@@ -20,6 +20,7 @@ function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
+ const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
@@ -37,14 +38,14 @@ function parsePlan(raw, context={}){
  }
  if(context.pending==='weather'&&!tasks.length&&!moneyTasks.length&&!isTime&&!/祝日|計算|為替|とは|調べ/.test(text))tasks.push({kind:'weather',places:found.length?found:[{name:text,query:text}],offset:context.offset||0});
  tasks.push(...moneyTasks);
- if(/祝日|連休/.test(text))tasks.push({kind:'holiday',year:Number(text.match(/(20\d{2})年/)?.[1])||null,next:/次|今後|これから/.test(text)});
+ if(/祝日|連休/.test(text)&&!/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:\s]/.test(text))tasks.push({kind:'holiday',year:Number(text.match(/(20\d{2})年/)?.[1])||null,next:/次|今後|これから/.test(text)});
  if(isTime){const explicit=text.match(/^(.{2,30}?)(?:は|の)(?:今)?(?:何時|時刻)/);tasks.push({kind:'time',places:found.length?found:explicit?[{name:explicit[1],query:explicit[1]}]:context.places||[]});}
  const calc=text.match(/^(?:計算(?:して)?[：:\s]*)?([\d\s.()+\-*/×÷^%]+)(?:を計算(?:して)?|は[？?]?|=[？?]?)?$/);
  if(calc&&/[+\-*/×÷^%]/.test(calc[1]))tasks.push({kind:'calc',expression:calc[1]});
  const knowledge=text.match(/^(.{1,100}?)(?:って何|とは(?:何)?|について(?:教えて|調べて|知りたい)?|を(?:調べて|検索して|教えて))[。？?]?$/);
  const prefix=text.match(/^(?:検索|調べる|知識)[：:\s]+(.{1,100})$/);
  if(knowledge||prefix)tasks.push({kind:'knowledge',query:(knowledge?.[1]||prefix[1]).trim()});
- if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(tasks[i].kind==='weather')tasks.splice(i,1);
+ if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(['weather','holiday'].includes(tasks[i].kind))tasks.splice(i,1);
  if(/^(もっと詳しく|詳しく|続き)[。？?]?$/.test(text)&&context.intent==='knowledge'&&context.query)tasks.push({kind:'knowledge',query:context.query,more:true});
  const extensions=parseExtensions(text,context,found);
  if(extensions.length){for(let i=tasks.length-1;i>=0;i--)if(tasks[i].kind==='knowledge'||tasks[i].kind==='weather'&&(!isWeather||extensions.some(t=>t.kind==='sun')))tasks.splice(i,1);}
@@ -135,6 +136,73 @@ function createCurrencyHandler({getJSON,el,p,source,state,follows}){
   if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');
   state.context={...state.context,intent:'currency',pending:null,base:task.base,quote:task.quote,amount:task.amount};
   follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？']);
+ };
+}
+
+const UK_HOLIDAY_URL='https://www.gov.uk/bank-holidays.json';
+const UK_REGIONS=[
+ {id:'england-and-wales',name:'イングランド・ウェールズ',aliases:['イングランド','ウェールズ','England','Wales']},
+ {id:'scotland',name:'スコットランド',aliases:['スコットランド','Scotland']},
+ {id:'northern-ireland',name:'北アイルランド',aliases:['北アイルランド','Northern Ireland']}
+];
+const ukError=error=>[{kind:'ukHoliday',error}];
+function parseUKHolidays(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,''),holiday=/祝日|バンクホリデー|bank holidays?/i.test(text),active=context.intent==='ukHoliday';
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|学術|辞書)[：:\s]|とは|って何|について/.test(text))return [];
+ const regions=UK_REGIONS.filter(region=>region.aliases.some(alias=>text.toLowerCase().includes(alias.toLowerCase()))).map(r=>r.id);
+ const uk=regions.length||/イギリス|英国|\bUK\b|\bBritain\b/i.test(text);
+ if(holiday&&/日本/.test(text)&&!uk)return [];
+ if(holiday&&/日本/.test(text)&&uk)return ukError('日本と英国の祝日は、依頼を改行で分けて指定してください。');
+ if(holiday&&!uk&&/(?:アメリカ|米国|フランス|ドイツ|中国|韓国|オーストラリア|カナダ|ブラジル|インド|イタリア|スペイン|ニュージーランド|メキシコ|シンガポール|アイルランド|海外|世界|外国)/.test(text))return ukError('祝日の照会は現在、日本と英国3地域に対応しています。例：「日本の祝日」「スコットランドの祝日」。');
+ if(uk&&/営業日|平日/.test(text))return ukError('英国は祝日一覧・次の祝日に対応しています。営業日計算は日本の祝日または土日のみで指定してください。');
+ const short=active&&(/^(?:今年|来年|再来年|\d{4}年)(?:は|なら)?$/.test(text)||regions.length&&/なら|では|は$/.test(text));
+ const follow=active&&/^(?:(?:(?:今年|来年|再来年|\d{4}年)(?:の)?)?(?:次の祝日|今後の祝日|これからの祝日|祝日一覧|祝日|バンクホリデー)(?:は)?)$/.test(text);
+ if(!(holiday&&uk||short||follow))return [];
+ if(/\d{1,2}月|\d{4}[-/]\d{1,2}/.test(text))return ukError('英国の祝日は年別一覧か「次の祝日」で指定してください。例：「2027年のスコットランドの祝日」。');
+ const yearMatch=text.match(/(\d{1,6})年|\b(\d{4})\b/),year=yearMatch?Number(yearMatch[1]||yearMatch[2]):null;
+ if(/\d/.test(text)&&!yearMatch||[...text.matchAll(/\d{1,6}年|\b\d{4}\b/g)].length>1)return ukError('年は1つずつ、西暦で指定してください。例：「2027年の英国の祝日」。');
+ const relative=/再来年/.test(text)?2:/来年/.test(text)?1:/今年/.test(text)?0:null;
+ if(year!==null&&(year<1||year>9999))return ukError('年は西暦1〜9999年で指定してください。収録された年だけ照会できます。');
+ const explicitYear=year!==null||relative!==null;
+ return [{kind:'ukHoliday',regions:regions.length?regions:active&&!uk?context.ukRegions:UK_REGIONS.map(r=>r.id),year:year??(!explicitYear&&short?context.ukYear:null),yearOffset:relative,next:/次|今後|これから/.test(text)?true:explicitYear||/一覧/.test(text)?false:short?!!context.ukNext:false}];
+}
+function ukHolidayEvents(data,regionId){
+ if(!UK_REGIONS.some(r=>r.id===regionId))throw Error('英国の対応地域を指定してください。');
+ const division=Object.hasOwn(data||{},regionId)?data[regionId]:null;
+ if(!division||division.division!==regionId||!Array.isArray(division.events)||!division.events.length||division.events.length>500)throw Error('地域別の祝日データを確認できませんでした。');
+ const seen=new Set(),events=[];
+ for(const event of division.events){
+  if(!event||typeof event.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(event.date)||typeof event.title!=='string'||!event.title.trim()||event.title.length>300||typeof event.notes!=='string'||event.notes.length>500)throw Error('祝日データの内容を確認できませんでした。');
+  parseCivilDate(event.date);const key=JSON.stringify([event.date,event.title,event.notes]);if(seen.has(key))continue;seen.add(key);events.push({date:event.date,title:event.title,notes:event.notes});
+ }
+ return events.sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title));
+}
+function ukHolidaySelection(events,{year=null,next=false},today){
+ parseCivilDate(today);const years=[...new Set(events.map(e=>Number(e.date.slice(0,4))))].sort((a,b)=>a-b);
+ if(year!==null&&(!Number.isInteger(year)||!years.includes(year)))throw Error(`${year}年の英国祝日は未収録です。収録年：${years.join('・')}年。`);
+ const rows=events.filter(e=>(year===null||Number(e.date.slice(0,4))===year)&&(!next||e.date>=today));
+ return {rows:rows.slice(0,next?3:24),total:rows.length,years};
+}
+function createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}){
+ return async(task,body)=>{
+  if(task.error)throw Error(task.error);
+  if(!Array.isArray(task.regions)||!task.regions.length||task.regions.length>3||new Set(task.regions).size!==task.regions.length||task.regions.some(id=>!UK_REGIONS.some(r=>r.id===id)))throw Error('英国の対応地域を指定してください。');
+  const today=localDate('Europe/London'),year=task.yearOffset!==null&&task.yearOffset!==undefined?Number(today.slice(0,4))+task.yearOffset:task.year??(task.next?null:Number(today.slice(0,4)));
+  if(year!==null&&(!Number.isInteger(year)||year<1||year>9999))throw Error('年を確認してください。');
+  const response=await getJSON(UK_HOLIDAY_URL,3600000);
+  // Validate every selected region before rendering any partial calendar as a complete result.
+  const selected=task.regions.map(id=>({region:UK_REGIONS.find(r=>r.id===id),...ukHolidaySelection(ukHolidayEvents(response.data,id),{year,next:task.next},today)}));
+  body.append(el('h3',task.next?'英国の次のバンクホリデー':`${year}年 英国のバンクホリデー`));
+  for(const item of selected){
+   const section=el('section',undefined,'wiki-result');section.append(el('h4',item.region.name));
+   for(const event of item.rows){const row=el('div',undefined,'holiday-row');row.append(el('time',event.date),el('span',event.title+(event.notes?`（${event.notes}）`:'')));section.append(row);}
+   if(!item.rows.length)p(section,`収録データに${today}以降の該当日はありません。将来の日付は補いません。`);
+   p(section,`収録年：${item.years.join('・')}年。${task.next?'各地域、今後の先頭3件。':item.total>24?'先頭24件を表示。':''}`,'sub');body.append(section);
+  }
+  p(body,`英国の銀行休業日の登録情報です。店舗・学校・勤務先の休業日とは異なる場合があります。${task.next?`基準日：英国時間 ${today}（当日を含む）。`:''}`);
+  source(body,'GOV.UK · © Crown copyright · OGL v3.0','https://www.gov.uk/bank-holidays',response);body.append(link('Open Government Licence v3.0','https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/'));
+  state.context={...state.context,intent:'ukHoliday',pending:null,ukRegions:task.regions,ukYear:year,ukNext:!!task.next};
+  follows(body,['スコットランドなら？','来年は？','次の祝日は？']);
  };
 }
 
@@ -555,7 +623,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|\d+日後)(?:は)?|(?:ほかには|他には|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|(?:ほかには|他には|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -566,6 +634,7 @@ const FEATURE_CATALOG=[
  {id:'sun',category:'life',title:'日の出・日の入り',description:'指定した都市の日の出・日の入り時刻。',query:'東京の明日の日の出は？',tags:'ひので 日没 太陽 天文'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コードにも対応。「200なら？」「ユーロにすると？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'次の祝日や、収録されている年の祝日一覧。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー'},
+ {id:'ukHoliday',category:'life',title:'英国の祝日を地域別に確認',description:'英国政府のバンクホリデー。3地域の違いと振替日を表示。',query:'2027年のイギリスの祝日',tags:'海外 英国 イギリス イングランド ウェールズ スコットランド 北アイルランド 休み 連休 旅行 祝日 bank holiday'},
  {id:'time',category:'life',title:'世界時計',description:'登録済み都市のいまの時刻を比較。',query:'ロンドンと東京は今何時？',tags:'じこく じさ 時差 旅行',local:true},
  {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
  {id:'quakes',category:'life',title:'重要地震の公開記録',description:'USGSが重要と分類した過去7日の地震。',query:'日本周辺の最近の地震',tags:'じしん 防災 揺れ USGS'},
@@ -734,12 +803,14 @@ const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday
 names.localAI='端末内AI';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
+names.ukHoliday='海外の祝日';
 const registry=[
  ['端末内LLM','起動時に全モデルを準備して会話・文章生成','https://huggingface.co/Qwen','公開モデルはApache 2.0。初回約2.7GB＋実行ファイル。対応端末で順番に準備し、1モデルずつ実行します。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
  ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
  ['Holidays JP','日本の祝日','https://github.com/holidays-jp/api','キー不要・MIT。取得できた年のみ回答します。'],
+ ['GOV.UK','英国3地域のバンクホリデー','https://www.gov.uk/bank-holidays','登録・キー不要の政府公開API。© Crown copyright / Open Government Licence v3.0。収録年のみ表示し、地域の違いを保ちます。'],
  ['ブラウザ内処理','計算・単位換算・日付計算・世界時計',null,'外部APIへの通信なし。日付計算の「今日」は日本時間です。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
  ...extraRegistry,
  ['openBD','ISBNから本を紹介','https://openbd.jp/','本の紹介目的で無償利用。書誌を改変せず表示し、更新を反映します。利用条件：https://openbd.jp/terms/'],
@@ -821,7 +892,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
