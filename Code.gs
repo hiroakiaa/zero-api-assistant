@@ -33,6 +33,11 @@ function settings_(){const values={};rows_('Settings').forEach(r=>{if(['app_name
 function rateLimit_(owner){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。少し待ってお試しください。');try{const cache=CacheService.getScriptCache(),key='rate:'+owner+':'+Math.floor(Date.now()/3600000),count=Number(cache.get(key)||0);if(count>=120)throw Error('1時間の利用上限です。時間を置いてお試しください。');cache.put(key,String(count+1),3600);}finally{lock.releaseLock();}}
 function listConversations_(owner){return rows_('Conversations').filter(r=>r[1]===owner).sort((a,b)=>String(b[4]).localeCompare(String(a[4]))).slice(0,30).map(r=>({id:r[0],title:r[2],createdAt:r[3],updatedAt:r[4]}));}
 function getConversation_(owner,id){if(!/^[a-zA-Z0-9-]{20,60}$/.test(id||''))throw Error('会話IDが無効です。');const conversation=rows_('Conversations').find(r=>r[0]===id&&r[1]===owner);if(!conversation)throw Error('この会話は見つかりません。');const messages=rows_('Messages').filter(r=>r[1]===owner&&r[2]===id).slice(-100).map(r=>({role:r[3],text:r[4],sources:JSON.parse(r[6]||'[]')}));return {id:id,title:conversation[2],context:JSON.parse(conversation[5]||'{}'),messages:messages};}
+function cleanSources_(raw){
+ if(!Array.isArray(raw)||raw.length>256)throw Error('参照リンクの形式または件数が無効です。');
+ const result=[],seen=new Set();for(const entry of raw){if(!entry||typeof entry.title!=='string'||typeof entry.url!=='string'||!/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?(?:[/?#]|$)/.test(entry.url)||/[\s<>"\\]/.test(entry.url)||seen.has(entry.url))continue;if(entry.url.length>1200)throw Error('参照URLが長すぎるため保存できません。画面の会話書き出しをご利用ください。');seen.add(entry.url);result.push({title:entry.title.replace(/\s+/g,' ').trim().slice(0,150)||'参照',url:entry.url});}
+ if(result.length>64||JSON.stringify(result).length>40000)throw Error('参照リンクの保存上限です。画面の会話書き出しをご利用ください。');return result;
+}
 function saveTurn_(owner,payload){
  if(settings_().history_enabled==='false')return {saved:false,reason:'管理者が履歴保存を停止しています。'};
  const id=payload.conversationId,requestId=payload.requestId;
@@ -40,7 +45,7 @@ function saveTurn_(owner,payload){
  const question=String(payload.userText||''),answer=String(payload.assistantText||'');
  if(!question||question.length>500||!answer||answer.length>16000)throw Error('保存できる文章量を超えています。');
  const context=JSON.stringify(payload.context||{});if(context.length>8000)throw Error('会話条件が長すぎます。');
- const sources=JSON.stringify((payload.sources||[]).slice(0,12).filter(s=>s&&typeof s.title==='string'&&/^https:\/\//.test(s.url||'')).map(s=>({title:s.title.slice(0,150),url:s.url.slice(0,1200)})));
+ const sources=JSON.stringify(cleanSources_(payload.sources||[]));
  const lock=LockService.getScriptLock();if(!lock.tryLock(8000))throw Error('保存が混み合っています。もう一度試してください。');
  try{
   const conversations=rows_('Conversations'),row=conversations.findIndex(r=>r[0]===id);
