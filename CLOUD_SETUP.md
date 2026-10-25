@@ -1,6 +1,6 @@
 # ZERO self-hosted inference
 
-Status: connection code and a loopback-only inference bridge are implemented. No production server or public route is configured. Mock tests are not evidence of actual model generation or iPhone compatibility.
+Status: connection code and a loopback-only inference bridge are implemented. A loopback-only Ollama server and bridge have been exercised on the owner-authorized PC. No public route or GAS production connection is configured yet. Local generation does not prove iPhone end-to-end operation.
 
 The path is browser → GAS → an owner-operated HTTPS bridge → the same host's local Ollama. Browser model downloads and paid hosted inference APIs are not used. A server still needs memory, storage, power, network access and uptime. Using an existing PC avoids a new inference API bill; it does not make those resources free.
 
@@ -20,16 +20,16 @@ If the Ollama desktop app is already running, it must be stopped before starting
 3. In another terminal, download the server model once:
 
 ```powershell
-ollama pull qwen3:1.7b
+ollama pull qwen2.5:7b-instruct
 ```
 
-This currently has approximately 1.4 GB of weights; actual execution needs additional memory. The bridge also accepts `qwen3:0.6b` and `qwen3:4b`. It rejects arbitrary models and cloud-hosted model tags. The models use Apache 2.0; retain their notices on the server. Registry tags may change, so record the installed model digest and version before a production rollout.
+This currently has approximately 4.7 GB of weights; actual execution needs additional memory. This bridge uses only the tested non-reasoning `qwen2.5:7b-instruct` model. It rejects arbitrary models and cloud-hosted model tags. The model uses Apache 2.0; retain its notices on the server. Registry tags may change, so record the installed model digest and version before a production rollout.
 
 4. Create a secret in your own terminal and start the bridge. Do not paste the secret into chat, commit it, include it in a URL, or put it in browser JavaScript.
 
 ```powershell
 $env:ZERO_AI_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
-$env:ZERO_AI_MODEL = 'qwen3:1.7b'
+$env:ZERO_AI_MODEL = 'qwen2.5:7b-instruct'
 node cloud/CloudServer.mjs
 ```
 
@@ -62,10 +62,10 @@ The app receives only a configured/not-configured flag. It never receives the UR
 
 - Registered API/calculation requests continue to use their existing handlers first. Writing, translation, summaries, code help and unsupported conversational prompts use the configured cloud server.
 - Only the current prompt and up to four recent generated messages, totaling at most 700 history characters, are sent to the inference server. API answers and local-model history are not automatically sent. The prompt is at most 2,000 characters; the current chat field is more restrictive.
-- No browser credentials, remote endpoints, model choices, tools or execution options can be supplied in a generation request. The bridge calls only `http://127.0.0.1:11434/api/chat` with a fixed local model, `think:false`, no tools, and a bounded output.
+- No browser credentials, remote endpoints, model choices, tools or execution options can be supplied in a generation request. The bridge calls only `http://127.0.0.1:11434/api/chat` with a fixed local model, no reasoning-model switch, no tools, and a bounded output.
 - One generation at a time is accepted. GAS shares a maximum of 100 attempts per Japan-calendar day across users. Failures count as attempts. The bridge rejects concurrent requests rather than maintaining an unbounded queue. There is no paid or local-download fallback.
 - Request bodies, generated answers and secrets are not logged by the bridge. GAS conversation history continues to use the existing private spreadsheet when enabled. No prompt/answer cache is added.
 - Generated text is returned without model/license/source footers. Incomplete output is identified rather than treated as complete.
 - Before retiring the device-local option, verify real text quality, latency, concurrency behavior, outages, restarts and iPhone browser use on the selected host. Keep model downloads manual until this has passed.
 
-Official references: [Ollama chat API](https://docs.ollama.com/api/chat), [local-only mode and networking](https://docs.ollama.com/faq), [Qwen3 model registry](https://ollama.com/library/qwen3), [Qwen3-1.7B license](https://huggingface.co/Qwen/Qwen3-1.7B).
+Official references: [Ollama chat API](https://docs.ollama.com/api/chat), [local-only mode and networking](https://docs.ollama.com/faq), [Qwen2.5-7B-Instruct model registry](https://ollama.com/library/qwen2.5:7b-instruct), [model license](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct).
