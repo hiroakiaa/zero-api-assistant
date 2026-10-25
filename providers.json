@@ -1,0 +1,11 @@
+[
+ {"id":"weather","name":"MET Norway","enabled":true,"license":"CC BY 4.0・商用可・負荷制限とキャッシュに従う","source_url":"https://api.met.no/doc/TermsOfService"},
+ {"id":"currency","name":"Frankfurter","enabled":true,"license":"無償公開・キー不要・商用可","source_url":"https://frankfurter.dev/"},
+ {"id":"knowledge","name":"Wikipedia / Wikimedia","enabled":true,"license":"各記事のCC BY-SA等・API利用方針に従う","source_url":"https://www.mediawiki.org/wiki/API:Main_page"},
+ {"id":"holiday","name":"Holidays JP","enabled":true,"license":"MIT","source_url":"https://github.com/holidays-jp/api"},
+ {"id":"books","name":"Open Library","enabled":true,"license":"公開書誌API・大量取得／高トラフィック商用基盤用途は対象外","source_url":"https://openlibrary.org/developers/api"},
+ {"id":"papers","name":"Europe PMC","enabled":true,"license":"公開書誌サービス・本文の利用権は別途","source_url":"https://europepmc.org/RestfulWebService"},
+ {"id":"quakes","name":"USGS","enabled":true,"license":"米国政府公開データ・出典表示","source_url":"https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php"},
+ {"id":"country","name":"World Bank","enabled":true,"license":"CC BY 4.0等・データ利用条件に従う","source_url":"https://datacatalog.worldbank.org/public-licenses"},
+ {"id":"news","name":"Hacker News","enabled":true,"license":"公式公開API・原文タイトルと議論へのリンクのみ","source_url":"https://github.com/HackerNews/API"}
+]
