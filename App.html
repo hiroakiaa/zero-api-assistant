@@ -75,6 +75,12 @@ function weatherAdvice(rain,min,max){const tips=[];if(rain>=40)tips.push('降水
 
 const currencyWords={米ドル:'USD',ドル:'USD',ユーロ:'EUR',日本円:'JPY',円:'JPY',英ポンド:'GBP',ポンド:'GBP',人民元:'CNY',元:'CNY',韓国ウォン:'KRW',ウォン:'KRW',豪ドル:'AUD',カナダドル:'CAD',スイスフラン:'CHF'};
 const currencyCodes=['USD','EUR','JPY','GBP','CNY','KRW','AUD','CAD','CHF'];
+const currencyDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
+function validateCurrencyDate(value,now=new Date()){
+ const date=parseCivilDate(value).toISOString().slice(0,10),today=new Date(now.getTime()+9*3600000).toISOString().slice(0,10);
+ if(date<'1948-01-01'||date>today)throw Error('為替の日付は1948-01-01以降、今日（日本時間）までで指定してください。通貨ごとに収録期間が異なります。');
+ return date;
+}
 const currencyToken=`(?:${Object.keys(currencyWords).sort((a,b)=>b.length-a.length).join('|')}|(?<![A-Za-z])(?:${currencyCodes.join('|')})(?![A-Za-z]))`;
 const moneyNumber='[+-]?(?:\\d[\\d,.]*|\\.\\d+)(?:万|億)?';
 const moneyUnit=new RegExp(`^(?:(${moneyNumber})\\s*(${currencyToken})|(${currencyToken})\\s*(${moneyNumber}))(.*)$`,'i');
@@ -95,8 +101,23 @@ function parseCurrencyTasks(raw,context={}){
  const explicit=/^(?:通貨(?:換算)?|為替(?:換算)?|換算)(?:[：:]|\s|$|レート|相場)/.test(input);
  input=input.replace(/^(?:通貨(?:換算)?|為替(?:換算)?|換算)(?:[：:\s]+|(?=レート|相場)|$)\s*/,'');
  const active=context.intent==='currency';
- const task=(amount,base,quote)=>[{kind:'currency',amount,base,quote}];
+ let requestedDate=active?context.currencyDate:undefined;
+ const task=(amount,base,quote)=>[{kind:'currency',amount,base,quote,...(requestedDate?{date:requestedDate}:{})}];
  try{
+  const dateMatches=[...input.matchAll(new RegExp(currencyDatePattern,'g'))];
+  if(dateMatches.length>1)return currencyError('為替の日付は1回の換算につき1日で指定してください。');
+  if(dateMatches.length){
+   const match=dateMatches[0],before=input.slice(0,match.index).trim(),after=input.slice(match.index+match[0].length).trim();
+   if(!explicit&&!active&&!new RegExp(currencyToken,'i').test(input))return [];
+   requestedDate=validateCurrencyDate(match[0]);
+   if(!before&&/^(?:なら|では|は)$/.test(after)&&active)return task(context.amount,context.base,context.quote);
+   if(!before)input=after.replace(/^(?:時点)?(?:のレートで|の為替で|の)?\s*/,'');
+   else if(/^(?:時点)?(?:のレートで|の為替で)?$/.test(after))input=before.replace(/(?:を|は|、|,)?\s*$/,'');
+   else return currencyError('日付は質問の先頭か末尾で指定してください。例：「2025-01-15の100ドルは何円？」。');
+  }
+  if(/^(?:最新(?:のレート)?(?:で|なら)?|今のレート(?:で|なら)?)$/.test(input)&&active){requestedDate=undefined;return task(context.amount,context.base,context.quote);}
+  if(/^最新(?:のレート)?で?\s*/.test(input)){requestedDate=undefined;input=input.replace(/^最新(?:のレート)?で?\s*/,'');}
+  if((active&&/^(?:日付|明日|昨日|今日|先週|来週|去年|来年)(?:なら|のレートで|の為替で)?$/.test(input))||/^(?:\d{4}[-/年])/.test(input))return currencyError('為替の日付は年月日で指定してください。例：「2025-01-15なら？」。最新へ戻すには「最新のレートで」。');
   if(active){
    if(/^(?:逆(?:にすると|に|方向|は)?|反対に)$/.test(input))return task(context.amount,context.quote,context.base);
    const amountOnly=input.match(new RegExp(`^(${moneyNumber})(?:なら|では|は)$`));
@@ -121,27 +142,32 @@ function parseCurrencyTasks(raw,context={}){
  }catch(e){return currencyError(e.message);}
  return [];
 }
-function currencyQuote(data,base,quote){
+function currencyQuote(data,base,quote,requestedDate){
  if(!data||data.base!==base||data.quote!==quote||typeof data.rate!=='number'||!Number.isFinite(data.rate)||data.rate<=0)throw Error('指定した通貨ペアの参考レートを確認できませんでした。');
  if(typeof data.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||Number.isNaN(Date.parse(data.date+'T00:00:00Z'))||new Date(data.date+'T00:00:00Z').toISOString().slice(0,10)!==data.date)throw Error('参考レートの日付を確認できませんでした。');
+ if(requestedDate&&data.date>requestedDate)throw Error('指定日より後のレートが返ったため、換算を停止しました。');
  return data;
 }
-function createCurrencyHandler({getJSON,el,p,source,state,follows}){
+function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Date()}){
  return async function currency(task,body){
   if(task.error)throw Error(task.error);
   if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12)throw Error('金額は0〜1兆の数値で指定してください。');
   if(!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote))throw Error('対応する通貨を指定してください。');
-  const url=`https://api.frankfurter.dev/v2/rate/${task.base.toLowerCase()}/${task.quote.toLowerCase()}`;
-  const r=task.base===task.quote?null:await getJSON(url,3600000);
-  const rate=r?currencyQuote(r.data,task.base,task.quote).rate:1,value=task.amount*rate;
+  const requestedDate=task.date!==undefined?validateCurrencyDate(task.date,now()):undefined;
+  const url=`https://api.frankfurter.dev/v2/rate/${task.base.toLowerCase()}/${task.quote.toLowerCase()}${requestedDate?'?date='+requestedDate:''}`;
+  let r=null;
+  if(task.base!==task.quote)try{r=await getJSON(url,3600000);}catch(error){if(requestedDate&&/HTTP 404\b/.test(error.message))throw Error(`指定日 ${requestedDate} の通貨ペアのレートを取得できませんでした。収録期間は通貨ごとに異なります。別の日付を指定してください。`);throw error;}
+  const rate=r?currencyQuote(r.data,task.base,task.quote,requestedDate).rate:1,value=task.amount*rate;
   if(!Number.isFinite(value))throw Error('換算結果が扱える範囲を超えています。');
   const format=n=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:12}).format(n);
   body.append(el('h3','通貨を換算'));const card=el('div',undefined,'result-card');
-  card.append(el('div',`${format(task.amount)} ${task.base} →`,'sub'),el('div',`${format(value)} ${task.quote}`,'big'),el('div',`1 ${task.base} = ${format(rate)} ${task.quote}${r?` · レート日 ${r.data.date}`:''}`,'details'));body.append(card);
+  card.append(el('div',`${format(task.amount)} ${task.base} →`,'sub'),el('div',`${format(value)} ${task.quote}`,'big'),el('div',`1 ${task.base} = ${format(rate)} ${task.quote}${r?` · ${requestedDate?'API返却日':'レート日'} ${r.data.date}`:''}`,'details'));body.append(card);
+  if(requestedDate){p(body,`指定日：${requestedDate}${r?' · API返却日：'+r.data.date:''}`);if(r&&r.data.date<requestedDate)p(body,'指定日とAPI返却日が異なるため、返却日の参考レートを使用しています。');if(r)p(body,'提供元の日次集計による参考値です。API返却日は、個々の市場・銀行の公表日や取引時刻を表すとは限りません。');}
   p(body,'参考レートでの概算です。表示は最大12桁。実際の両替・決済レートや手数料は含みません。');
   if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');
   state.context={...state.context,intent:'currency',pending:null,base:task.base,quote:task.quote,amount:task.amount};
-  follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？']);
+  if(requestedDate)state.context.currencyDate=requestedDate;else delete state.context.currencyDate;
+  follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？',...(requestedDate?['最新のレートで']:[])]);
  };
 }
 
@@ -852,7 +878,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -861,7 +887,7 @@ const CATALOG_CATEGORIES=[['all','すべて'],['life','暮らし・お出かけ'
 const FEATURE_CATALOG=[
  {id:'weather',category:'life',title:'天気を比べる',description:'最大3都市の気温と降水量の予報を確認。',query:'東京と大阪の明日の天気を比較して',tags:'てんき 雨 傘 洗濯 気温 服装',popular:true},
  {id:'sun',category:'life',title:'日の出・日の入り',description:'指定した都市の日の出・日の入り時刻。',query:'東京の明日の日の出は？',tags:'ひので 日没 太陽 天文'},
- {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コードにも対応。「200なら？」「ユーロにすると？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円',popular:true},
+ {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
  {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
  {id:'ukHoliday',category:'life',title:'英国の祝日を地域別に確認',description:'英国政府のバンクホリデー。3地域の違いと振替日を表示。',query:'2027年のイギリスの祝日',tags:'海外 英国 イギリス イングランド ウェールズ スコットランド 北アイルランド 休み 連休 旅行 祝日 bank holiday'},
@@ -1129,7 +1155,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
