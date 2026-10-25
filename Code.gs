@@ -70,6 +70,10 @@ function validateAPI_(url){
   else {allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','explaintext','exintro','exchars','inprop','redirects'];Object.assign(expected,{prop:'extracts|info',explaintext:'1',exintro:'1',inprop:'url',redirects:'1'});if(!['550','1800'].includes(params.exchars))throw Error('抜粋の長さが無効です。');}
   if(!params.gsrsearch||params.gsrsearch.length>100)throw Error('知識検索の条件が無効です。');
  }else if(host==='holidays-jp.github.io'&&path==='/api/v1/date.json'){provider='holiday';allowed=[];
+ }else if(host==='api.crossref.org'&&path==='/works'){
+  provider='crossref';expected.select='DOI,title,author,published,container-title,type';
+  if(Object.prototype.hasOwnProperty.call(params,'query.bibliographic')){allowed=['query.bibliographic','rows','offset','select'];expected.rows='3';if(!params['query.bibliographic'].trim()||params['query.bibliographic'].length>100||/[\u0000-\u001f]/.test(params['query.bibliographic'])||! /^(0|3|6|9|12)$/.test(params.offset||''))throw Error('学術検索の条件が無効です。');}
+  else{allowed=['filter','rows','select'];expected.rows='1';const doi=(params.filter||'').slice(4);if(!(params.filter||'').startsWith('doi:')||!/^10\.\d{4,9}\/[A-Za-z0-9._;()/:+\-]{1,180}$/.test(doi)||/(?:^|\/)\.{1,2}(?:\/|$)/.test(doi))throw Error('DOIの検索条件が無効です。');}
  }else if(host==='openlibrary.org'&&path==='/search.json'){
   provider='books';allowed=['q','limit','page','fields'];expected={limit:'5',fields:'key,title,author_name,first_publish_year'};if(!params.q||params.q.length>80||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
  }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
@@ -91,6 +95,7 @@ function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
  const cache=CacheService.getScriptCache(),key='api:'+hash_(url),hit=cache.get(key);if(hit)return Object.assign(JSON.parse(hit),{cache:true});
  const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
+ const crossrefLease=provider==='crossref'?reserveCrossref_():null;try{
  const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
  if(provider==='books'){const serial=LockService.getScriptLock();if(!serial.tryLock(5000))throw Error('書籍検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),delay=1100-(Date.now()-Number(props.getProperty('LAST_BOOK_FETCH')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));props.setProperties({LAST_BOOK_FETCH:String(Date.now())});}finally{serial.releaseLock();}}
  const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:provider==='weather',headers:{'User-Agent':'ZERO-API-Assistant/3.0 github.com/hiroakiaa/zero-api-assistant'}}),status=response.getResponseCode(),responseHeaders=response.getHeaders?response.getHeaders():{};
@@ -99,6 +104,9 @@ function fetchAPI_(url){
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=['isbn','postal'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
+ }finally{if(crossrefLease)releaseCrossref_(crossrefLease);}
 }
+function reserveCrossref_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('学術検索が混み合っています。');try{const props=PropertiesService.getScriptProperties();if(Number(props.getProperty('CROSSREF_BUSY_UNTIL')||0)>Date.now())throw Error('学術検索は別の照会中です。少し待って試してください。');const delay=1100-(Date.now()-Number(props.getProperty('CROSSREF_LAST_END')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));const lease=Utilities.getUuid();props.setProperties({CROSSREF_LEASE:lease,CROSSREF_BUSY_UNTIL:String(Date.now()+360000)});return lease;}finally{lock.releaseLock();}}
+function releaseCrossref_(lease){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))return;try{const props=PropertiesService.getScriptProperties();if(props.getProperty('CROSSREF_LEASE')===lease)props.setProperties({CROSSREF_LEASE:'',CROSSREF_BUSY_UNTIL:'0',CROSSREF_LAST_END:String(Date.now())});}finally{lock.releaseLock();}}
 function retryDeadline_(provider,retryAfter,now,status){const value=String(retryAfter??'').trim();let deadline;if(/^\d+$/.test(value)&&Number.isFinite(Number(value)*1000))deadline=now+Number(value)*1000;else if(value)deadline=Date.parse(value);if(Number.isFinite(deadline)&&deadline>now&&deadline<=8640000000000000)return deadline;return provider==='dictionary'&&status===429?(Math.floor(now/3600000)+1)*3600000:now+60000;}
 function cooldownMessage_(until){return '提供元への新しい照会を '+Utilities.formatDate(new Date(until),'Asia/Tokyo','yyyy-MM-dd HH:mm:ss')+'（日本時間）まで停止しています。';}
