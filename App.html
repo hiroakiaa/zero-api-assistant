@@ -122,6 +122,7 @@ function groupExactQuakeRecords(features){
  return groups;
 }
 function dictionaryExcerpt(data){
+ if(Array.isArray(data?.entries)&&data.entries.length===0)return {missing:true,senses:[],pronunciations:[]};
  const original=data?.source?.url,license=data?.source?.license;
  if(typeof original!=='string'||!/^https:\/\/en\.wiktionary\.org\/wiki\/[\S]+$/.test(original)||license?.name!=='CC BY-SA 4.0'||license?.url!=='https://creativecommons.org/licenses/by-sa/4.0/')throw Error('辞書の出典・ライセンスを確認できないため、本文の表示を停止しました。');
  const entries=Array.isArray(data.entries)?data.entries:[],senses=[],pronunciations=[],seen=new Set();
@@ -141,6 +142,7 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
    const url=`https://freedictionaryapi.com/api/v1/entries/en/${encodeURIComponent(task.word)}`;let r;
    try{r=await getJSON(url,86400000);}catch(e){if(/HTTP 404/.test(e.message)){p(body,`「${task.word}」の見出しがありません。つづりや基本形を確認してください。`);return;}throw e;}
    const entry=dictionaryExcerpt(r.data);body.append(el('h3',`英英辞書 · ${task.word}`));
+   if(entry.missing){p(body,`「${task.word}」の見出しがありません。つづりや基本形を確認してください。`);source(body,'FreeDictionaryAPI.com','https://freedictionaryapi.com/',r);return;}
    for(const pronunciation of entry.pronunciations)p(body,`IPA ${pronunciation.text}${pronunciation.tags.length?' · '+pronunciation.tags.join(' / '):''}`,'sub');
    for(const [i,sense]of entry.senses.entries()){const row=el('div',undefined,'wiki-result');row.append(el('strong',`${i+1}. ${sense.partOfSpeech}`));p(row,sense.definition);body.append(row);}
    if(!entry.senses.length)p(body,'英語の定義が未収録です。元記事をご確認ください。');
