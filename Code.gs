@@ -89,7 +89,7 @@ function validateAPI_(url){
  }else if(host==='openlibrary.org'&&path==='/search.json'){
   provider='books';allowed=['q','title','author','limit','page','fields'];expected={limit:'5',fields:'key,title,author_name,first_publish_year'};const bookFields=['q','title','author'].filter(key=>Object.prototype.hasOwnProperty.call(params,key));if(bookFields.length!==1||!params[bookFields[0]].trim()||params[bookFields[0]].length>80||/[\u0000-\u001f]/.test(params[bookFields[0]])||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
  }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
-  provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
+  provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>200||/[\u0000-\u001f]/.test(params.query)||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
  }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&/^\/earthquakes\/feed\/v1\.0\/summary\/(?:significant_(?:hour|day|week|month)|4\.5_day)\.geojson$/.test(path)){provider='quakes';allowed=[];
  }else if(host==='api.worldbank.org'&&path==='/v2/country'){provider='country';allowed=['format','per_page'];expected={format:'json',per_page:'400'};
