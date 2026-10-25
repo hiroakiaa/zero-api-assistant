@@ -233,3 +233,11 @@ ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`IS
 - [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
 
 CSVの内容は専用ダイアログでも確認でき、保存が制限された環境では選択してコピーできます。内容確認は追加照会せず、ダウンロードと同じCSV文字列を使います。会話の入力欄は1つのままです。
+
+## 速度・時間・データ量の換算と会話の続き
+
+`60mphは何km/h？`、`90分は何時間？`、`1GiBは何MB？`を外部通信なしで計算します。速度はm/s・km/h・mph・kn、時間の長さはms・s・min・h・dです。日は24時間固定で、月・年の日数や夏時間を含む暦の期間には換算しません。データ量はB・kB（KBも可）・MB・GB・TB、KiB・MiB・GiB・TiB、bit・kbit・Mbit・Gbit・Tbitです。Bはバイト、bはビットとして区別します。データ量の英字記号は大文字・小文字を厳密に扱い、mbなどは意味を推測せず案内します。
+
+換算後の`MiBなら？`、`それをMiBにして`は元の数量と元単位を保ちます。`2なら？`は元単位での数量だけを変更し、`逆にすると？`は同じ数量のまま元単位と変換先を入れ替えます（直前の計算結果を入力に戻す操作ではありません）。`1GiBは何MB？。2なら？。逆にすると？`のような複数依頼や保存済み会話の復元後にも条件を引き継ぎます。失敗した換算では条件を更新しません。時間の長さとデータ量は0以上、数量の絶対値は10の15乗まで、異なる種類間の換算は停止します。表示は最大13桁で、内部計算はJavaScriptの浮動小数点数です。通信速度やファイル転送時間は扱いません。
+
+定義の確認先：[NIST換算係数](https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors)、[NISTの時間単位](https://www.nist.gov/pml/special-publication-811/nist-guide-si-chapter-5-units-outside-si)、[NISTの2進接頭語](https://physics.nist.gov/cuu/Units/binary.html)。
