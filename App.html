@@ -749,13 +749,12 @@ function help(body){body.append(el('h3','こんなふうに聞いてください
 function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
- const model=localAI.model;head.querySelector('.tag').textContent='端末内LLM';body.append(el('h3',`${model.name} · 端末内で生成`));const output=el('div','生成しています…','local-generated');body.append(output);
+ head.querySelector('.tag').textContent='端末内LLM';const output=el('div','生成しています…','local-generated');body.append(output);
  const history=state.context.localHistory||[];let partial='',answer;
  let outcome;try{outcome=await localAI.generate(text,history,value=>{partial=value;output.textContent=value||'生成しています…';scrollConversationToEnd(false);});answer=outcome.text;}
- catch(e){output.textContent=partial||'生成を完了できませんでした。';if(partial){source(body,model.model+' · Apache 2.0',model.source);p(body,'未完の生成文です。処理が止まる前までを表示しています。','sub');}throw e;}
+ catch(e){output.textContent=partial||'生成を完了できませんでした。';if(partial){p(body,'未完の生成文です。処理が止まる前までを表示しています。','sub');}throw e;}
  output.replaceChildren();
  const blocks=answer.split(/(```[^\n]*\n[\s\S]*?```)/g);for(const block of blocks){if(!block)continue;if(block.startsWith('```')&&block.endsWith('```')){const code=el('code',block.replace(/^```[^\n]*\n/,'').slice(0,-3).trimEnd()),pre=el('pre');pre.append(code);output.append(pre);}else output.append(el('p',block.trim()));}
- source(body,model.model+' · Apache 2.0',model.source);p(body,'生成された文章です。最新の数値・天気などはデータ照会で確認できます。','sub');
  if(!outcome.complete){p(body,outcome.notice,'error');return false;}
  state.context={...state.context,intent:'localAI',localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
 }
