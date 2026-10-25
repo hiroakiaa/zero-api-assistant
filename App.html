@@ -616,9 +616,9 @@ function parseJapaneseHolidays(raw,context={}){
  if(day){
   const value=day[1],task=make(null,active);
   const offsets={今日:0,明日:1,明後日:2,昨日:-1,翌日:1,前日:-1};
-  if(['その日','この日','翌日','前日'].includes(value)&&!context.lastDate)return jpHolidayError('先に日付を指定してください。例：「2026-11-03は祝日？」。');
-  if(['その日','この日'].includes(value))return[{...task,date:context.lastDate}];
-  if(Object.hasOwn(offsets,value))return[{...task,dayOffset:offsets[value],fromDate:['翌日','前日'].includes(value)?context.lastDate:'今日'}];
+  let reference;if(['その日','この日','翌日','前日'].includes(value)){try{reference=calendarReferenceDate(context);}catch{return jpHolidayError('先に日付を指定してください。例：「2026-11-03は祝日？」。');}}
+  if(['その日','この日'].includes(value))return[{...task,date:reference}];
+  if(Object.hasOwn(offsets,value))return[{...task,dayOffset:offsets[value],fromDate:['翌日','前日'].includes(value)?reference:'今日'}];
   const md=value.match(/^(\d{1,2})月(\d{1,2})日$/);return[{...task,...(md?{monthDay:[Number(md[1]),Number(md[2])]}:{date:value})}];
  }
  if(active){
@@ -667,7 +667,7 @@ function createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follo
    if(result.total>result.rows.length)p(body,`該当${result.total}件のうち先頭${result.rows.length}件を表示しています。`,'sub');
   }
   p(body,`日本時間 ${today} を基準に照会。収録年：${result.years.join('・')}年。`,'sub');source(body,'Holidays JP · MIT','https://holidays-jp.github.io/',response);
-  state.context={...state.context,intent:'holiday',pending:null,holidayYear:result.year??Number(today.slice(0,4)),holidayMonth:result.month,holidayMode:result.mode,...(result.mode==='date'?{lastDate:result.date}:{})};
+  state.context={...state.context,intent:'holiday',pending:null,holidayYear:result.year??Number(today.slice(0,4)),holidayMonth:result.month,holidayMode:result.mode,lastDate:result.mode==='date'?result.date:null};
   follows(body,result.mode==='date'?['翌日は？','一覧にして']:['来年は？','11月だけ','次の祝日は？']);
  };
 }
@@ -1170,6 +1170,31 @@ const datePrefix='^(?:日付(?:計算)?[：:]\\s*)?';
 const dateDifference=new RegExp(`${datePrefix}(${datePattern}|今日)から(${datePattern}|今日)まで(?:は)?(?:何日|の日数|の日数差)[。？?]?$`);
 const dateAddition=new RegExp(`${datePrefix}(?:(${datePattern}|今日)(?:から|の))?(\\d{1,7})日(後|前)(?:は(?:何日)?|の(?:日付|曜日))?[。？?]?$`);
 const dateWeekday=new RegExp(`${datePrefix}(${datePattern}|今日)(?:は|の)(?:何曜日|曜日)[。？?]?$`);
+function calendarReferenceDate(context){
+ const allowed=['dateMath','businessDays','weather','sun'].includes(context.intent)||context.intent==='holiday'&&(!context.holidayMode||context.holidayMode==='date');
+ if(!allowed||context.pending||typeof context.lastDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(context.lastDate))throw Error('先に基準となる日付を1つ指定してください。例：「2026-01-31の1か月後は何日？」。');
+ return parseCivilDate(context.lastDate).toISOString().slice(0,10);
+}
+function parseCalendarFollow(input,context){
+ const text=input.replace(/^日付(?:計算)?[：:]\s*/,'').replace(/[。？?]$/,''),ending='(?:は(?:何日|何曜日)?|の日付|の曜日|なら|では)?';
+ const months=text.match(new RegExp('^(?:('+datePattern+'|今日)(?:から|の))?(\\d{1,6})(か月|ヶ月|ケ月|カ月|箇月|年)(後|前)'+ending+'$'));
+ if(months)return[{kind:'dateMath',operation:'addMonths',from:months[1]||'今日',months:Number(months[2])*(months[3]==='年'?12:1)*(months[4]==='前'?-1:1),unit:months[3]==='年'?'year':'month'}];
+ const amount=text.match(new RegExp('^(?:その|この)(?:日(?:から|の)?)?(\\d{1,7})(日|か月|ヶ月|ケ月|カ月|箇月|年)(後|前)'+ending+'$')),
+  relative=text.match(new RegExp('^(?:その|この)?(翌日|前日|翌月|前月|翌年|前年)'+ending+'$')),
+  weekday=/^(?:その日|この日)(?:は|の)(?:何曜日|曜日|日付|何日)$/.test(text),due=/^(?:あと何日|(?:その日|この日)まで(?:あと)?何日)$/.test(text),
+  diff=text.match(new RegExp('^('+datePattern+'|今日|その日|この日)から('+datePattern+'|今日|その日|この日)まで(?:は)?(?:何日|の日数|の日数差)$'));
+ if(!amount&&!relative&&!weekday&&!due&&!(diff&&/その日|この日/.test(text))){
+  if(/^(?:その|この|今日|\d|[+-]\d)/.test(text)&&new RegExp('(か月|ヶ月|ケ月|カ月|箇月|年)(後|前)'+ending+'$').test(text))return[{kind:'dateMath',error:'月数・年数は0以上の整数で、「前」「後」を付けて指定してください。'}];
+  return [];
+ }
+ if((amount||relative)&&['weather','sun'].includes(context.intent)&&!/^日付|何日|何曜日|日付|曜日/.test(input))return [];
+ let from;try{from=calendarReferenceDate(context);}catch(e){return[{kind:'dateMath',error:e.message}];}
+ if(weekday)return[{kind:'dateMath',operation:'weekday',from}];
+ if(due)return[{kind:'dateMath',operation:'difference',from:'今日',to:from}];
+ if(diff)return[{kind:'dateMath',operation:'difference',from:['その日','この日'].includes(diff[1])?from:diff[1],to:['その日','この日'].includes(diff[2])?from:diff[2]}];
+ if(relative){const name=relative[1],sign=/^前/.test(name)?-1:1;if(/日$/.test(name))return[{kind:'dateMath',operation:'add',from,days:sign}];return[{kind:'dateMath',operation:'addMonths',from,months:sign*(/年$/.test(name)?12:1),unit:/年$/.test(name)?'year':'month'}];}
+ const n=Number(amount[1])*(amount[3]==='前'?-1:1);return[amount[2]==='日'?{kind:'dateMath',operation:'add',from,days:n}:{kind:'dateMath',operation:'addMonths',from,months:n*(amount[2]==='年'?12:1),unit:amount[2]==='年'?'year':'month'}];
+}
 function parseLocalTasks(text,context={}){
  const input=text.normalize('NFKC').trim(),unit= input.match(convertPattern);
  const unitTask=(amount,from,to)=>from&&to?[{kind:'units',amount,from:from[0],to:to[0]}]:[{kind:'unitsGuide',message:'データ量の記号は大文字・小文字を区別します。Bはバイト、b/bitはビットです。例：1 MBは何Mbit？、1 GiBは何MB？'}];
@@ -1185,6 +1210,7 @@ function parseLocalTasks(text,context={}){
    return unitTask(amount?Number(amount[1].replaceAll(',','')):context.unitAmount,a,to?resolveUnit(to[1]):b);
   }
  }
+ const calendar=parseCalendarFollow(input,context);if(calendar.length)return calendar;
  const diff=input.match(dateDifference);
  if(diff)return [{kind:'dateMath',operation:'difference',from:diff[1],to:diff[2]}];
  const weekday=input.match(dateWeekday);
@@ -1220,11 +1246,19 @@ function parseCivilDate(input,today){
  return date;
 }
 function dateMath(task,today){
+ if(task.error)throw Error(task.error);
  const from=parseCivilDate(task.from,today),iso=date=>date.toISOString().slice(0,10),weekday=date=>'日月火水木金土'[date.getUTCDay()]+'曜日';
  if(task.operation==='difference'){
   const to=parseCivilDate(task.to,today);return {from:iso(from),to:iso(to),days:(to-from)/86400000};
  }
  if(task.operation==='weekday')return {date:iso(from),weekday:weekday(from)};
+ if(task.operation==='addMonths'){
+  if(!Number.isInteger(task.months)||Math.abs(task.months)>119987||task.unit!==undefined&&!['month','year'].includes(task.unit)||task.unit==='year'&&task.months%12!==0)throw Error('月数・年数は対応範囲内の整数で指定してください。');
+  const total=(from.getUTCFullYear()-1)*12+from.getUTCMonth()+task.months;if(total<0||total>119987)throw Error('日付は西暦1〜9999年の範囲で計算できます。');
+  const year=Math.floor(total/12)+1,month=total%12,end=new Date(0);end.setUTCFullYear(year,month+1,0);end.setUTCHours(0,0,0,0);
+  const day=Math.min(from.getUTCDate(),end.getUTCDate()),target=new Date(0);target.setUTCFullYear(year,month,day);target.setUTCHours(0,0,0,0);
+  return{from:iso(from),date:iso(target),weekday:weekday(target),months:task.months,clamped:day!==from.getUTCDate()};
+ }
  if(task.operation!=='add'||!Number.isInteger(task.days)||Math.abs(task.days)>3652058)throw Error('日数は整数で指定してください。');
  const target=new Date(from);target.setUTCDate(target.getUTCDate()+task.days);
  if(!Number.isFinite(target.getTime())||target.getUTCFullYear()<1||target.getUTCFullYear()>9999)throw Error('日付は西暦1〜9999年の範囲で計算できます。');
@@ -1253,16 +1287,20 @@ function createLocalHandlers({el,p,state,localDate,source,follows}){
    if(task.operation==='difference'){
     card.append(el('div',`${result.from} → ${result.to}`,'sub'),el('div',`${result.days.toLocaleString('ja-JP')} 日`,'big'));
    }else{
+    if(task.operation==='addMonths')card.append(el('div',result.from+' の '+Math.abs(task.unit==='year'?task.months/12:task.months).toLocaleString('ja-JP')+(task.unit==='year'?'年':'か月')+(task.months<0?'前':'後'),'sub'));
     if(task.operation==='add')card.append(el('div',`${result.from} の ${Math.abs(result.days).toLocaleString('ja-JP')}日${result.days<0?'前':'後'}`,'sub'));
     card.append(el('div',result.date,'big'),el('div',result.weekday,'details'));
    }
    body.append(card);
    if(task.operation==='difference')p(body,'開始日を0日として数えた、終了日までの暦上の日数差です。終了日が前なら負の値になります。');
+   if(task.operation==='addMonths')p(body,'月・年は同じ日付へ移し、その月にない日は月末に合わせます。'+(result.clamped?'今回は月末への補正を適用しました。':''));
    p(body,'端末内でグレゴリオ暦の日付を計算しました。'+(task.from==='今日'||task.to==='今日'?`「今日」は日本時間 ${today} です。`:''));
    state.context={...state.context,intent:'dateMath',pending:null,lastDate:result.date||result.to};
+   follows(body,['その翌日は？','その日は何曜日？','あと何日？','その日は祝日？']);
   }
  };
 }
+
 
 const businessDate='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日|今日)';
 function parseBusinessTasks(raw){
@@ -1519,7 +1557,8 @@ const FEATURE_CATALOG=[
  {id:'speedUnits',category:'tools',title:'速度を換算',description:'m/s・km/h・mph・ノットを端末内で換算。',query:'60mphは何km/h？',tags:'速度 そくど 風速 時速 秒速 マイル ノット',local:true},
  {id:'durationUnits',category:'tools',title:'時間の長さを換算',description:'ミリ秒・秒・分・時間・日を換算。1日は24時間。',query:'90分は何時間？',tags:'時間 じかん 秒 分 ミリ秒 日 換算',local:true},
  {id:'dataUnits',category:'tools',title:'データ量を換算',description:'MBとMiB、バイトとビットを区別して換算。',query:'1GiBは何MB？',tags:'データ 容量 バイト ビット MB MiB GB GiB KB キロ メガ ギガ',local:true},
- {id:'date',category:'tools',title:'日付計算',description:'日数を足す・引く、曜日を確認。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
+ {id:'date',category:'tools',title:'日付計算',description:'日・月・年を加減し、計算した日付で会話を続ける。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
+ {id:'dateMonths',category:'tools',title:'月・年で日付を計算',description:'同じ日がない月は月末に合わせ、補正を表示。',query:'2026-01-31の1か月後は何日？',tags:'日付 ひづけ 月 年 誕生日 記念日 月末 翌月 翌年',local:true},
  {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
  {id:'compound',category:'tools',title:'まとめて質問する',description:'依頼を区切り、条件を引き継いで順に処理。',query:'5kmは何m？それとcmなら？そして今日から100日後は何日？',tags:'複数 いくつか まとめて 会話 続き',local:true},
  {id:'businessDays',category:'tools',title:'営業日で日付を計算',description:'土日と日本の祝日を除いて前後の日付を計算。',query:'2026-10-30から3営業日後は何日？',tags:'仕事 締め切り 期限 平日 営業日 納期'},
@@ -1748,7 +1787,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目':c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目':c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
