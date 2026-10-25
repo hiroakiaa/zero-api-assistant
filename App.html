@@ -846,7 +846,17 @@ function renderTrendPlot(rows,maximum,label){
  for(const group of trendSegments(rows,maximum)){const line=document.createElementNS(svg.namespaceURI,'polyline');for(const [key,value]of Object.entries({points:group.map(p=>`${p.x},${p.y}`).join(' '),fill:'none',stroke:'#d7d7eb','stroke-width':'2','vector-effect':'non-scaling-stroke'}))line.setAttribute(key,value);svg.append(line);for(const point of group){const circle=document.createElementNS(svg.namespaceURI,'circle');for(const [key,value]of Object.entries({cx:String(point.x),cy:String(point.y),r:'2',fill:'#e2e2ef'}))circle.setAttribute(key,value);svg.append(circle);}}
  return svg;
 }
-function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date(),plot=renderTrendPlot}){
+function countryTrendCSV(series,indicator){
+ const cell=value=>{let text=String(value??'');if(/^[\s\uFEFF]*[=+\-@]|^[\t\r\n]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};
+ const rows=[['国・地域','コード','指標（日本語表記）','指標コード','単位','年','値（追加の丸めなし）','収録状況','出典','出典URL','ライセンス','ライセンスURL','取得日時']];
+ for(const value of series)for(const row of value.rows)rows.push([value.country.name,value.country.code,indicator.label,indicator.id,indicator.unit,row.year,row.value===null?'':row.value,row.value===null?'未収録':'収録あり','World Bank, World Development Indicators',value.url,'CC BY 4.0','https://creativecommons.org/licenses/by/4.0/',value.result.at||'']);
+ return '\uFEFF'+rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
+}
+function downloadTrendCSV(csv,filename){
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),anchor=document.createElement('a');anchor.href=url;anchor.download=filename;
+ try{document.body.append(anchor);anchor.click();}finally{anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}
+function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date(),plot=renderTrendPlot,download=downloadTrendCSV}){
  const directory=createCountryResolver(getJSON,statCountries);
  return async function countryTrend(task,body){
   const indicator=validateTrendTask(task,now());if(!task.countries.length){state.context={...state.context,intent:'countryTrend',lastDate:null,pending:'countryStat',countryMetric:task.metric,statCountries:[],trendFrom:task.from,trendTo:task.to};p(body,`${task.from}〜${task.to}年の${indicator.label}を調べる国・地域を指定してください。`);follows(body,['日本なら？','スイスなら？']);return;}
@@ -854,7 +864,9 @@ function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=(
   const valid=results.filter(r=>r.status==='fulfilled').map(r=>r.value),values=valid.flatMap(v=>v.rows.filter(r=>r.value!==null).map(r=>r.value)),maximum=Math.max(1,...values),format=value=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2}).format(value);
   body.append(el('h3',`${indicator.label}の推移 · ${task.from}〜${task.to}年`));if(values.length)p(body,`グラフの共通目盛：0〜${format(maximum)} ${indicator.unit}。未収録の年では線を切ります。`,'sub');
   const shown=new Set();for(let i=0;i<results.length;i++){const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}const value=result.value;if(shown.has(value.country.code))continue;shown.add(value.country.code);body.append(el('h3',value.country.name));if(value.rows.some(row=>row.value!==null)){body.append(plot(value.rows,maximum,`${value.country.name} ${indicator.label} ${task.from}〜${task.to}年`));p(body,`${task.from}年 — ${task.to}年`,'sub');}else p(body,'この期間の数値は未収録です。');const table=el('table',undefined,'trend-table'),head=el('thead'),heading=el('tr');heading.append(el('th','年'),el('th',indicator.unit+'（丸め表示）'));head.append(heading);table.append(head);const tbody=el('tbody');for(const row of value.rows){const tr=el('tr');tr.append(el('th',String(row.year)),el('td',row.value===null?'未収録':format(row.value)));tbody.append(tr);}table.append(tbody);body.append(table);source(body,`World Bank · ${indicator.id}`,value.url,value.result);}
-  if(!valid.length)return;if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'年別の公表値です。未収録は表に明示し、表示桁を丸めています。出典：World Bank, World Development Indicators。指標名は日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
+  if(!valid.length)return;
+  const exported=valid.filter((value,index,all)=>all.findIndex(other=>other.country.code===value.country.code)===index),save=el('button','年別データをCSV保存','history-item');save.type='button';save.addEventListener('click',()=>{try{download(countryTrendCSV(exported,indicator),`zero-${indicator.id}-${task.from}-${task.to}.csv`);}catch{p(body,'CSVを保存できませんでした。ブラウザーのダウンロード設定をご確認ください。','error');}});body.append(save);p(body,`取得できた${exported.length}か国・地域の全対象年を保存します。未収録は値を空欄にして明示し、数値には表示用の丸めを加えません。出典・単位・取得日時を含みます。`,'sub');
+  if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'年別の公表値です。未収録は表に明示し、表示桁を丸めています。出典：World Bank, World Development Indicators。指標名は日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
   const next=results.map((r,i)=>r.status==='fulfilled'?r.value.country:task.countries[i]).filter((country,index,all)=>all.findIndex(c=>(c.code||c.query||c.name)===(country.code||country.query||country.name))===index);state.context={...state.context,intent:'countryTrend',lastDate:null,pending:null,countryMetric:task.metric,statCountries:next,trendFrom:task.from,trendTo:task.to};follows(body,['過去5年なら？',task.metric==='life'?'人口は？':'平均寿命は？','スイスなら？']);
  };
 }
