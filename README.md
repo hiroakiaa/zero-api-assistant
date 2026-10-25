@@ -57,6 +57,8 @@ GASに `Code.gs`, `Config.gs`, `App.html`, `appsscript.json` を反映し、既�
 
 ## API出典
 
+ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`ISBN-10: 4780802040`のように入力します。検査数字を確認してから照会し、書名・著者等・出版社などを提供元の表記で表示します。詳細は版元ドットコムの本紹介ページへ進めます。ISBNが正しくても、openBDに収録されていない本があります。結果の再利用は最大1時間です。情報の更新や削除要請がある場合は接続を停止し、保存済みの紹介データも管理者が確認して対応します。
+
 - [MET Norway](https://api.met.no/doc/TermsOfService)
 - [Frankfurter](https://frankfurter.dev/)
 - [Wikipedia / MediaWiki](https://www.mediawiki.org/wiki/API:Main_page)
@@ -66,4 +68,5 @@ GASに `Code.gs`, `Config.gs`, `App.html`, `appsscript.json` を反映し、既�
 - [USGS](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php)
 - [World Bank](https://datacatalog.worldbank.org/public-licenses)
 - [Hacker News](https://github.com/HackerNews/API)
+- [openBD](https://openbd.jp/terms/)：本の紹介・販促目的に無償利用。個人・団体・企業で利用可能。書誌の基本情報を改変せず表示します。書影・内容紹介文・書評は取得結果から表示しません。
 - [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
