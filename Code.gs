@@ -89,7 +89,7 @@ function validateAPI_(url){
   provider='country';
   if(!path.includes('/indicator/')){allowed=['format'];expected={format:'json'};}
   else if(path.endsWith('/SP.POP.TOTL')&&params.mrv==='1'&&!params.source){allowed=['format','mrv','per_page'];expected={format:'json',mrv:'1',per_page:'1'};}
-  else {allowed=['format','source','mrnev','date','per_page'];expected={format:'json',source:'2',per_page:'1'};if(Object.prototype.hasOwnProperty.call(params,'date')){const maxYear=new Date(Date.now()+9*3600000).getUTCFullYear();if(params.mrnev!==undefined||!/^\d{4}$/.test(params.date)||Number(params.date)<1960||Number(params.date)>maxYear)throw Error('国統計の年が無効です。');}else expected.mrnev='1';}
+  else {allowed=['format','source','mrnev','date','per_page'];expected={format:'json',source:'2',per_page:params.per_page==='20'?'20':'1'};const maxYear=new Date(Date.now()+9*3600000).getUTCFullYear();if(params.per_page==='20'){const range=(params.date||'').match(/^(\d{4}):(\d{4})$/);if(params.mrnev!==undefined||!range||Number(range[1])<1960||Number(range[2])>maxYear||Number(range[1])>Number(range[2])||Number(range[2])-Number(range[1])>=20)throw Error('統計推移の年範囲が無効です。');}else if(Object.prototype.hasOwnProperty.call(params,'date')){if(params.mrnev!==undefined||!/^\d{4}$/.test(params.date)||Number(params.date)<1960||Number(params.date)>maxYear)throw Error('国統計の年が無効です。');}else expected.mrnev='1';}
  }else if(host==='hacker-news.firebaseio.com'&&/^\/v0\/(topstories|item\/[0-9]{1,12})\.json$/.test(path)){provider='news';allowed=[];
  }else if(host==='jp-postal-code-api.ttskch.com'&&/^\/api\/v1\/\d{7}\.json$/.test(path)){provider='postal';allowed=[];
  }else if(host==='api.openbd.jp'&&path==='/v1/get'){
