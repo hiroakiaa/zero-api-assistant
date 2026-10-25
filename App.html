@@ -1818,7 +1818,9 @@ function renderGeneratedAnswer(output,text,el){
 function generatedTranscriptText(body){const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');}
 
 function cloudGenerationInput(raw,history=[]){
- const explicit=explicitLocalPrompt(raw),prompt=explicit?.content||raw,kind=['文章','翻訳','要約','コード'].includes(explicit?.kind)?explicit.kind:'general';
+ const explicit=explicitLocalPrompt(raw),prompt=explicit?.content||raw;
+ const naturalTranslation=/(?:英語|日本語|韓国語|中国語|フランス語|スペイン語|ドイツ語|イタリア語|ポルトガル語|アラビア語)(?:に|へ)(?:訳して|翻訳して|翻訳してください|してください|して)(?:[。?？!！]?$|[：:])|(?:英訳|和訳|翻訳)(?:して|してください)(?:[。?？!！]?$|[：:])/.test(prompt.trim());
+ const kind=['文章','翻訳','要約','コード'].includes(explicit?.kind)?explicit.kind:!explicit&&naturalTranslation?'翻訳':'general';
  if(typeof prompt!=='string'||!prompt.trim()||prompt.length>2000)throw Error('クラウドAIへの入力は1〜2000文字で指定してください。');
  const recent=cloudConversationHistory(history);
  return {prompt,kind,history:recent};
