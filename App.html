@@ -355,6 +355,28 @@ function createPostalHandler({getJSON,el,p,source,state}){
  };
 }
 
+// Split only explicit separators outside quotes and parentheses.
+function requestSegments(raw,recognize,context={}){
+ const text=raw.normalize('NFKC').trim(),pairs={'「':'」','『':'』','“':'”','"':'"','(':')','[':']','{':'}'},stack=[],parts=[];
+ let buffer='',strong=false,i=0;
+ const push=()=>{const part=buffer.trim().replace(/^[、,]\s*/,'');if(part)parts.push(part);buffer='';};
+ while(i<text.length){
+  const ch=text[i];
+  if(stack.length){buffer+=ch;if(ch==='\\'&&stack.at(-1)==='"'&&i+1<text.length){buffer+=text[++i];}else if(ch===stack.at(-1))stack.pop();else if(pairs[ch]&&ch!=='"')stack.push(pairs[ch]);i++;continue;}
+  if(pairs[ch]){stack.push(pairs[ch]);buffer+=ch;i++;continue;}
+  const connector=text.slice(i).match(/^(?:(?:それと|そして|加えて)(?:[、,\s]*)|あと[、,\s]+)/);
+  const queryText=/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる)[：:\s]/.test(buffer)&&!/[?、,」』”"]\s*$/.test(buffer);
+  if(connector&&!queryText){push();strong=true;i+=connector[0].length;continue;}
+  if(/[。;\n\r]/.test(ch)){push();i++;continue;}
+  buffer+=ch;i++;
+ }
+ if(stack.length)return [text];push();
+ if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
+ const follow=/^(?:(?:明日|明後日|あさって|今日|\d+日後)(?:は)?|(?:ほかには|他には|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?)|.{1,20}なら)[？?]?$/;
+ if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
+ return [text];
+}
+
 const $=s=>document.querySelector(s);
 const cloud=new CloudDB();
 const providerCooldowns=new ProviderCooldowns();
@@ -440,10 +462,20 @@ async function ask(raw){
  const user=el('div',undefined,'message user');user.append(el('div',text,'bubble'));$('#messages').append(user);state.transcript.push({role:'あなた',text});
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
-  const tasks=parsePlan(text,state.context);loading.remove();
-  if(!tasks.length)help(body);
+  const requests=requestSegments(text,parsePlan,state.context);loading.remove();
   const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
-  for(const task of tasks.slice(0,4)){const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}}
+  let executed=0,helpShown=false,limited=false;
+  for(const request of requests){
+   if(executed>=4){limited=true;break;}
+   const tasks=parsePlan(request,state.context);
+   if(!tasks.length){if(requests.length>1)p(body,`「${request}」は対応する処理を見つけられませんでした。`);if(!helpShown){help(body);helpShown=true;}continue;}
+   for(const task of tasks){
+    if(executed>=4){limited=true;break;}executed++;
+    const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);
+    try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}
+   }
+  }
+  if(limited)p(body,'1回に実行できる依頼は4件までです。残りは分けて送ってください。');
   updateContext();
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
  finally{
