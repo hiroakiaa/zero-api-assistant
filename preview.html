@@ -807,12 +807,13 @@ const trendError=error=>[{kind:'countryTrend',error}];
 function parseCountryTrend(raw,context={},now=new Date()){
  let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text))return [];
  const explicit=/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/人口|GDP|国内総生産|平均寿命|出生時平均余命/i.test(text);
+ if(active)text=text.replace(/^(?:同じ|その)期間(?:で|の|なら|では)?\s*/,'');
  if(!explicit&&!active||explicit&&!hasMetric&&!['countryTrend','countryStat'].includes(context.intent))return [];
  if(active&&/^最新(?:では|なら|は)?$/.test(text))return [{kind:'countryStat',countries:context.statCountries||[],metric:context.countryMetric,year:null}];
  if(!hasMetric&&/天気|気温|日の出|地震|祝日|為替|ドル|円|計算|時刻|翻訳|文章|ニュース/.test(text))return [];
  if(!explicit&&hasMetric&&!/^(?:人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命)(?:は|なら|では)?$/i.test(text))return [];
  const ranges=[...text.matchAll(/(\d{4})年?\s*(?:から|[~〜～–-])\s*(\d{4})年/g)],recent=[...text.matchAll(/(?:過去|直近)(\d{1,3})年(?:間)?/g)];if(ranges.length+recent.length>1)return trendError('推移の期間は1つだけ指定してください。');
- const currentYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));let from=active&&!explicit?context.trendFrom:currentYear-9,to=active&&!explicit?context.trendTo:currentYear;
+ const currentYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));let from=active?context.trendFrom:currentYear-9,to=active?context.trendTo:currentYear;
  if(ranges.length){from=Number(ranges[0][1]);to=Number(ranges[0][2]);text=text.replace(ranges[0][0],'');}
  if(recent.length){const years=Number(recent[0][1]);to=currentYear;from=to-years+1;text=text.replace(recent[0][0],'');}
  if(/\d+年|以降|以前|来年|去年|昨年|今年/.test(text))return trendError('開始年と終了年を指定してください。例：「2020年から2025年の日本の人口推移」。');
