@@ -8,6 +8,9 @@
 .model-preparation-list{display:grid;gap:6px;margin:12px 0 20px}.model-preparation-row{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border:1px solid #34343c;border-radius:10px;font-size:11px}.model-preparation-row span:last-child{color:#b5b5c4}.local-ai-bar span{overflow-wrap:anywhere;min-width:0}.local-ai-bar #ai-stop{flex-shrink:0}
 
 @media(max-width:520px){.header-tools #cloud-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}}
+
+.ai-routing-option{display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.7;margin:12px 0}.ai-routing-option input{width:16px;height:16px;flex-shrink:0;accent-color:#ddd}
+
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -808,7 +811,7 @@ const FEATURE_CATALOG=[
  {id:'weekdays',category:'tools',title:'土日のみ除いて計算',description:'祝日は数えて土日のみ除く。API不要。',query:'土日のみ除く: 今日から5日後は何日？',tags:'土日 平日 期限 カレンダー',local:true},
  {id:'ai-writing',category:'tools',title:'端末内AIで文章を書く',description:'モデルを読み込んでから、短い文章を生成。',query:'文章: お礼のメールを3文で書いて',tags:'AI LLM 作文 メール 下書き 生成 相談',local:true},
  {id:'ai-translate',category:'research',title:'端末内AIで翻訳',description:'モデルを読み込んでから、短文を翻訳。',query:'翻訳: Good morning. を日本語にして',tags:'AI LLM 翻訳 ほんやく 英語 言い換え',local:true},
- {id:'ai-code',category:'tools',title:'端末内AIでコード相談',description:'コードの説明や下書き。実行はしません。',query:'コード: JavaScriptのmapを短い例で説明して',tags:'AI LLM プログラミング コード JavaScript Python GAS',local:true}
+ {id:'ai-code',category:'tools',title:'端末内AIでコード相談',description:'自動選択時は準備済みのコード向けモデルで説明や下書き。コードは実行しません。',query:'コード: JavaScriptのmapを短い例で説明して',tags:'AI LLM プログラミング コード JavaScript Python GAS',local:true}
 ];
 const searchText=value=>value.normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
 function filterFeatures(query='',category='all'){
@@ -841,7 +844,7 @@ const LOCAL_MODELS=[
  {id:'qwen-cpu',name:'互換モード',model:'onnx-community/Qwen2.5-0.5B-Instruct',repository:'onnx-community/Qwen2.5-0.5B-Instruct',revision:'22942cb7d7ba4cc81bb4673549ca4d4614469b5e',runtime:'transformers',dtype:'q8',bytes:520000000,role:'GPUなし・英語の短文向け。日本語や翻訳は不得手です',license:'Apache-2.0',source:'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct'}
 ];
 function localModel(id){const model=LOCAL_MODELS.find(m=>m.id===id);if(!model)throw Error('登録された端末内モデルを選択してください。');return model;}
-function explicitLocalPrompt(raw){const text=String(raw).trim(),match=text.match(/^([^:：]{1,8})[：:]\s*([\s\S]+)$/),kind=match?.[1].normalize('NFKC').toLowerCase();return /^(ai|相談|文章|翻訳|要約|コード)$/.test(kind||'')?{kind,text,content:match[2]}:null;}
+function explicitLocalPrompt(raw){const text=String(raw).trim(),match=text.match(/^([^:：]{1,10})[：:]\s*([\s\S]+)$/),key=match?.[1].normalize('NFKC').toLowerCase(),aliases={ai:'ai',相談:'相談',文章:'文章',文章作成:'文章',作文:'文章',write:'文章',翻訳:'翻訳',translate:'翻訳',要約:'要約',summarize:'要約',コード:'コード',プログラミング:'コード',code:'コード'};return Object.hasOwn(aliases,key)?{kind:aliases[key],text,content:match[2]}:null;}
 function dataRoutingText(raw){const explicit=explicitLocalPrompt(raw);return explicit?(explicit.kind==='ai'?explicit.content:null):raw;}
 function generationMessages(prompt,history=[],mode='chat',runtime='webllm'){
  const task=explicitLocalPrompt(prompt),guidance={文章:'文章の書き方の説明ではなく、指定された完成原稿を直接書いてください。登場人物の会話など依頼の条件を守ってください。',翻訳:'翻訳先の言語で翻訳文だけを書いてください。原文にない挨拶・質問・内容を付け加えないでください。',要約:'与えられた文章の要点をまとめてください。原文にない事実を足さないでください。',コード:'コードの説明・下書きを提示してください。コードを実行したとは言わないでください。'}[task?.kind]||'';
@@ -864,6 +867,31 @@ function generationResult(text,reason){
  const finishReason=['stop','length','repetition'].includes(reason)?reason:'unknown';
  const notice={stop:'',length:'生成量の上限に達したため途中で終了しました。未完の文章です。依頼を短く分けて送れます。',repetition:'同じ長い表現が連続したため生成を停止しました。未完の文章です。条件を具体的にして、もう一度試してください。',unknown:'生成の終了理由を確認できませんでした。文章が途中で切れていないか確認してください。'}[finishReason];
  return {text,finishReason,complete:finishReason==='stop',notice};
+}
+
+function localTaskKind(raw,context={}){
+ const explicit=explicitLocalPrompt(raw),text=(explicit?.content||String(raw)).trim();
+ if(explicit?.kind==='コード')return 'code';
+ if(explicit&&['文章','翻訳','要約'].includes(explicit.kind))return 'general';
+ if(/```|^(?:コード|プログラミング|JavaScript\b|TypeScript\b|Python\b|Java\b|HTML\b|CSS\b|SQL\b|GAS\b|Rust\b|C\+\+|C#|Go言語)/i.test(text))return 'code';
+ if(context.intent==='localAI'&&context.localTask==='code'&&/^(?:もっと短く|短くして|もっと詳しく|詳しく|続き|別の例|もう一つ|他の方法|修正して|説明して)[。？?]?$/.test(text))return 'code';
+ return 'general';
+}
+function chooseLocalRoute(raw,context={},options={}){
+ const current=localModel(options.current),task=localTaskKind(raw,context),preferred=task==='code'?'qwen-coder':'qwen3-chat';
+ const automatic=options.automatic!==false,available=options.gpu===true&&options.prepared?.[preferred]==='prepared';
+ const model=automatic&&available?localModel(preferred):current;
+ return {task,modelId:model.id,switchModel:model.id!==current.id,automatic};
+}
+class ModelRouter{
+ constructor(ai,options=()=>({})){this.ai=ai;this.options=options;}
+ plan(raw,context={}){if(!this.ai.ready)throw Error('端末内モデルの準備が終わってから送信してください。');return chooseLocalRoute(raw,context,{...this.options(),current:this.ai.model.id});}
+ async ensure(raw,context={}){
+  const route=this.plan(raw,context);
+  if(route.switchModel)await this.ai.load(route.modelId);
+  if(!this.ai.ready||this.ai.model?.id!==route.modelId)throw Error('用途に合う端末内モデルを起動できませんでした。端末内AIからモデルを選んで再開してください。');
+  return route;
+ }
 }
 
 class ModelPreparation{
@@ -922,27 +950,31 @@ function mountAIPanel({ai,el,link}){
  const device=el('p','端末の対応状況を確認中…','info-note');device.id='ai-device';dialog.append(device);
  const allControls=el('div',undefined,'ai-controls'),prepare=el('button','全モデルをまとめて準備','new-chat'),pause=el('button','一括準備を停止','history-item');prepare.id='ai-prepare-all';pause.id='ai-prepare-pause';pause.hidden=true;allControls.append(prepare,pause);dialog.append(allControls);
  const preparationList=el('div',undefined,'model-preparation-list');preparationList.id='ai-preparation-list';dialog.append(preparationList);
+ const routeLabel=el('label',undefined,'ai-routing-option'),automatic=el('input');automatic.type='checkbox';automatic.id='ai-routing-auto';try{automatic.checked=localStorage.getItem('zero-model-routing-auto')!=='false';}catch{automatic.checked=true;}routeLabel.append(automatic,el('span','用途に合わせてモデルを自動選択'));dialog.append(routeLabel,el('p','準備に成功したモデルから、文章・会話は標準モデル、コード相談はコード向けモデルを使います。手動でモデルを起動すると、自動選択を解除します。','info-note'));
  const label=el('label','モデルを選ぶ','skills-search'),select=el('select');select.id='ai-model';for(const model of LOCAL_MODELS){const option=el('option',`${model.name} · ${model.model}`);option.value=model.id;select.append(option);}select.value='qwen3-chat';label.append(select);dialog.append(label);
  const detail=el('div',undefined,'model-detail');dialog.append(detail,el('p','モデルは1つずつ準備し、実行も1つずつ行います。取得済みファイルはブラウザーが保持している間、次回も再利用します。別の端末・ブラウザーでは初回取得が必要です。通信量・空き容量・電力を使い、対応状況と速度は端末によって異なります。読み込み解除は実行を止めますが、キャッシュを削除しません。','info-note'));
  const controls=el('div',undefined,'ai-controls'),load=el('button','選択したモデルを起動','new-chat'),unload=el('button','読み込み解除','history-item');load.id='ai-load';unload.id='ai-unload';controls.append(load,unload);dialog.append(controls);
  const progress=el('progress');progress.id='ai-progress';progress.max=1;progress.hidden=true;const status=el('p','未読み込み','info-note');status.id='ai-status';status.setAttribute('role','status');dialog.append(progress,status);document.body.append(dialog);
  const bar=el('div',undefined,'local-ai-bar'),open=el('button','✦ 端末内AI','text-button'),barStatus=el('span','全モデルの準備を確認中…'),stop=el('button','停止','text-button');open.id='ai-open';barStatus.id='ai-bar-status';stop.id='ai-stop';stop.hidden=true;bar.append(open,barStatus,stop);document.querySelector('.composer-area').insertBefore(bar,document.querySelector('#chat-form'));
  let gpu=false,checked=false,checking=null,batch={phase:'off',current:0,total:4,prepared:0,results:{}},last={phase:'off',text:'未読み込み'};
+ const routing=new ModelRouter(ai,()=>({automatic:automatic.checked,gpu,prepared:batch.results}));
+ const saveRouting=()=>{try{localStorage.setItem('zero-model-routing-auto',String(automatic.checked));if(!automatic.checked&&ai.model?.id)localStorage.setItem('zero-model-manual-id',ai.model.id);}catch{}};automatic.addEventListener('change',saveRouting);
+ const manualModel=()=>{try{return localModel(localStorage.getItem('zero-model-manual-id'));}catch{return null;}};
  const preparation=new ModelPreparation(ai,state=>{batch=state;preparationList.replaceChildren();const labels={loading:'準備中',prepared:'準備成功',unsupported:'この端末では未対応',failed:'準備失敗・再試行できます',paused:'停止'};for(const model of LOCAL_MODELS){const row=el('div',undefined,'model-preparation-row');row.append(el('span',model.name),el('span',labels[state.results[model.id]]||'未準備'));preparationList.append(row);}render(last);});
  const paused=value=>{try{if(value!==undefined)localStorage.setItem('zero-model-preparation-paused',String(value));return localStorage.getItem('zero-model-preparation-paused')==='true';}catch{return false;}};
- function updateButton(){const model=localModel(select.value),busy=preparation.running||['loading','generating'].includes(ai.phase);load.disabled=busy||checked&&model.runtime==='webllm'&&!gpu;select.disabled=busy;prepare.disabled=busy;pause.hidden=!preparation.running;unload.disabled=ai.phase==='off'&&!preparation.running;}
+ function updateButton(){const model=localModel(select.value),busy=preparation.running||['loading','generating'].includes(ai.phase);load.disabled=busy||checked&&model.runtime==='webllm'&&!gpu;select.disabled=busy;automatic.disabled=busy;prepare.disabled=busy;pause.hidden=!preparation.running;unload.disabled=ai.phase==='off'&&!preparation.running;}
  function details(){const model=localModel(select.value);detail.replaceChildren();detail.append(el('strong',model.role),el('p',`モデル取得：約${Math.ceil(model.bytes/1000000)} MB ＋実行ライブラリ`),el('p',model.runtime==='webllm'?`GPUメモリ目安：約${(model.memoryMB/1000).toFixed(1)} GB（実行環境で変動）`:'CPUで実行します。処理に時間がかかる場合があります。'),link('モデル提供元・Apache 2.0ライセンス',model.source));updateButton();}
- async function checkDevice(){if(checking)return checking;checking=(async()=>{try{const adapter=await navigator.gpu?.requestAdapter();gpu=!!adapter?.features.has('shader-f16');}catch{}checked=true;device.textContent=gpu?'GPUモードに対応しています。全モデルの準備後は会話・文章モデルを起動します。':'GPUモデルはこの端末では準備できません。互換モードを準備します。';if(!gpu)select.value='qwen-cpu';details();})();return checking;}
- function render(state){last=state;if(preparation.running&&state.model&&select.value!==state.model.id){select.value=state.model.id;details();}
+ async function checkDevice(){if(checking)return checking;checking=(async()=>{try{const adapter=await navigator.gpu?.requestAdapter();gpu=!!adapter?.features.has('shader-f16');}catch{}checked=true;device.textContent=gpu?'GPUモードに対応しています。用途別の自動選択とモデルの手動固定を使えます。':'GPUモデルはこの端末では準備できません。互換モードを準備します。';if(!gpu)select.value='qwen-cpu';details();})();return checking;}
+ function render(state){last=state;if(state.model&&select.value!==state.model.id){select.value=state.model.id;details();}
   const preparing=preparation.running,prefix=preparing?`一括準備 ${batch.current}/${batch.total} · `:batch.phase==='done'?`全${batch.prepared}モデル準備成功 · `:batch.phase==='partial'?`${batch.prepared}/${batch.total}モデル準備成功 · `:'';
   status.textContent=prefix+(state.text||'未読み込み');barStatus.textContent=preparing?`一括準備 ${batch.current}/${batch.total}（初回約2.7GB＋実行ファイル）`:batch.phase==='paused'?'一括準備を停止中':prefix+(state.phase==='ready'?state.model?.name:state.phase==='loading'?'読み込み中…':state.phase==='generating'?'生成中…':'未読み込み');
   stop.hidden=!preparing&&!['loading','generating'].includes(state.phase);progress.hidden=!preparing&&state.phase!=='loading';if(Number.isFinite(state.progress))progress.value=Math.max(0,Math.min(1,state.progress));else progress.removeAttribute('value');updateButton();
  }
- async function prepareAll(){await checkDevice();if(preparation.running)return;paused(false);try{await preparation.run({gpu});}catch(e){status.textContent=e.message;}if(ai.phase==='ready'){select.value=ai.model.id;details();}}
+ async function prepareAll(){await checkDevice();if(preparation.running)return;paused(false);const manual=!automatic.checked?manualModel():null;try{await preparation.run({gpu,...(manual&&(gpu||manual.runtime==='transformers')?{preferred:manual.id}:{})});}catch(e){status.textContent=e.message;}if(ai.phase==='ready'){select.value=ai.model.id;details();}}
  function stopPreparation(){paused(true);if(preparation.running)preparation.cancel();else ai.clear('端末内AIの処理を停止しました。');}
  async function show(){dialog.showModal();await checkDevice();select.focus();}
- open.addEventListener('click',show);select.addEventListener('change',details);prepare.addEventListener('click',prepareAll);pause.addEventListener('click',stopPreparation);stop.addEventListener('click',stopPreparation);unload.addEventListener('click',stopPreparation);load.addEventListener('click',async()=>{try{await ai.load(select.value);}catch(e){if(ai.phase==='off')status.textContent=e.message;}});details();
- return{show,update:render,async autoPrepare(){if(paused()){batch.phase='paused';render(last);return;}await prepareAll();}};
+ open.addEventListener('click',show);select.addEventListener('change',details);prepare.addEventListener('click',prepareAll);pause.addEventListener('click',stopPreparation);stop.addEventListener('click',stopPreparation);unload.addEventListener('click',stopPreparation);load.addEventListener('click',async()=>{automatic.checked=false;saveRouting();const id=select.value;try{await ai.load(id);try{localStorage.setItem('zero-model-manual-id',id);}catch{}}catch(e){if(ai.phase==='off')status.textContent=e.message;}});details();
+ return{show,update:render,plan:(text,context)=>routing.plan(text,context),ensureFor:(text,context)=>routing.ensure(text,context),async autoPrepare(){if(paused()){batch.phase='paused';render(last);return;}await prepareAll();}};
 }
 
 const $=s=>document.querySelector(s);
@@ -1021,6 +1053,7 @@ function help(body){body.append(el('h3','こんなふうに聞いてください
 function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
+ const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
  head.querySelector('.tag').textContent='端末内LLM';const output=el('div','生成しています…','local-generated');body.append(output);
  const history=state.context.localHistory||[];let partial='',answer;
  let outcome;try{outcome=await localAI.generate(text,history,value=>{partial=value;output.textContent=value||'生成しています…';scrollConversationToEnd(false);});answer=outcome.text;}
@@ -1028,7 +1061,7 @@ async function localAnswer(text,body,head){
  output.replaceChildren();
  const blocks=answer.split(/(```[^\n]*\n[\s\S]*?```)/g);for(const block of blocks){if(!block)continue;if(block.startsWith('```')&&block.endsWith('```')){const code=el('code',block.replace(/^```[^\n]*\n/,'').slice(0,-3).trimEnd()),pre=el('pre');pre.append(code);output.append(pre);}else output.append(el('p',block.trim()));}
  if(!outcome.complete){p(body,outcome.notice,'error');return false;}
- state.context={...state.context,intent:'localAI',localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
+ state.context={...state.context,intent:'localAI',localTask:route.task,localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
 }
 async function ask(raw){
  const text=raw.trim();if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
