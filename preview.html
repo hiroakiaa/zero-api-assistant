@@ -442,6 +442,7 @@ function generationMessages(prompt,history=[],mode='chat'){
  const system=mode==='explain'?'あなたは日本語の説明係です。与えられたデータだけを短く説明してください。数値・日付・出典を変更せず、不明な情報を補わないでください。':'あなたは日本語で簡潔に答えるアシスタントです。依頼文を繰り返さず、完成した文章・翻訳・説明を直接出力してください。現在の天気・為替・住所などを推測せず、アプリのデータ照会を案内してください。外部サービスの呼出しやコード実行をしたと偽らないでください。';
  const messages=[{role:'system',content:system}];let room=700;
  const recent=[];for(const m of history.slice(-6).reverse()){if(m.source!=='llm'||!['user','assistant'].includes(m.role)||typeof m.text!=='string')continue;const text=m.text.slice(0,Math.min(room,800));if(!text)break;recent.unshift({role:m.role,content:text});room-=text.length;}
+ while(recent.length&&recent[0].role!=='user')recent.shift();
  if(String(prompt).length>2000)throw Error('端末内AIへの入力は2000文字以内で指定してください。');
  messages.push(...recent,{role:'user',content:String(prompt)});return messages;
 }
