@@ -64,6 +64,9 @@ function validateAPI_(url){
   if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
   if(path.includes('/sunrise/')&&(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!/^[-+]\d{2}:\d{2}$/.test(params.offset||'')))throw Error('天文の検索条件が無効です。');
  }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=[];
+ }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&params.list==='geosearch'){
+  provider='knowledge';allowed=['action','format','origin','list','gscoord','gsradius','gslimit','gsnamespace','gsprimary'];expected={action:'query',format:'json',origin:'*',list:'geosearch',gslimit:'20',gsnamespace:'0',gsprimary:'primary'};
+  const coordinates=(params.gscoord||'').split('|');if(coordinates.length!==2||coordinates.some(n=>! /^-?\d{1,3}(\.\d{1,4})?$/.test(n))||Math.abs(Number(coordinates[0]))>90||Math.abs(Number(coordinates[1]))>180||! /^(?:[1-9]\d{2,3}|10000)$/.test(params.gsradius||''))throw Error('周辺記事の座標・半径が無効です。');
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'){
   provider='knowledge';expected={action:'query',format:'json',origin:'*',generator:'search',gsrlimit:'3'};
   if(params.prop==='coordinates'){allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','colimit'];expected.prop='coordinates';expected.colimit='1';}
