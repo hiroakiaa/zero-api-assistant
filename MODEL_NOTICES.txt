@@ -660,3 +660,8 @@ Server-side only (no browser download): Qwen2.5-7B-Instruct
 Model: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
 Ollama registry: https://ollama.com/library/qwen2.5:7b-instruct
 License: Apache-2.0 (the Apache 2.0 text above also applies). Actual installed model digest is recorded privately in deployment evidence.
+
+Server-side optional translation model (no browser download): Qwen2.5-14B-Instruct
+Model: https://huggingface.co/Qwen/Qwen2.5-14B-Instruct
+Ollama registry: https://ollama.com/library/qwen2.5:14b-instruct
+License: Apache-2.0 (the Apache 2.0 text above also applies). Actual installed model digest is recorded privately in deployment evidence.
