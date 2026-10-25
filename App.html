@@ -181,7 +181,7 @@ const bookFields={q:'キーワード',title:'書名',author:'著者名'};
 const bookSearchFields='key,title,author_name,first_publish_year,editions,editions.key,editions.title,editions.isbn';
 function selectedBookCandidates(context){
  const list=context.bookCandidates,page=context.page;
- if(!Number.isInteger(page)||page<1||page>5||!Array.isArray(list)||list.length>5||!list.length||list.some((v,i)=>!v||v.number!==(page-1)*5+i+1||!/^OL[1-9]\d{0,11}W$/.test(v.workId)||v.editionId!==null&&!/^OL[1-9]\d{0,12}M$/.test(v.editionId)||v.isbn!==null&&(typeof v.isbn!=='string'||isbn13(v.isbn)!==v.isbn))||new Set(list.map(v=>v.workId)).size!==list.length)throw Error('保存した本の候補を確認できません。もう一度検索してください。');
+ if(!Number.isInteger(page)||page<1||page>5||!Array.isArray(list)||list.length>5||!list.length||list.some((v,i)=>!v||v.number!==(page-1)*5+i+1||!/^OL[1-9]\d{0,11}W$/.test(v.workId)||v.editionId!=null&&!/^OL[1-9]\d{0,12}M$/.test(v.editionId)||v.isbn!=null&&(typeof v.isbn!=='string'||isbn13(v.isbn)!==v.isbn))||new Set(list.map(v=>v.workId)).size!==list.length)throw Error('保存した本の候補を確認できません。もう一度検索してください。');
  return list;
 }
 const bookError=error=>[{kind:'books',error}];
