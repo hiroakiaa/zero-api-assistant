@@ -26,6 +26,7 @@ function parsePlan(raw, context={}){
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
  const nearby=parseNearby(text,context,cities);if(nearby.length)return nearby;
  const convertedTime=parseTimeConversion(text,context);if(convertedTime.length)return convertedTime;
+ const solar=parseSolarTasks(text,context,cities);if(solar.length)return solar;
  const jpHolidays=parseJapaneseHolidays(text,context);if(jpHolidays.length)return jpHolidays;
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
@@ -518,6 +519,71 @@ function createTimeConversionHandler({el,p,state,follows,cities,now=()=>Date.now
  };
 }
 
+const solarDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
+const solarError=error=>[{kind:'sun',error}];
+function checkedSolarDate(value){const date=parseCivilDate(value).toISOString().slice(0,10);if(date<'2000-01-01'||date>'2099-12-31')throw Error('このアプリの天文日付は2000〜2099年で指定してください。');return date;}
+function shiftSolarDate(date,days){const value=parseCivilDate(checkedSolarDate(date));value.setUTCDate(value.getUTCDate()+days);return checkedSolarDate(value.toISOString().slice(0,10));}
+function parseSolarTasks(raw,context={},cities=[]){
+ const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');if(weatherQueryProtected(text))return [];
+ const explicit=/日の出|日の入り|日没/.test(text),active=context.intent==='sun';
+ if(!explicit&&/天気|気温|傘|服装|人口|GDP|首都|平均寿命|祝日|為替|円|ドル|ユーロ|換算|計算|時刻|何時|翻訳|文章|論文|検索|ニュース|単位|書籍|プログラム/.test(text))return [];
+ const found=cities.filter(city=>text.includes(city.name)||text.toLowerCase().includes(city.query?.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
+ const follow=active&&(/^(?:今日|明日|明後日|あさって|あした|きょう|昨日|一昨日|翌日|前日|\d+日[後前])(?:なら|では|は)?$/.test(text)||new RegExp(`^${solarDatePattern}(?:なら|では|は)?$`).test(text)||/^.{2,40}(?:なら|では)$/.test(text)||found.length&&text.length<25||context.pending==='sun'&&/^[\p{L} .・-]{1,40}$/u.test(text)&&!/天気|気温|人口|GDP|首都|平均寿命|祝日|為替|計算|時刻|翻訳|文章|論文|検索/.test(text));
+ if(!explicit&&!follow)return [];
+ if(/天気|気温|\d+時|\d+:\d+|来週|先週|今週|週末|曜日|来年|去年|昨年|来月|先月|夏至|冬至|春分|秋分|大晦日|年末|年始|\d+日間|から|まで/.test(text)||/元日|元旦|初日の出/.test(text)&&!new RegExp(solarDatePattern).test(text))return solarError('日の出・日の入りは1日ずつ年月日で指定してください。例：「東京の2027-01-01の日の出」。他の依頼は改行して質問できます。');
+ const cleaned=weatherPlaceText(text).replace(/(?:翌日|前日|元日|元旦)の/g,'').replace('初日の出','日の出'),placeMatch=cleaned.match(/^(.{1,50}?)の(?:日の出|日の入り|日没)/),cityFollow=!explicit&&text.match(/^(.{1,40}?)(?:なら|では)$/),relativeCity=/^(?:今日|明日|明後日|あさって|あした|きょう|昨日|一昨日|翌日|前日|\d+日[後前])$/;
+ let named=placeMatch?.[1];if(!named&&cityFollow&&!relativeCity.test(cityFollow[1])&&!new RegExp(solarDatePattern).test(cityFollow[1]))named=cityFollow[1];if(!named&&context.pending==='sun'&&!explicit&&/^[\p{L} .・-]{1,40}$/u.test(text)&&!relativeCity.test(text))named=text;
+ const places=found.length?found:named?[{name:named,query:named}]:context.places||[];
+ if(explicit&&!found.length&&!placeMatch&&!/^(?:日の出|日の入り|日没)(?:は|を|の)?(?:何時(?:ですか)?|時刻|教えて|調べて)?$/.test(cleaned))return solarError('地点と日付を確認してください。例：「金沢の2027-01-01の日の出」。');
+ const dates=[...text.matchAll(new RegExp(solarDatePattern,'g'))];if(dates.length>1)return solarError('天文の日付は1件ずつ指定してください。');
+ let task={kind:'sun',places,offset:0};
+ try{
+  if(dates.length){if(/今日|明日|明後日|昨日|一昨日|翌日|前日|\d+日[後前]/.test(text))return solarError('日付と相対日が混在しています。調べる日を1つ指定してください。');task.date=checkedSolarDate(dates[0][0]);if(/初日の出|元日|元旦/.test(text)&&!task.date.endsWith('-01-01'))return solarError('初日の出は1月1日の日付で指定してください。');}
+  else if(/翌日|前日/.test(text)){if(!active||!context.sunDates?.length)return solarError('先に基準の日付を調べてください。例：「東京の2027-01-01の日の出」。');const shift=/翌日/.test(text)?1:-1;if(context.sunDate)task.date=shiftSolarDate(context.sunDate,shift);else task.previousDates=context.sunDates.map(value=>({name:value.name,date:shiftSolarDate(value.date,shift)}));}
+  else if(/\d{4}[-/年]|\d+月\d+日/.test(text))return solarError('日付は西暦を含む年月日で指定してください。');
+  else {const relative=/明後日|あさって/.test(text)?2:/明日|あした/.test(text)?1:/一昨日/.test(text)?-2:/昨日/.test(text)?-1:/今日|きょう/.test(text)?0:null,days=text.match(/(\d+)日(後|前)/);if(relative!==null)task.offset=relative;else if(days)task.offset=Number(days[1])*(days[2]==='前'?-1:1);else if(active){if(context.sunDate)task.date=checkedSolarDate(context.sunDate);else if(context.sunDates?.length)task.previousDates=context.sunDates;else task.offset=context.offset||0;}}
+ }catch(error){return solarError(error.message);}
+ return [task];
+}
+function solarRequestDate(task,place,today){
+ if(task.date!==undefined)return checkedSolarDate(task.date);
+ if(task.previousDates){const previous=task.previousDates.find(value=>value.name===place.name);if(!previous)throw Error('都市ごとに基準日が異なります。新しい地点の日付も年月日で指定してください。');return checkedSolarDate(previous.date);}
+ if(!Number.isInteger(task.offset)||Math.abs(task.offset)>36600)throw Error('天文の日数は整数で指定してください。');return shiftSolarDate(today,task.offset);
+}
+function solarOffset(date,zone){
+ const candidates=localTimeCandidates(date,'12:00',zone);if(candidates.length!==1)throw Error('指定日の現地正午を一意に確認できません。別の日付を指定してください。');
+ const minutes=(parseCivilDate(date).getTime()+12*3600000-candidates[0])/60000;if(!Number.isInteger(minutes)||minutes<-720||minutes>900)throw Error('天文APIに渡せる時差の範囲外です。');
+ return `${minutes<0?'-':'+'}${String(Math.floor(Math.abs(minutes)/60)).padStart(2,'0')}:${String(Math.abs(minutes)%60).padStart(2,'0')}`;
+}
+function solarStamp(value){
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,9})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(value))throw Error('天文時刻の形式を確認できません。');parseCivilDate(value.slice(0,10));const stamp=Date.parse(value);if(!Number.isFinite(stamp))throw Error('天文時刻の値を確認できません。');return stamp;
+}
+function solarEvents(data,place,date,zone){
+ const coordinates=data?.geometry?.coordinates,interval=data?.when?.interval;if(data?.type!=='Feature'||data?.geometry?.type!=='Point'||!Array.isArray(coordinates)||coordinates.length<2||coordinates.slice(0,2).some(value=>!Number.isFinite(value))||Math.abs(coordinates[0]-place.longitude)>.00011||Math.abs(coordinates[1]-place.latitude)>.00011||data?.properties?.body!=='Sun'||!Array.isArray(interval)||interval.length!==2)throw Error('指定地点の天文データを確認できませんでした。');
+ const start=solarStamp(interval[0]),end=solarStamp(interval[1]),format=new Intl.DateTimeFormat('sv-SE',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'});if(end-start<20*3600000||end-start>28*3600000||format.format((start+end)/2)!==date)throw Error('指定日の太陽周期を確認できなかったため、表示を停止しました。');
+ const events=['sunrise','sunset'].map(key=>{const value=data.properties[key];if(value===undefined)return {missing:true};if(value===null||value.time===null)return {none:true};const stamp=solarStamp(value.time);if(stamp<start-24*3600000||stamp>end+24*3600000)throw Error('太陽周期から離れたイベント時刻のため、表示を停止しました。');return {stamp,date:format.format(stamp),time:new Date(stamp).toLocaleTimeString('ja-JP',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'})};});
+ if(events[0].stamp!==undefined&&events[1].stamp!==undefined&&events[0].stamp>=events[1].stamp)throw Error('日の出と日の入りの順序を確認できませんでした。');return events;
+}
+function createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}){
+ return async function sun(task,body){
+  if(task.error)throw Error(task.error);if(task.date!==undefined)checkedSolarDate(task.date);
+  if(task.previousDates!==undefined){if(!Array.isArray(task.previousDates)||task.previousDates.length<1||task.previousDates.length>3||task.previousDates.some(value=>!value||typeof value.name!=='string'))throw Error('基準日と地点を確認してください。');for(const value of task.previousDates)checkedSolarDate(value.date);}
+  if(task.date===undefined&&task.previousDates===undefined&&(!Number.isInteger(task.offset)||Math.abs(task.offset)>36600))throw Error('天文の日数は整数で指定してください。');
+  if(!task.places.length){state.context={...state.context,intent:'sun',pending:'sun',sunDate:task.date||null,sunDates:[],offset:task.offset,lastDate:null};p(body,`${task.date?task.date+'の':''}日の出・日の入りを調べる地点を指定してください。`);follows(body,['東京','大阪','パリ']);return;}
+  const ok=[];
+  for(const city of task.places.slice(0,3))try{
+   if(Number.isFinite(city.latitude))solarRequestDate(task,city,localDate(city.timezone||'UTC'));
+   const place=await resolveCity(city),zone=place.timezone||'UTC',date=solarRequestDate(task,place,localDate(zone)),offset=solarOffset(date,zone),query=new URLSearchParams({lat:place.latitude.toFixed(4),lon:place.longitude.toFixed(4),date,offset}),url=`https://api.met.no/weatherapi/sunrise/3.0/sun?${query}`,result=await getJSON(url,86400000),events=solarEvents(result.data,place,date,zone);
+   body.append(el('h3',`${place.name} · 基準日 ${date}`));if(!place.timezone)p(body,'現地時間帯は未特定です。基準日とイベント日時はUTCで表示します。');const card=el('div',undefined,'result-card');for(const [index,label]of ['日の出','日の入り'].entries()){const event=events[index];card.append(el('div',`${label}：${event.missing?'未収録':event.none?'時刻なし（提供元のnull）':event.date+' '+event.time}`,'big'));}card.append(el('div',`${zone} · APIへの時差指定 ${offset}`,'sub'));body.append(card);source(body,'MET Norway · CC BY 4.0',url,result);ok.push({requestedName:city.name,place,date});
+  }catch(error){p(body,`${city.name}：${error.message}`,'error');}
+  if(!ok.length)return;
+  p(body,'提供元の太陽周期に対する天文学的な時刻です。イベントは基準日の前日・翌日になる場合があるため、実際の年月日も表示しています。地形や実際の見え方とは異なり、nullから白夜・極夜や天気を断定しません。時刻は端末の時間帯データで変換しています。');
+  const targets=task.places.slice(0,3),places=targets.map(city=>ok.find(value=>value.requestedName===city.name)?.place||city),sunDates=targets.map((city,index)=>{const date=ok.find(value=>value.requestedName===city.name)?.date||task.date||task.previousDates?.find(value=>value.name===city.name)?.date;return date?{name:places[index].name,date}:null;}).filter(Boolean),dates=[...new Set(sunDates.map(value=>value.date))];
+  if(ok.length<targets.length)p(body,'一部の地点を取得できませんでした。次の質問でも指定した地点を維持します。');
+  state.context={...state.context,intent:'sun',pending:null,places,offset:task.offset,sunDate:sunDates.length===places.length&&dates.length===1?dates[0]:null,sunDates,lastDate:targets.length===1&&ok[0].place.timezone==='Asia/Tokyo'?ok[0].date:null};follows(body,['翌日なら？','前日なら？','今日は？','大阪なら？']);
+ };
+}
+
 function deviceToken(){const key='zero.device.v1';let value;try{value=localStorage.getItem(key);}catch{}if(!/^[a-f0-9]{64}$/.test(value||'')){value=[...crypto.getRandomValues(new Uint8Array(32))].map(x=>x.toString(16).padStart(2,'0')).join('');try{localStorage.setItem(key,value);}catch{}}return value;}
 function cacheDeadline(at,ttl,now=Date.now()){
  const fetched=Date.parse(at);return Number.isFinite(fetched)?Math.min(now+ttl,fetched+ttl):now;
@@ -548,12 +614,6 @@ function parseExtensions(text,context={},found=[]){
  topic('papers',[/^(?:論文|文献)[：:]\s*(.{1,80})$/, /^(.{1,80}?)(?:に関する|についての|の)(?:論文|文献)(?:を(?:探して|検索して|教えて))?[。？?]?$/]);
  if(/地震/.test(text)&&!/(とは|って何|仕組み|原因)/.test(text))tasks.push({kind:'quakes',japan:/日本|国内/.test(text)});
  if(/(?:技術|テック|IT|Hacker\s*News|HN).*(?:ニュース|記事)|^(?:ニュース|注目記事)[？?]?$|Hacker\s*News/i.test(text))tasks.push({kind:'news'});
- if(/日の出|日の入り|日没/.test(text)||context.intent==='sun'&&/^(?:明日|明後日|今日|あさって|あした|きょう|\d+日後|.{2,20}なら)[？?]?$/.test(text)){
-  const m=text.match(/^(.{2,30}?)の(?:(?:明日|今日|明後日|あさって|あした|きょう|\d+日後)の)?(?:日の出|日の入り|日没)/);
-  const places=found.length?found:m?[{name:m[1],query:m[1]}]:context.places||[];
-  const days=text.match(/(\d+)日後/);
-  tasks.push({kind:'sun',places,offset:/明後日|あさって/.test(text)?2:/明日|あした/.test(text)?1:/今日|きょう/.test(text)?0:days?Number(days[1]):context.intent==='sun'?context.offset||0:0});
- }
  const country=countryAliases.find(([name])=>text.includes(name)&&!(name==='中国'&&/中国(?:地方|山地|自動車道)/.test(text)));
  if(country&&/首都|人口|国情報/.test(text))tasks.push({kind:'country',name:country[0],code:country[1],population:/人口/.test(text)});
  if(!tasks.length&&['books','papers'].includes(context.intent)&&/^(?:ほかには|他には|別の候補|次の候補)[？?]?$/.test(text)){const task={kind:context.intent,query:context.query,page:(context.page||1)+1};if(context.intent==='papers')task.cursor=context.nextCursor;tasks.push(task);}
@@ -612,7 +672,6 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
   async quakes(task,body){const url='https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson',r=await getJSON(url,300000);body.append(el('h3',task.japan?'日本周辺の重要地震':'世界の重要地震'));const list=groupExactQuakeRecords(r.data.features||[]).filter(({feature:v})=>!task.japan||(v.geometry?.coordinates?.[0]>=122&&v.geometry.coordinates[0]<=155&&v.geometry.coordinates[1]>=20&&v.geometry.coordinates[1]<=48)).sort((a,b)=>(b.feature.properties?.time||0)-(a.feature.properties?.time||0)).slice(0,5);if(!list.length)p(body,'このフィードの対象・地域条件に一致する地震はありません。地震が発生していないことを意味しません。');for(const {feature:v,records} of list){const d=v.properties||{};resultRow(body,`M${d.mag??'不明'} · ${d.place||'場所不明'}`,d.url,`${Number.isFinite(d.time)?new Date(d.time).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'時刻不明'}（日本時間）`);if(records.length>1){p(body,`同一の時刻・規模・座標の元記録 ${records.length}件`);for(const record of records)if(record.id&&record.url)body.append(link(String(record.id),record.url));}}p(body,'過去7日間にUSGSが重要と分類した地震のみです。全地震・緊急地震速報ではありません。同一の時刻・規模・座標が揃った記録だけをまとめています。'+(task.japan?'地域は北緯20〜48°・東経122〜155°で絞り込んでいます。':''));source(body,'USGS Earthquake Hazards Program',url,r);source(body,'日本の最新の防災情報：気象庁','https://www.jma.go.jp/bosai/');state.context={...state.context,intent:'quakes'};},
   async country(task,body){const url=`https://api.worldbank.org/v2/country/${task.code}?format=json`,r=await getJSON(url,86400000),d=r.data?.[1]?.[0];if(!d)throw Error('国のデータがありません。');body.append(el('h3',`${task.name}の国情報`));const card=el('div',undefined,'result-card');card.append(el('div',d.name,'city'),el('div',`首都：${d.capitalCity||'未収録'}`,'big'),el('div',`地域：${d.region?.value||'未収録'}`,'details'));body.append(card);source(body,'World Bank · 国情報',url,r);if(task.population){const popUrl=`https://api.worldbank.org/v2/country/${task.code}/indicator/SP.POP.TOTL?format=json&mrv=1&per_page=1`,pop=await getJSON(popUrl,86400000),row=pop.data?.[1]?.find(v=>Number.isFinite(v.value));p(body,row?`公表人口：${new Intl.NumberFormat('ja-JP').format(row.value)}人（${row.date}年）。現在のリアルタイム人口ではありません。`:'人口データが未収録です。');source(body,'World Bank · SP.POP.TOTL',popUrl,pop);}p(body,'名称は提供元の表記を表示しています。');state.context={...state.context,intent:'country',countryCode:task.code};},
   async news(task,body){const topUrl='https://hacker-news.firebaseio.com/v0/topstories.json',top=await getJSON(topUrl,600000),ids=Array.isArray(top.data)?top.data.filter(Number.isInteger).slice(0,5):[];body.append(el('h3','Hacker News の注目記事'));const rows=await Promise.allSettled(ids.map(id=>getJSON(`https://hacker-news.firebaseio.com/v0/item/${id}.json`,600000)));let shown=0;for(const r of rows){if(r.status!=='fulfilled')continue;const d=r.value.data;if(!d||d.deleted||d.dead)continue;shown++;resultRow(body,d.title||'表題不明',`https://news.ycombinator.com/item?id=${d.id}`,`${d.score??'不明'}ポイント · ${new Date(d.time*1000).toLocaleString('ja-JP')}投稿`);}if(!shown)p(body,'記事を取得できませんでした。時間を置いてお試しください。');p(body,'技術系コミュニティの注目順です。原文タイトルと議論へのリンクを表示し、記事本文は転載しません。');source(body,'Hacker News 公式API',topUrl,top);state.context={...state.context,intent:'news'};},
-  async sun(task,body){if(!task.places.length){p(body,'都市名を指定してください。例：東京の明日の日の出は？');return;}for(const city of task.places.slice(0,3)){const place=await resolveCity(city),timezone=place.timezone||'UTC',now=localDate(timezone),date=new Date(now+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+task.offset);const target=date.toISOString().slice(0,10),zone=new Intl.DateTimeFormat('en-US',{timeZone:timezone,timeZoneName:'longOffset'}).formatToParts(date).find(v=>v.type==='timeZoneName')?.value||'GMT';const offset=zone==='GMT'?'+00:00':zone.replace('GMT','');const q=new URLSearchParams({lat:place.latitude.toFixed(4),lon:place.longitude.toFixed(4),date:target,offset}),url=`https://api.met.no/weatherapi/sunrise/3.0/sun?${q}`,r=await getJSON(url,86400000),data=r.data.properties;if(!data)throw Error('日の出・日の入りのデータがありません。');const time=value=>value?new Date(value).toLocaleTimeString('ja-JP',{timeZone:timezone,hour:'2-digit',minute:'2-digit'}):'現象なし／未収録';body.append(el('h3',`${place.name} · ${target}`));if(!place.timezone)p(body,'現地の時間帯は未特定です。日付と日の出・日の入りはUTC（協定世界時）で表示します。');const card=el('div',undefined,'result-card');card.append(el('div',`日の出 ${time(data.sunrise?.time)}`,'big'),el('div',`日の入り ${time(data.sunset?.time)}`,'big'),el('div',placeTimezoneLabel(place),'sub'));body.append(card);p(body,'天文学的な時刻です。地形や実際の見え方とは異なる場合があります。');source(body,'MET Norway · CC BY 4.0','https://api.met.no/',r);}state.context={...state.context,intent:'sun',places:task.places,offset:task.offset};follows(body,['明日は？']);}
  };
 }
 
@@ -1061,7 +1120,7 @@ function requestSegments(raw,recognize,context={}){
 const CATALOG_CATEGORIES=[['all','すべて'],['life','暮らし・お出かけ'],['research','調べもの'],['tools','計算・整理'],['local','端末内']];
 const FEATURE_CATALOG=[
  {id:'weather',category:'life',title:'天気を比べる',description:'最大3都市を比較。年月日を指定し、取得できた予報を集計。',query:'東京と大阪の明日の天気を比較して',tags:'てんき 雨 傘 洗濯 気温 服装',popular:true},
- {id:'sun',category:'life',title:'日の出・日の入り',description:'指定した都市の日の出・日の入り時刻。',query:'東京の明日の日の出は？',tags:'ひので 日没 太陽 天文'},
+ {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
  {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
@@ -1316,7 +1375,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+[...(c.places||[]).map(v=>v.name),c.weatherDate].filter(Boolean).join(' / '):c.intent==='countryStat'?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate].filter(Boolean).join(' / '):c.intent==='countryStat'?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
@@ -1335,7 +1394,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
