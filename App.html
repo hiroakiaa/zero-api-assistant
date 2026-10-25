@@ -199,9 +199,11 @@ function convertUnits(amount,from,to){
  if(a[1]!==b[1])throw Error('種類が異なる単位は換算できません。長さ・質量・体積・面積・温度ごとに指定してください。');
  let value;
  if(a[1]==='temperature'){
+  const minimum=from==='K'?0:from==='℃'?-273.15:-459.67;
+  if(amount<minimum)throw Error('絶対零度（0 K）未満の温度は扱えません。');
   const c=from==='℃'?amount:from==='℉'?(amount-32)*5/9:amount-273.15;
-  if(c< -273.15-1e-10)throw Error('絶対零度（0 K）未満の温度は扱えません。');
   value=to==='℃'?c:to==='℉'?c*9/5+32:c+273.15;
+  if(to==='K'&&value<0)value=0; // Valid boundary values can have floating-point roundoff.
  }else value=amount*a[2]/b[2];
  if(!Number.isFinite(value))throw Error('計算できる数値の範囲を超えています。');
  return {value:Object.is(value,-0)?0:value,dimension:a[1]};
