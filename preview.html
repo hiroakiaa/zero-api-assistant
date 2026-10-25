@@ -20,6 +20,7 @@ function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
+ const jpHolidays=parseJapaneseHolidays(text,context);if(jpHolidays.length)return jpHolidays;
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
@@ -38,7 +39,6 @@ function parsePlan(raw, context={}){
  }
  if(context.pending==='weather'&&!tasks.length&&!moneyTasks.length&&!isTime&&!/祝日|計算|為替|とは|調べ/.test(text))tasks.push({kind:'weather',places:found.length?found:[{name:text,query:text}],offset:context.offset||0});
  tasks.push(...moneyTasks);
- if(/祝日|連休/.test(text)&&!/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:\s]/.test(text))tasks.push({kind:'holiday',year:Number(text.match(/(20\d{2})年/)?.[1])||null,next:/次|今後|これから/.test(text)});
  if(isTime){const explicit=text.match(/^(.{2,30}?)(?:は|の)(?:今)?(?:何時|時刻)/);tasks.push({kind:'time',places:found.length?found:explicit?[{name:explicit[1],query:explicit[1]}]:context.places||[]});}
  const calc=text.match(/^(?:計算(?:して)?[：:\s]*)?([\d\s.()+\-*/×÷^%]+)(?:を計算(?:して)?|は[？?]?|=[？?]?)?$/);
  if(calc&&/[+\-*/×÷^%]/.test(calc[1]))tasks.push({kind:'calc',expression:calc[1]});
@@ -204,6 +204,75 @@ function createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follow
   source(body,'GOV.UK · © Crown copyright · OGL v3.0','https://www.gov.uk/bank-holidays',response);body.append(link('Open Government Licence v3.0','https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/'));
   state.context={...state.context,intent:'ukHoliday',pending:null,ukRegions:task.regions,ukYear:year,ukNext:!!task.next};
   follows(body,['スコットランドなら？','来年は？','次の祝日は？']);
+ };
+}
+
+const JP_HOLIDAY_URL='https://holidays-jp.github.io/api/v1/date.json';
+const jpDateToken='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日|\\d{1,2}月\\d{1,2}日|今日|明日|明後日|昨日|その日|この日|翌日|前日)';
+const jpYearToken='(?:今年|再来年|来年|去年|昨年|\\d{1,6}年)';
+const jpHolidayError=error=>[{kind:'holiday',error}];
+function parseJapaneseHolidays(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,''),active=context.intent==='holiday',japan=/日本/.test(text),input=text.replace(/(?:日本国内|日本)(?:の)?/g,'');
+ if(/イギリス|英国|スコットランド|北アイルランド|イングランド|ウェールズ|\b(?:UK|Britain|Scotland|Northern Ireland|England|Wales)\b/i.test(text))return [];
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text)||context.intent==='ukHoliday'&&!japan)return [];
+ const make=(spec,inherit=false)=>{const offset={今年:0,来年:1,再来年:2,去年:-1,昨年:-1}[spec];return{kind:'holiday',year:spec&&offset===undefined?Number(spec.slice(0,-1)):spec?null:inherit?context.holidayYear??null:null,yearOffset:offset??null,month:null,next:false};};
+ const day=input.match(new RegExp(`^(${jpDateToken})(?:は|が|の|って)?祝日(?:ですか|か|なの|かどうか|か調べて|か教えて|を確認)?$`))||active&&input.match(new RegExp(`^(${jpDateToken})(?:は|なら|では)$`));
+ if(day){
+  const value=day[1],task=make(null,active);
+  const offsets={今日:0,明日:1,明後日:2,昨日:-1,翌日:1,前日:-1};
+  if(['その日','この日','翌日','前日'].includes(value)&&!context.lastDate)return jpHolidayError('先に日付を指定してください。例：「2026-11-03は祝日？」。');
+  if(['その日','この日'].includes(value))return[{...task,date:context.lastDate}];
+  if(Object.hasOwn(offsets,value))return[{...task,dayOffset:offsets[value],fromDate:['翌日','前日'].includes(value)?context.lastDate:'今日'}];
+  const md=value.match(/^(\d{1,2})月(\d{1,2})日$/);return[{...task,...(md?{monthDay:[Number(md[1]),Number(md[2])]}:{date:value})}];
+ }
+ if(active){
+  const month=input.match(/^(\d{1,2})月(?:だけ|なら|では|は)$/);if(month)return[{...make(null,true),month:Number(month[1])}];
+  const year=input.match(new RegExp(`^(${jpYearToken})(?:は|なら|では)$`));if(year)return[{...make(year[1]),month:context.holidayMonth??null}];
+  if(/^(?:年間一覧|全部の祝日|一覧にして)$/.test(input))return[make(null,true)];
+ }
+ const list=input.match(new RegExp(`^(?:(${jpYearToken})(?:の)?)?(?:(\\d{1,2})月(?:の)?)?(?:(次|今後|これから)(?:の)?)?(?:祝日|連休)(?:一覧|はいつ|は|を教えて|を調べて|を確認して|を知りたい)?$`));
+ if(list){const task=make(list[1],active&&!japan&&!list[3]||active&&!!list[2]);task.month=list[2]?Number(list[2]):null;task.next=!!list[3];return[task];}
+ if(/祝日|連休/.test(input)&&(japan||/^(?:[\d+\-]|今年|再来年|来年|去年|昨年|今日|明日|明後日|昨日|その日|この日|祝日)/.test(input)))return jpHolidayError('年・月・日付の条件を確認してください。例：「来年の日本の祝日」「11月の祝日」「2026-11-03は祝日？」。');
+ return [];
+}
+function resolveJapaneseHolidayTask(task,today){
+ if(task.error)throw Error(task.error);parseCivilDate(today);
+ if(task.year!==null&&task.year!==undefined&&(!Number.isInteger(task.year)||task.year<1||task.year>9999))throw Error('年は西暦1〜9999年で指定してください。');
+ if(task.yearOffset!==null&&task.yearOffset!==undefined&&![-1,0,1,2].includes(task.yearOffset))throw Error('年の指定を確認してください。');
+ const year=task.yearOffset!==null&&task.yearOffset!==undefined?Number(today.slice(0,4))+task.yearOffset:task.year??Number(today.slice(0,4));
+ if(year<1||year>9999)throw Error('年は西暦1〜9999年で指定してください。');
+ const month=task.month??null;if(month!==null&&(!Number.isInteger(month)||month<1||month>12))throw Error('月は1〜12月で指定してください。');
+ let date;
+ if(task.date!==undefined)date=parseCivilDate(task.date,today);
+ else if(task.monthDay!==undefined){if(!Array.isArray(task.monthDay)||task.monthDay.length!==2||task.monthDay.some(n=>!Number.isInteger(n)))throw Error('月日を確認してください。');date=parseCivilDate(`${String(year).padStart(4,'0')}-${task.monthDay[0]}-${task.monthDay[1]}`);}
+ else if(task.dayOffset!==undefined){if(![-1,0,1,2].includes(task.dayOffset))throw Error('日付の指定を確認してください。');date=parseCivilDate(task.fromDate||'今日',today);date.setUTCDate(date.getUTCDate()+task.dayOffset);if(date.getUTCFullYear()<1||date.getUTCFullYear()>9999)throw Error('日付が対応範囲を超えています。');}
+ if(date)return{mode:'date',year:date.getUTCFullYear(),month:null,date:date.toISOString().slice(0,10),today};
+ return{mode:task.next?'next':'list',year:task.next&&task.year==null&&task.yearOffset==null&&!month?null:year,month,today};
+}
+function japaneseHolidaySelection(resolved,data){
+ const calendar=holidayCalendar(data),years=[...calendar.years].map(Number).sort((a,b)=>a-b),requireYear=year=>{if(!years.includes(year))throw Error(`${year}年の日本の祝日は未収録です。収録年：${years.join('・')}年。`);};
+ if(resolved.year!==null)requireYear(resolved.year);
+ else {const current=Number(resolved.today.slice(0,4));requireYear(current);for(let y=current;y<=years.at(-1);y++)requireYear(y);}
+ if(resolved.mode==='date')return{...resolved,name:calendar.holidays.get(resolved.date)||null,years};
+ const rows=[...calendar.holidays].sort(([a],[b])=>a.localeCompare(b)).filter(([date])=>(resolved.year===null||Number(date.slice(0,4))===resolved.year)&&(!resolved.month||Number(date.slice(5,7))===resolved.month)&&(resolved.mode!=='next'||date>=resolved.today));
+ return{...resolved,rows:rows.slice(0,resolved.mode==='next'?5:30),total:rows.length,years};
+}
+function createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}){
+ return async(task,body)=>{
+  const today=localDate('Asia/Tokyo'),resolved=resolveJapaneseHolidayTask(task,today),response=await getJSON(JP_HOLIDAY_URL,3600000),result=japaneseHolidaySelection(resolved,response.data);
+  const scope=result.year===null?'':`${result.year}年${result.month?result.month+'月':''}`;
+  body.append(el('h3',result.mode==='date'?'日付の祝日登録を確認':result.mode==='next'?`${scope} これからの日本の祝日`.trim():`${scope}の日本の祝日`));
+  if(result.mode==='date'){
+   const card=el('div',undefined,'result-card');card.append(el('div',result.date,'sub'),el('div',result.name||'祝日の登録なし','big'));body.append(card);
+   if(!result.name)p(body,'この日付は取得データに日本の祝日として登録されていません。土日や会社・学校独自の休業日は別です。');
+  }else{
+   for(const [date,name]of result.rows){const row=el('div',undefined,'holiday-row');row.append(el('time',date),el('span',name));body.append(row);}
+   if(!result.rows.length)p(body,result.mode==='next'?'指定した期間に、基準日以降の祝日の登録がありません。収録範囲より先の日付は補いません。':'指定した年・月には祝日の登録がありません。土日や独自の休業日は別です。');
+   if(result.total>result.rows.length)p(body,`該当${result.total}件のうち先頭${result.rows.length}件を表示しています。`,'sub');
+  }
+  p(body,`日本時間 ${today} を基準に照会。収録年：${result.years.join('・')}年。`,'sub');source(body,'Holidays JP · MIT','https://holidays-jp.github.io/',response);
+  state.context={...state.context,intent:'holiday',pending:null,holidayYear:result.year??Number(today.slice(0,4)),holidayMonth:result.month,holidayMode:result.mode,...(result.mode==='date'?{lastDate:result.date}:{})};
+  follows(body,result.mode==='date'?['翌日は？','一覧にして']:['来年は？','11月だけ','次の祝日は？']);
  };
 }
 
@@ -399,7 +468,7 @@ function createLocalHandlers({el,p,state,localDate,source,follows}){
    body.append(card);
    if(task.operation==='difference')p(body,'開始日を0日として数えた、終了日までの暦上の日数差です。終了日が前なら負の値になります。');
    p(body,'端末内でグレゴリオ暦の日付を計算しました。'+(task.from==='今日'||task.to==='今日'?`「今日」は日本時間 ${today} です。`:''));
-   state.context={...state.context,intent:'dateMath'};
+   state.context={...state.context,intent:'dateMath',pending:null,lastDate:result.date||result.to};
   }
  };
 }
@@ -458,7 +527,7 @@ function createBusinessHandler({getJSON,el,p,source,state,localDate}){
   if(result.excluded.length)p(body,'除いた祝日：'+result.excluded.slice(0,8).map(item=>`${item.date} ${item.name}`).join(' ／ ')+(result.excluded.length>8?' ほか':''));
   if(response){p(body,`祝日データ収録年：${result.years.join('・')}年。未収録の年は計算しません。`);source(body,'Holidays JP · MIT','https://holidays-jp.github.io/',response);}else p(body,'外部APIを呼ばずに端末内で計算しました。');
   if(task.from==='今日'||task.to==='今日')p(body,`「今日」は日本時間 ${today} です。`);
-  state.context={...state.context,intent:'businessDays'};
+  state.context={...state.context,intent:'businessDays',pending:null,lastDate:result.to};
  };
 }
 
@@ -624,7 +693,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|(?:ほかには|他には|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:ほかには|他には|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -634,7 +703,8 @@ const FEATURE_CATALOG=[
  {id:'weather',category:'life',title:'天気を比べる',description:'最大3都市の気温と降水量の予報を確認。',query:'東京と大阪の明日の天気を比較して',tags:'てんき 雨 傘 洗濯 気温 服装',popular:true},
  {id:'sun',category:'life',title:'日の出・日の入り',description:'指定した都市の日の出・日の入り時刻。',query:'東京の明日の日の出は？',tags:'ひので 日没 太陽 天文'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コードにも対応。「200なら？」「ユーロにすると？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円',popular:true},
- {id:'holiday',category:'life',title:'日本の祝日',description:'次の祝日や、収録されている年の祝日一覧。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー'},
+ {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
+ {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
  {id:'ukHoliday',category:'life',title:'英国の祝日を地域別に確認',description:'英国政府のバンクホリデー。3地域の違いと振替日を表示。',query:'2027年のイギリスの祝日',tags:'海外 英国 イギリス イングランド ウェールズ スコットランド 北アイルランド 休み 連休 旅行 祝日 bank holiday'},
  {id:'time',category:'life',title:'世界時計',description:'登録済み都市のいまの時刻を比較。',query:'ロンドンと東京は今何時？',tags:'じこく じさ 時差 旅行',local:true},
  {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
@@ -859,14 +929,6 @@ async function knowledge(task,body){
  for(const page of pages){const row=el('div',undefined,'wiki-result');row.append(link(page.title,`https://ja.wikipedia.org/?curid=${page.pageid}`));p(row,page.extract||'本文の抜粋はありません。記事リンクをご確認ください。');body.append(row);}
  p(body,'Wikipediaの本文抜粋です。質問に対する自動推論や、複数の記事を統合した要約は行っていません。');source(body,'Wikipedia · 各記事の著者 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',r);state.context={...state.context,intent:'knowledge',query:task.query};follows(body,task.more?['検索: 再生可能エネルギー']:['もっと詳しく']);
 }
-async function holiday(task,body){
- const r=await getJSON('https://holidays-jp.github.io/api/v1/date.json',86400000);const today=localDate('Asia/Tokyo'),year=task.year||Number(today.slice(0,4));
- const all=Object.entries(r.data).filter(([date,name])=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&typeof name==='string').sort(([a],[b])=>a.localeCompare(b));if(!all.length)throw Error('祝日データがありません。');
- const rows=all.filter(([date])=>task.next?date>=today&&(!task.year||date.startsWith(String(year))):date.startsWith(String(year)));
- body.append(el('h3',task.next?'これからの日本の祝日':`${year}年の日本の祝日`));if(!rows.length)p(body,'指定した期間の祝日が、取得したデータにありません。将来の祝日を推測して補完することはできません。');
- for(const [date,name] of rows.slice(0,task.next?5:30)){const n=el('div',undefined,'holiday-row');n.append(el('time',date),el('span',name));body.append(n);}
- p(body,`判定基準：日本時間 ${today}。収録期間 ${all[0][0]}〜${all.at(-1)[0]}。`);source(body,'Holidays JP · MIT','https://github.com/holidays-jp/api',r);state.context={...state.context,intent:'holiday'};
-}
 async function time(task,body){
  if(!task.places.length){p(body,'都市名と「何時？」を入力してください。例：パリは今何時？');return;}
  body.append(el('h3','世界のいま'));const grid=el('div',undefined,'result-grid');body.append(grid);
@@ -893,7 +955,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
