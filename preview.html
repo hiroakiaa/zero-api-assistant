@@ -1171,7 +1171,7 @@ const dateDifference=new RegExp(`${datePrefix}(${datePattern}|今日)から(${da
 const dateAddition=new RegExp(`${datePrefix}(?:(${datePattern}|今日)(?:から|の))?(\\d{1,7})日(後|前)(?:は(?:何日)?|の(?:日付|曜日))?[。？?]?$`);
 const dateWeekday=new RegExp(`${datePrefix}(${datePattern}|今日)(?:は|の)(?:何曜日|曜日)[。？?]?$`);
 function calendarReferenceDate(context){
- const allowed=['dateMath','businessDays','weather','sun'].includes(context.intent)||context.intent==='holiday'&&(!context.holidayMode||context.holidayMode==='date');
+ const allowed=['dateMath','businessDays','weather','sun'].includes(context.intent)||context.intent==='holiday'&&context.holidayMode==='date';
  if(!allowed||context.pending||typeof context.lastDate!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(context.lastDate))throw Error('先に基準となる日付を1つ指定してください。例：「2026-01-31の1か月後は何日？」。');
  return parseCivilDate(context.lastDate).toISOString().slice(0,10);
 }
