@@ -17,6 +17,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const local=parseLocalTasks(text,context);if(local.length)return local;
  const found=cities.filter(c=>text.includes(c.name)||text.toLowerCase().includes(c.query.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
  const isWeather=/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯/.test(text);
  const isTime=/何時|時刻|時差|世界時計/.test(text);
@@ -146,7 +147,7 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
    for(const pronunciation of entry.pronunciations)p(body,`IPA ${pronunciation.text}${pronunciation.tags.length?' · '+pronunciation.tags.join(' / '):''}`,'sub');
    for(const [i,sense]of entry.senses.entries()){const row=el('div',undefined,'wiki-result');row.append(el('strong',`${i+1}. ${sense.partOfSpeech}`));p(row,sense.definition);body.append(row);}
    if(!entry.senses.length)p(body,'英語の定義が未収録です。元記事をご確認ください。');
-   p(body,'Wiktionaryの英語定義から最大3件、発音記号から最大2件を原文のまま選んで表示しています。和訳・音声・引用例文は生成しません。');
+   p(body,'Wiktionaryの原文から、英語の定義を最大3件、発音記号を最大2件抜粋しています。');
    source(body,'Wiktionary · 執筆者と編集履歴は元記事から確認できます',entry.original);source(body,'CC BY-SA 4.0 · 定義・発音記号の利用条件',entry.license.url);source(body,'FreeDictionaryAPI.com','https://freedictionaryapi.com/',r);state.context={...state.context,intent:'dictionary',word:task.word};
   },
   async books(task,body){const page=Math.min(task.page||1,5),q=new URLSearchParams({q:task.query,limit:'5',page:String(page),fields:'key,title,author_name,first_publish_year'});const url=`https://openlibrary.org/search.json?${q}`,r=await getJSON(url,86400000);body.append(el('h3',`「${task.query}」の本`));const docs=r.data.docs||[];if(!docs.length)p(body,'一致する本がありません。別の表記や英語でも試してください。');for(const book of docs)if(/^\/works\/OL\d+W$/.test(book.key||''))resultRow(body,book.title||'書名不明','https://openlibrary.org'+book.key,`${book.author_name?.slice(0,3).join('、')||'著者不明'} · 初刊 ${book.first_publish_year||'不明'}`);p(body,`書誌の検索結果・${page}ページ目です。本文を無料で読めることを保証する一覧ではありません。`);source(body,'Open Library',url,r);state.context={...state.context,intent:'books',query:task.query,page};if(docs.length===5&&page<5)follows(body,['ほかには？']);},
@@ -158,16 +159,113 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
  };
 }
 
+// Fixed unit relationships; no remote service or generated answers.
+const unitDefinitions=[
+ ['mm','length',0.001,['mm','ミリメートル']],['cm','length',0.01,['cm','センチメートル','センチ']],['m','length',1,['m','メートル']],['km','length',1000,['km','キロメートル']],
+ ['in','length',0.0254,['in','inch','インチ']],['ft','length',0.3048,['ft','フィート']],['yd','length',0.9144,['yd','ヤード']],['mi','length',1609.344,['mi','mile','マイル']],
+ ['mg','mass',0.000001,['mg','ミリグラム']],['g','mass',0.001,['g','グラム']],['kg','mass',1,['kg','キログラム']],['lb','mass',0.45359237,['lb','lbs','ポンド']],['oz','mass',0.028349523125,['oz','オンス']],
+ ['mL','volume',0.000001,['ml','ミリリットル']],['L','volume',0.001,['l','リットル']],['m³','volume',1,['m3','立方メートル']],
+ ['cm²','area',0.0001,['cm2','平方センチメートル']],['m²','area',1,['m2','平方メートル']],['km²','area',1000000,['km2','平方キロメートル']],['ha','area',10000,['ha','ヘクタール']],
+ ['℃','temperature',null,['°c','℃','摂氏']],['℉','temperature',null,['°f','℉','華氏']],['K','temperature',null,['k','ケルビン']]
+];
+const aliases=new Map(unitDefinitions.flatMap(unit=>unit[3].map(alias=>[alias.normalize('NFKC').toLowerCase(),unit])));
+const unitPattern=[...aliases.keys()].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+const numberPattern='[+-]?(?:(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?|\\.\\d+)';
+const convertPattern=new RegExp(`^(?:(?:単位|換算|単位換算)[：:]\\s*)?(${numberPattern})\\s*(${unitPattern})\\s*(?:は何|は|を|→|->)\\s*(${unitPattern})(?:に(?:換算|変換)?(?:して)?|ですか|になる)?[。？?]?$`,'i');
+const datePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
+const datePrefix='^(?:日付(?:計算)?[：:]\\s*)?';
+const dateDifference=new RegExp(`${datePrefix}(${datePattern}|今日)から(${datePattern}|今日)まで(?:は)?(?:何日|の日数|の日数差)[。？?]?$`);
+const dateAddition=new RegExp(`${datePrefix}(?:(${datePattern}|今日)(?:から|の))?(\\d{1,7})日(後|前)(?:は(?:何日)?|の(?:日付|曜日))?[。？?]?$`);
+const dateWeekday=new RegExp(`${datePrefix}(${datePattern}|今日)(?:は|の)(?:何曜日|曜日)[。？?]?$`);
+function parseLocalTasks(text,context={}){
+ const input=text.normalize('NFKC').trim(),unit= input.match(convertPattern);
+ if(unit)return [{kind:'units',amount:Number(unit[1].replaceAll(',','')),from:aliases.get(unit[2].toLowerCase())[0],to:aliases.get(unit[3].toLowerCase())[0]}];
+ if(context.intent==='units'){
+  const to=input.match(new RegExp(`^(${unitPattern})(?:なら|では|は)[？?]?$`,'i'));
+  if(to)return [{kind:'units',amount:context.unitAmount,from:context.unitFrom,to:aliases.get(to[1].toLowerCase())[0]}];
+ }
+ const diff=input.match(dateDifference);
+ if(diff)return [{kind:'dateMath',operation:'difference',from:diff[1],to:diff[2]}];
+ const weekday=input.match(dateWeekday);
+ if(weekday)return [{kind:'dateMath',operation:'weekday',from:weekday[1]}];
+ const add=input.match(dateAddition);
+ // Bare "3日後" remains a weather/sun followup in those conversations.
+ if(add&&(add[1]||/何日|日付|曜日|^日付/.test(input)||!['weather','sun'].includes(context.intent)))return [{kind:'dateMath',operation:'add',from:add[1]||'今日',days:Number(add[2])*(add[3]==='前'?-1:1)}];
+ return [];
+}
+function convertUnits(amount,from,to){
+ const a=unitDefinitions.find(unit=>unit[0]===from),b=unitDefinitions.find(unit=>unit[0]===to);
+ if(!a||!b||!Number.isFinite(amount)||Math.abs(amount)>1e15)throw Error('数値と対応する単位を確認してください。');
+ if(a[1]!==b[1])throw Error('種類が異なる単位は換算できません。長さ・質量・体積・面積・温度ごとに指定してください。');
+ let value;
+ if(a[1]==='temperature'){
+  const c=from==='℃'?amount:from==='℉'?(amount-32)*5/9:amount-273.15;
+  if(c< -273.15-1e-10)throw Error('絶対零度（0 K）未満の温度は扱えません。');
+  value=to==='℃'?c:to==='℉'?c*9/5+32:c+273.15;
+ }else value=amount*a[2]/b[2];
+ if(!Number.isFinite(value))throw Error('計算できる数値の範囲を超えています。');
+ return {value:Object.is(value,-0)?0:value,dimension:a[1]};
+}
+function parseCivilDate(input,today){
+ const text=input==='今日'?today:String(input).replace(/年|月/g,'-').replace(/日$/,'').replaceAll('/','-');
+ const match=text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+ if(!match)throw Error('日付は YYYY-MM-DD、YYYY/MM/DD、または年月日で指定してください。');
+ const year=Number(match[1]),month=Number(match[2]),day=Number(match[3]);
+ const date=new Date(0);date.setUTCFullYear(year,month-1,day);date.setUTCHours(0,0,0,0);
+ if(year<1||year>9999||date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)throw Error('存在する日付を指定してください。');
+ return date;
+}
+function dateMath(task,today){
+ const from=parseCivilDate(task.from,today),iso=date=>date.toISOString().slice(0,10),weekday=date=>'日月火水木金土'[date.getUTCDay()]+'曜日';
+ if(task.operation==='difference'){
+  const to=parseCivilDate(task.to,today);return {from:iso(from),to:iso(to),days:(to-from)/86400000};
+ }
+ if(task.operation==='weekday')return {date:iso(from),weekday:weekday(from)};
+ if(task.operation!=='add'||!Number.isInteger(task.days)||Math.abs(task.days)>3652058)throw Error('日数は整数で指定してください。');
+ const target=new Date(from);target.setUTCDate(target.getUTCDate()+task.days);
+ if(!Number.isFinite(target.getTime())||target.getUTCFullYear()<1||target.getUTCFullYear()>9999)throw Error('日付は西暦1〜9999年の範囲で計算できます。');
+ return {from:iso(from),date:iso(target),weekday:weekday(target),days:task.days};
+}
+function createLocalHandlers({el,p,state,localDate,source,follows}){
+ const format=value=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:13}).format(value);
+ return {
+  units(task,body){
+   const result=convertUnits(task.amount,task.from,task.to);body.append(el('h3','単位を換算'));
+   const card=el('div',undefined,'result-card');card.append(el('div',`${format(task.amount)} ${task.from} →`,'sub'),el('div',`${format(result.value)} ${task.to}`,'big'));body.append(card);
+   p(body,'端末内で計算しました。表示は最大13桁に丸めています。');
+   if(['in','ft','yd','mi'].includes(task.from)||['in','ft','yd','mi'].includes(task.to))p(body,'インチ・フィート・ヤード・マイルは国際定義を使用します。');
+   if(['lb','oz'].includes(task.from)||['lb','oz'].includes(task.to))p(body,'ポンド・オンスは常衡の質量です。');
+   source(body,'換算係数：NIST Guide to the SI','https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors');
+   state.context={...state.context,intent:'units',unitAmount:task.amount,unitFrom:task.from,unitTo:task.to};
+   if(result.dimension==='length')follows(body,['cmなら？','マイルなら？']);
+  },
+  dateMath(task,body){
+   const today=localDate('Asia/Tokyo'),result=dateMath(task,today);body.append(el('h3',task.operation==='difference'?'日付の差':'日付を計算'));
+   const card=el('div',undefined,'result-card');
+   if(task.operation==='difference'){
+    card.append(el('div',`${result.from} → ${result.to}`,'sub'),el('div',`${result.days.toLocaleString('ja-JP')} 日`,'big'));
+   }else{
+    if(task.operation==='add')card.append(el('div',`${result.from} の ${Math.abs(result.days).toLocaleString('ja-JP')}日${result.days<0?'前':'後'}`,'sub'));
+    card.append(el('div',result.date,'big'),el('div',result.weekday,'details'));
+   }
+   body.append(card);
+   if(task.operation==='difference')p(body,'開始日を0日として数えた、終了日までの暦上の日数差です。終了日が前なら負の値になります。');
+   p(body,'端末内でグレゴリオ暦の日付を計算しました。'+(task.from==='今日'||task.to==='今日'?`「今日」は日本時間 ${today} です。`:''));
+   state.context={...state.context,intent:'dateMath'};
+  }
+ };
+}
+
 const $=s=>document.querySelector(s);
 const cloud=new CloudDB();
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
-const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',...extraLabels};
+const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',...extraLabels};
 const registry=[
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
  ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
  ['Holidays JP','日本の祝日','https://github.com/holidays-jp/api','キー不要・MIT。取得できた年のみ回答します。'],
- ['ブラウザ内処理','計算・世界時計・会話の条件保持',null,'外部APIへの通信なし。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
+ ['ブラウザ内処理','計算・単位換算・日付計算・世界時計',null,'外部APIへの通信なし。日付計算の「今日」は日本時間です。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
  ...extraRegistry
 ];
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -230,7 +328,7 @@ async function time(task,body){
  p(body,`表示時点の時刻です（端末の時計を使用）。端末時刻が正しいことを前提とします。`);state.context={...state.context,intent:'time',places:task.places};
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
-function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'天気・日の出、為替、百科事典、英英辞書、本、生命科学の文献、重要地震、国の人口・首都、技術ニュース、祝日、計算、世界時計に対応しています。');follows(body,['東京の明日の天気は？','辞書: hello','本: space','論文: 睡眠','フランスの人口','技術ニュース']);}
+function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'天気・日の出、為替、百科事典、英英辞書、本、生命科学の文献、重要地震、国の人口・首都、技術ニュース、祝日、計算、単位換算、日付計算、世界時計に対応しています。');follows(body,['東京の明日の天気は？','辞書: hello','5kmは何m？','今日から100日後は何日？','本: space','技術ニュース']);}
 function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
 async function ask(raw){
  const text=raw.trim();if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
@@ -239,7 +337,7 @@ async function ask(raw){
  try{
   const tasks=parsePlan(text,state.context);loading.remove();
   if(!tasks.length)help(body);
-  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate})};
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
   for(const task of tasks.slice(0,4)){const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}}
   updateContext();
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
@@ -261,7 +359,7 @@ for(const [title,scope,url,terms] of registry){const row=el('div',undefined,'api
 for(const id of ['about','about-top'])$('#'+id).addEventListener('click',()=>$('#info').showModal());$('#close-info').addEventListener('click',()=>$('#info').close());$('#info').addEventListener('click',e=>{if(e.target===$('#info')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 $('#export').addEventListener('click',()=>{if(!state.transcript.length){$('#info').showModal();return;}const content=state.transcript.map(v=>`${v.role}\n${v.text}`).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='zero-conversation.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('#focus-chat').addEventListener('click',()=>$('#prompt').focus());
-const questionExamples=[['天気','東京と大阪の明日の天気を比較して'],['日の出・日の入り','東京の明日の日の出は？'],['通貨換算','100ユーロは何円？'],['百科事典','人工知能とは？'],['英英辞書・発音記号','辞書: hello'],['本を探す','本: space'],['生命科学の文献','論文: 睡眠'],['地震の公開記録','日本周辺の最近の地震'],['国の首都・人口','フランスの人口'],['技術ニュース','技術ニュース'],['日本の祝日','次の祝日は？'],['計算','計算: (1280 + 980) × 1.1'],['世界時計','ロンドンと東京は今何時？']];
+const questionExamples=[['天気','東京と大阪の明日の天気を比較して'],['日の出・日の入り','東京の明日の日の出は？'],['通貨換算','100ユーロは何円？'],['百科事典','人工知能とは？'],['英英辞書・発音記号','辞書: hello'],['本を探す','本: space'],['生命科学の文献','論文: 睡眠'],['地震の公開記録','日本周辺の最近の地震'],['国の首都・人口','フランスの人口'],['技術ニュース','技術ニュース'],['日本の祝日','次の祝日は？'],['計算','計算: (1280 + 980) × 1.1'],['単位換算','5kmは何マイル？'],['日付計算','今日から100日後は何日？'],['日付の差','2026-10-25から2027-01-01まで何日？'],['世界時計','ロンドンと東京は今何時？']];
 for(const [title,query]of questionExamples){const button=el('button',undefined,'skill-option');button.dataset.ask=query;button.append(el('strong',title),el('small',query));$('#skill-examples')?.append(button);}
 $('#discover-open')?.addEventListener('click',()=>$('#skills-dialog').showModal());$('#skills-close')?.addEventListener('click',()=>$('#skills-dialog').close());$('#skills-filter')?.addEventListener('input',e=>{for(const b of $('#skill-examples').children)b.hidden=!b.textContent.toLowerCase().includes(e.target.value.toLowerCase());});
 async function saveTurn(payload,body){
