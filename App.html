@@ -450,30 +450,33 @@ const visibleLocalText=text=>String(text).replace(/<think>[\s\S]*?<\/think>/g,''
 
 const LOCAL_AI_WORKER="let engine=null,runtime='',streamerClass=null,busy=false,qwen3=false;\nconst send=(id,type,data={})=>self.postMessage({id,type,...data});\nself.onmessage=async({data})=>{\n const {id,type,model,messages}=data;if(busy){send(id,'error',{message:'端末内AIは別の処理中です。'});return;}busy=true;\n try{\n  if(type==='load'){\n   if(!model||!['webllm','transformers'].includes(model.runtime)||!/^([\\w.-]+)\\/([\\w.-]+)$/.test(model.repository)||!/^[a-f0-9]{40}$/.test(model.revision))throw Error('モデル設定が無効です。');\n   runtime=model.runtime;qwen3=model.model.startsWith('Qwen3-');send(id,'progress',{text:'実行ライブラリを読み込んでいます…',progress:0});\n   if(runtime==='webllm'){\n    const lib=await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/+esm');\n    const record=lib.prebuiltAppConfig.model_list.find(m=>m.model_id===model.model);if(!record)throw Error('選択モデルはこの実行版で利用できません。');\n    engine=new lib.MLCEngine({appConfig:{...lib.prebuiltAppConfig,model_list:[{...record,model:`https://huggingface.co/${model.repository}/resolve/${model.revision}/`,overrides:{...record.overrides,context_window_size:2048}}]},initProgressCallback:p=>send(id,'progress',{text:String(p.text||'モデルを準備しています…').slice(0,140),progress:p.progress})});\n    await engine.reload(model.model);\n   }else{\n    const lib=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1');\n    lib.env.allowLocalModels=false;lib.env.backends.onnx.wasm.numThreads=1;lib.env.backends.onnx.wasm.proxy=false;\n    lib.env.backends.onnx.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/';\n    streamerClass=lib.TextStreamer;\n    engine=await lib.pipeline('text-generation',model.repository,{revision:model.revision,dtype:model.dtype,device:'wasm',progress_callback:p=>send(id,'progress',{text:p.status==='progress'?`モデルファイルを取得中 · ${Math.round((p.loaded||0)/1000000)} MB`:'モデルを準備しています…',progress:Number.isFinite(p.progress)?p.progress/100:0})});\n   }\n   send(id,'done',{loaded:true});\n  }else if(type==='generate'){\n   if(!engine)throw Error('モデルを先に読み込んでください。');\n   if(!Array.isArray(messages)||messages.length>8||messages.some(m=>!['system','user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>5000))throw Error('会話の入力が無効です。');\n   let text='';\n   if(runtime==='webllm'){\n    const chunks=await engine.chat.completions.create({messages:qwen3?messages.map((m,i)=>i===messages.length-1?{...m,content:m.content+'\\n/no_think'}:m):messages,max_tokens:384,temperature:0.3,stream:true,...(qwen3?{extra_body:{enable_thinking:false}}:{})});\n    for await(const chunk of chunks){const token=chunk.choices?.[0]?.delta?.content||'';text+=token;if(token)send(id,'token',{text});}\n   }else{\n    const streamer=new streamerClass(engine.tokenizer,{skip_prompt:true,skip_special_tokens:true,callback_function:token=>{text+=token;send(id,'token',{text});}});\n    const result=await engine(messages,{max_new_tokens:160,do_sample:false,repetition_penalty:1.1,streamer});\n    text=result?.[0]?.generated_text?.at?.(-1)?.content||text;\n   }\n   send(id,'done',{text});\n  }else throw Error('対応していない操作です。');\n }catch(e){send(id,'error',{message:String(e.message||'端末内AIで問題が起きました。').replace(/https?:\\/\\/\\S+/g,'[配信先]').slice(0,220)});}finally{busy=false;}\n};\n";
 class LocalAI{
- constructor(onState=()=>{}){this.onState=onState;this.phase='off';this.model=null;this.worker=null;this.pending=new Map();this.serial=0;}
+ constructor(onState=()=>{}){this.onState=onState;this.phase='off';this.model=null;this.worker=null;this.workerURL=null;this.pending=new Map();this.serial=0;this.revision=0;}
  get ready(){return this.phase==='ready';}
  setState(phase,text,progress=null){this.phase=phase;this.onState({phase,text,progress,model:this.model});}
  clear(message='端末内AIを解除しました。'){
-  this.worker?.terminate();this.worker=null;for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(Object.assign(Error(message),{name:'AbortError'}));}this.pending.clear();this.model=null;this.setState('off',message);
+  this.revision++;this.worker?.terminate();this.worker=null;if(this.workerURL)URL.revokeObjectURL(this.workerURL);this.workerURL=null;for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(Object.assign(Error(message),{name:'AbortError'}));}this.pending.clear();this.model=null;this.setState('off',message);
  }
  call(type,payload,onToken,timeout){
-  const id=++this.serial;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>this.clear('処理に時間がかかったため停止しました。再度モデルを読み込めます。'),timeout);this.pending.set(id,{resolve,reject,timer,onToken});this.worker.postMessage({id,type,...payload});});
+  const id=++this.serial;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>this.clear('処理に時間がかかったため停止しました。再度モデルを読み込めます。'),timeout);this.pending.set(id,{resolve,reject,timer,onToken});try{this.worker.postMessage({id,type,...payload});}catch(e){clearTimeout(timer);this.pending.delete(id);reject(e);}});
  }
  async load(id){
   const model=localModel(id);if(this.phase==='generating')throw Error('生成を停止してからモデルを変更してください。');this.clear('モデルを切り替えています…');this.model=model;this.setState('loading','ダウンロードを開始します…',0);
-  const blob=URL.createObjectURL(new Blob([LOCAL_AI_WORKER],{type:'text/javascript'}));this.worker=new Worker(blob,{type:'module'});URL.revokeObjectURL(blob);
-  this.worker.onmessage=({data})=>{const pending=this.pending.get(data.id);if(!pending)return;
+  const revision=this.revision;
+  try{
+  this.workerURL=URL.createObjectURL(new Blob([LOCAL_AI_WORKER],{type:'text/javascript'}));const worker=this.worker=new Worker(this.workerURL,{type:'module'});
+  worker.onmessage=({data})=>{if(this.worker!==worker)return;const pending=this.pending.get(data.id);if(!pending)return;
    if(data.type==='progress'){this.setState('loading',data.text,data.progress);return;}
    if(data.type==='token'){pending.onToken?.(visibleLocalText(data.text));return;}
    clearTimeout(pending.timer);this.pending.delete(data.id);data.type==='done'?pending.resolve(data):pending.reject(Error(data.message||'端末内AIで問題が起きました。'));
   };
-  this.worker.onerror=()=>this.clear('この端末でモデルを起動できませんでした。別のモデルを選んでください。');
-  try{await this.call('load',{model},null,600000);this.setState('ready',`${model.name} · 利用できます`);}catch(e){if(this.worker)this.clear(e.message);throw e;}
+  worker.onerror=()=>{if(this.worker===worker)this.clear('この端末でモデルを起動できませんでした。別のモデルを選んでください。');};
+  await this.call('load',{model},null,600000);this.setState('ready',`${model.name} · 利用できます`);
+  }catch(e){if(this.revision===revision)this.clear(e.message);throw e;}
  }
  async generate(prompt,history=[],onToken=()=>{},mode='chat'){
-  if(!this.ready)throw Error('先に端末内AIのモデルを読み込んでください。');this.setState('generating','端末内で生成しています…');
+  if(!this.ready)throw Error('先に端末内AIのモデルを読み込んでください。');const worker=this.worker;this.setState('generating','端末内で生成しています…');
   try{const result=await this.call('generate',{messages:generationMessages(prompt,history,mode)},onToken,180000);const text=visibleLocalText(result.text);if(!text)throw Error('文章が生成されませんでした。短い質問でもう一度試してください。');return text;}
-  finally{if(this.worker)this.setState('ready',`${this.model.name} · 利用できます`);}
+  finally{if(this.worker===worker&&this.worker)this.setState('ready',`${this.model.name} · 利用できます`);}
  }
 }
 
@@ -492,7 +495,7 @@ function mountAIPanel({ai,el,link}){
  function details(){const model=localModel(select.value);detail.replaceChildren();detail.append(el('strong',model.role),el('p',`モデル取得：約${Math.ceil(model.bytes/1000000)} MB ＋実行ライブラリ`),el('p',model.runtime==='webllm'?`GPUメモリ目安：約${(model.memoryMB/1000).toFixed(1)} GB（実行環境で変動）`:'CPUで実行します。処理に時間がかかる場合があります。'),link('モデル提供元・Apache 2.0ライセンス',model.source));updateButton();}
  function updateButton(){const model=localModel(select.value),busy=['loading','generating'].includes(ai.phase);load.disabled=busy||checked&&model.runtime==='webllm'&&!gpu;select.disabled=busy;unload.disabled=ai.phase==='off';}
  async function show(){dialog.showModal();if(!checked){try{const adapter=await navigator.gpu?.requestAdapter();gpu=!!adapter?.features.has('shader-f16');}catch{}checked=true;device.textContent=gpu?'この端末はGPUモードに対応しています。':'GPUモードの対応を確認できません。互換モードを試せます。';if(!gpu)select.value='qwen-cpu';details();}select.focus();}
- open.addEventListener('click',show);select.addEventListener('change',details);unload.addEventListener('click',()=>ai.clear());load.addEventListener('click',async()=>{try{await ai.load(select.value);}catch(e){status.textContent=e.message;}});details();
+ open.addEventListener('click',show);select.addEventListener('change',details);unload.addEventListener('click',()=>ai.clear());load.addEventListener('click',async()=>{try{await ai.load(select.value);}catch(e){if(ai.phase==='off')status.textContent=e.message;}});details();
  return {show,update(state){const text=state.text||'未読み込み';status.textContent=text;barStatus.textContent=state.phase==='ready'?state.model?.name:state.phase==='loading'?'読み込み中…':state.phase==='generating'?'生成中…':'未読み込み';stop.hidden=!['loading','generating'].includes(state.phase);progress.hidden=state.phase!=='loading';if(Number.isFinite(state.progress))progress.value=Math.max(0,Math.min(1,state.progress));else progress.removeAttribute('value');updateButton();}};
 }
 
@@ -529,7 +532,8 @@ function source(parent,title,url,meta){const row=el('div',undefined,'source');ro
 function p(parent,text,cls){parent.append(el('p',text,cls));}
 function follows(parent,items){const n=el('div',undefined,'followups');for(const text of items){const b=el('button',text);b.type='button';b.dataset.ask=text;n.append(b);}parent.append(n);}
 function localDate(timezone){return new Intl.DateTimeFormat('sv-SE',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
-function scrollConversationToEnd(){requestAnimationFrame(()=>{const pane=$('#conversation');pane.scrollTo({top:pane.scrollHeight,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});});}
+let conversationScrollFrame=0;
+function scrollConversationToEnd(smooth=true){if(conversationScrollFrame)cancelAnimationFrame(conversationScrollFrame);conversationScrollFrame=requestAnimationFrame(()=>{conversationScrollFrame=0;const pane=$('#conversation');pane.scrollTo({top:pane.scrollHeight,behavior:!smooth||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});});}
 async function resolveCity(city){if(Number.isFinite(city.latitude))return {...city,timezone:city.timezone==='UTC'?null:city.timezone};const query=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:city.query,gsrlimit:'3',prop:'coordinates',colimit:'1'});const {data}=await getJSON(`https://ja.wikipedia.org/w/api.php?${query}`,86400000);const found=Object.values(data.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0)).find(p=>p.coordinates?.[0]);if(!found)throw Error(`「${city.name}」の座標を特定できませんでした。都市名を具体的に指定してください。`);return {name:found.title,latitude:found.coordinates[0].lat,longitude:found.coordinates[0].lon,timezone:null};}
 async function weather(task,body){
  if(task.offset<0||task.offset>6)throw Error('天気予報は今日から6日後まで指定できます。');
@@ -582,7 +586,10 @@ function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$(
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const model=localAI.model;head.querySelector('.tag').textContent='端末内LLM';body.append(el('h3',`${model.name} · 端末内で生成`));const output=el('div','生成しています…','local-generated');body.append(output);
- const history=state.context.localHistory||[],answer=await localAI.generate(text,history,value=>{output.textContent=value||'生成しています…';scrollConversationToEnd();});output.replaceChildren();
+ const history=state.context.localHistory||[];let partial='',answer;
+ try{answer=await localAI.generate(text,history,value=>{partial=value;output.textContent=value||'生成しています…';scrollConversationToEnd(false);});}
+ catch(e){output.textContent=partial||'生成を完了できませんでした。';if(partial){source(body,model.model+' · Apache 2.0',model.source);p(body,'未完の生成文です。処理が止まる前までを表示しています。','sub');}throw e;}
+ output.replaceChildren();
  const blocks=answer.split(/(```[^\n]*\n[\s\S]*?```)/g);for(const block of blocks){if(!block)continue;if(block.startsWith('```')&&block.endsWith('```')){const code=el('code',block.replace(/^```[^\n]*\n/,'').slice(0,-3).trimEnd()),pre=el('pre');pre.append(code);output.append(pre);}else output.append(el('p',block.trim()));}
  source(body,model.model+' · Apache 2.0',model.source);p(body,'生成された文章です。最新の数値・天気などはデータ照会で確認できます。','sub');
  state.context={...state.context,intent:'localAI',localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
