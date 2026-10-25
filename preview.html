@@ -31,6 +31,7 @@ function parseBookTasks(raw,context={}){
  if(/^(?:論文|文献|検索|知識|調べる|辞書|学術検索|学術|Crossref|周辺記事|文章|翻訳|要約|コード)[：:\s]/.test(text))return [];
  match=text.match(/^(.{1,80}?)(?:に関する|についての|の)(?:おすすめの)?(?:本|書籍)(?:を(?:探して|検索して|教えて))?[。？?]?$/);
  if(match)return [{kind:'books',query:match[1].replace(/[。？?]$/,'').trim()}];
+ if(context.intent!=='books'&&/^(?:本の続き|書籍検索の続き)$/.test(clean))return bookError('先に「本: キーワード」「書名検索: 書名」「著者検索: 名前」で検索してください。');
  if(context.intent==='books'&&/^(?:ほかには|他には|別の候補|次の候補|本の続き|書籍検索の続き|続き)$/.test(clean)){
   if(context.booksExhausted)return bookError('この検索の続きはありません。別の検索語で探してください。');
   const page=context.page??1;if(!Number.isInteger(page)||page<1||page>=5)return bookError('書籍検索は5ページまでです。別の検索語で探してください。');
