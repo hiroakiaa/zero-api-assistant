@@ -78,6 +78,7 @@ function validateAPI_(url){
  }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/SP.POP.TOTL)?$/.test(path)){
   provider='country';allowed=path.includes('/indicator/')?['format','mrv','per_page']:['format'];expected=path.includes('/indicator/')?{format:'json',mrv:'1',per_page:'1'}:{format:'json'};
  }else if(host==='hacker-news.firebaseio.com'&&/^\/v0\/(topstories|item\/[0-9]{1,12})\.json$/.test(path)){provider='news';allowed=[];
+ }else if(host==='jp-postal-code-api.ttskch.com'&&/^\/api\/v1\/\d{7}\.json$/.test(path)){provider='postal';allowed=[];
  }else if(host==='api.openbd.jp'&&path==='/v1/get'){
   provider='isbn';allowed=['isbn'];if(!/^(978|979)\d{10}$/.test(params.isbn||'')||Array.from(params.isbn).reduce((sum,d,i)=>sum+Number(d)*(i%2?3:1),0)%10!==0)throw Error('ISBNの検索条件が無効です。');
  }else if(host==='freedictionaryapi.com'&&/^\/api\/v1\/entries\/en\/[a-z][a-z'%\-]{0,119}$/.test(path)){
@@ -97,7 +98,7 @@ function fetchAPI_(url){
  if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
  const expires=responseHeaders.Expires||responseHeaders.expires;
- const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=provider==='isbn'?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
+ const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=['isbn','postal'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
 }
 function retryDeadline_(provider,retryAfter,now,status){const value=String(retryAfter??'').trim();let deadline;if(/^\d+$/.test(value)&&Number.isFinite(Number(value)*1000))deadline=now+Number(value)*1000;else if(value)deadline=Date.parse(value);if(Number.isFinite(deadline)&&deadline>now&&deadline<=8640000000000000)return deadline;return provider==='dictionary'&&status===429?(Math.floor(now/3600000)+1)*3600000:now+60000;}
 function cooldownMessage_(until){return '提供元への新しい照会を '+Utilities.formatDate(new Date(until),'Asia/Tokyo','yyyy-MM-dd HH:mm:ss')+'（日本時間）まで停止しています。';}
