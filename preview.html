@@ -2,13 +2,16 @@
 @media(max-width:950px){.sidebar{width:270px;padding:14px 20px}.brand span{display:none}.app-header{height:78px}.side-heading h1{font-size:18px}.composer-area{padding:12px 22px}#conversation{padding:0 22px}.sidebar-bottom{padding-top:12px}}@media(max-width:700px){.app-header{height:71px;padding:0 16px}.brand{font-size:21px}.header-tools{gap:8px}#cloud-status{font-size:9px;max-width:115px}.icon-button{height:36px;min-width:36px;border-radius:12px}.sidebar{display:none}.welcome{padding:25px 5px;min-height:250px}.welcome h2{font-size:21px}.suggestions{gap:6px;margin-top:27px}.suggestions button{font-size:10px;padding:9px 10px}#conversation{padding:0 15px}.composer-area{padding:10px 14px 13px}.composer-foot{font-size:8px}.composer-foot>span:first-child{max-width:75%}.bottom-nav{height:77px;min-height:77px;padding-inline:8px;gap:2px}.bottom-nav button{min-width:0;flex:1;border-radius:13px;gap:2px}.bottom-nav b{font-size:21px}.bottom-nav small{font-size:9px}.bottom-nav span{font-size:10px}.answer-body{padding:14px}.big{font-size:27px}.bubble{font-size:13px}#mobile-reset{display:grid;height:36px;min-width:36px;border:1px solid #303039;background:#232329;border-radius:12px;font-size:19px}dialog{padding:21px}}@media(max-height:650px) and (min-width:701px){.sidebar-bottom small,.side-label{display:none}.app-header{height:65px}.side-heading h1{margin-bottom:13px}.side-examples{gap:0;margin-top:13px}.side-examples button{min-height:30px;padding:4px 6px;font-size:11px}.bottom-nav{height:72px;min-height:72px}.sidebar-bottom{padding-top:5px}.sidebar-bottom p{margin:4px 0}.welcome{min-height:210px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 #messages:empty{display:none}@media(max-height:800px) and (min-width:701px){.sidebar{padding-top:6px}.side-heading h1{margin:8px 0 17px}.side-label{margin-top:18px}.side-examples{gap:0}.side-examples button{min-height:34px}.sidebar-bottom{padding-top:8px}.sidebar-bottom small{display:none}}
 .skills-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.skill-option{padding:14px;text-align:left;border:1px solid #3b3b45;background:#27272e;border-radius:13px}.skill-option strong{display:block;font-size:12px}.skill-option small{display:block;color:#a4a4b5;margin-top:7px;font-size:10px;line-height:1.7}.skills-search{display:grid;gap:7px;color:#a9a9b8;font-size:11px}.skills-search input{width:100%;border:1px solid #454550;background:#151519;color:#eee;border-radius:11px;padding:11px;font:inherit}@media(max-width:430px){.skills-grid{grid-template-columns:1fr}}
+#skills-dialog{padding:0;overflow:hidden}#skills-dialog[open]{display:flex;flex-direction:column}.catalog-header{padding:22px 24px 8px;flex-shrink:0;border-bottom:1px solid #33333c}.catalog-header .dialog-head{margin-bottom:8px}.catalog-header p{margin:8px 0}.catalog-results{overflow-y:auto;min-height:0;padding:0 24px 24px;overscroll-behavior:contain}.skill-categories{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}.skill-categories button{border:1px solid #41414c;border-radius:10px;background:#24242b;padding:7px 10px;font-size:10px}.skill-categories button[aria-pressed=true]{background:#e7e7ee;color:#19191d}.skill-group h3{font-size:12px;color:#b5b5c5;margin:22px 0 10px}.skill-group .skills-grid{margin-top:0}.skill-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}.skill-badge{white-space:nowrap;font-size:8px;color:#b7b7c7;border:1px solid #484853;padding:2px 4px;border-radius:5px}.skill-description{display:block;font-size:10px;color:#b5b5c6;line-height:1.7;margin-top:8px}.skills-empty{text-align:center;padding:25px 10px}.skills-empty p{color:#b5b5c5}@media(max-width:430px){.catalog-header{padding:18px 18px 8px}.catalog-results{padding:0 18px 18px}}
+.local-ai-bar{max-width:850px;margin:0 auto 7px;display:flex;align-items:center;gap:10px;color:#a9a9b8;font-size:10px}.local-ai-bar .text-button{margin:0;font-size:11px;color:#dddde8}.local-ai-bar #ai-stop{margin-left:auto;color:#dbc9b8}#ai-dialog select{width:100%;padding:11px;background:#151519;border:1px solid #454550;color:#eee;border-radius:11px;font:inherit}.model-detail{margin-top:16px;padding:14px;border:1px solid #41414c;border-radius:12px}.model-detail strong{font-size:13px}.model-detail p{font-size:11px;margin:6px 0}.model-detail a{font-size:10px}.ai-controls{display:flex;gap:9px;align-items:center;margin:16px 0}.ai-controls .history-item{margin:0}#ai-progress{width:100%;height:12px;accent-color:#ddd}.local-generated{font-size:13px!important;line-height:1.9;white-space:pre-wrap!important}@media(max-width:430px){.ai-controls{align-items:stretch;flex-direction:column}}
+.local-generated pre{margin:14px 0;padding:16px;border:1px solid #343438;border-radius:14px;background:#101012;overflow:auto;white-space:pre;font:13px/1.7 ui-monospace,monospace}.local-generated p{white-space:pre-wrap}
 </style></head><body>
-<header class="app-header"><a class="brand" href="./">ZERO<span>無料APIアシスタント</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="history-open" class="icon-button" aria-label="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
+<header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="history-open" class="icon-button" aria-label="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
 <main><section id="conversation" aria-label="会話"><div id="welcome" class="welcome"><svg viewBox="0 0 24 24" class="welcome-icon" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 1.6-5.5A8 8 0 1 1 20 11Z"/></svg><small>Your questions start here.</small><h2>知りたいことを、ここに。</h2><p>調べる。比べる。計算する。</p><div class="suggestions"><button data-ask="東京の明日の天気は？">明日の天気は？</button><button data-ask="100ドルは何円？">100ドルは何円？</button><button data-ask="人工知能とは？">人工知能とは？</button></div></div><div id="messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><div class="composer-area"><div id="context" class="context" hidden></div><form id="chat-form"><label for="prompt" class="sr-only">質問を入力</label><textarea id="prompt" rows="1" maxlength="500" placeholder="質問を入力…"></textarea><button id="send" aria-label="質問を送信" type="submit">↑</button></form><div class="composer-foot"><span id="storage-note">接続状態を確認しています。</span><span id="stats">API照会 0回</span></div></div></main></div>
 <nav class="bottom-nav" aria-label="機能"><button class="active" id="focus-chat"><b>☏</b><small>Talk</small><span>そうだん</span></button><button data-ask="東京の明日の天気は？"><b>☀</b><small>Weather</small><span>てんき</span></button><button data-ask="100ドルは何円？"><b>⇄</b><small>Exchange</small><span>かんさん</span></button><button id="discover-open"><b>▤</b><small>Discover</small><span>しらべる</span></button><button id="history-bottom"><b>◷</b><small>History</small><span>りれき</span></button></nav>
-<dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。生成言語モデルは使わない、用途を限定した会話型アシスタントです。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。</p></dialog>
-<dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><dialog id="skills-dialog"><div class="dialog-head"><h2>できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><label class="skills-search">質問例を絞り込む<input id="skills-filter" type="search" placeholder="例：本、日の出、ニュース"></label><div id="skill-examples" class="skills-grid"></div></dialog><script type="module">const cities = [
+<dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。希望してモデルを読み込むと、端末内LLMによる会話・文章生成も使えます。有料の推論APIには接続しません。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。</p></dialog>
+<dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">const cities = [
  ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
 const currencyWords={米ドル:'USD',ドル:'USD',ユーロ:'EUR',日本円:'JPY',円:'JPY',英ポンド:'GBP',ポンド:'GBP',人民元:'CNY',元:'CNY',韓国ウォン:'KRW',ウォン:'KRW',豪ドル:'AUD',カナダドル:'CAD',スイスフラン:'CHF'};
@@ -377,12 +380,130 @@ function requestSegments(raw,recognize,context={}){
  return [text];
 }
 
+const CATALOG_CATEGORIES=[['all','すべて'],['life','暮らし・お出かけ'],['research','調べもの'],['tools','計算・整理'],['local','端末内']];
+const FEATURE_CATALOG=[
+ {id:'weather',category:'life',title:'天気を比べる',description:'最大3都市の気温と降水量の予報を確認。',query:'東京と大阪の明日の天気を比較して',tags:'てんき 雨 傘 洗濯 気温 服装',popular:true},
+ {id:'sun',category:'life',title:'日の出・日の入り',description:'指定した都市の日の出・日の入り時刻。',query:'東京の明日の日の出は？',tags:'ひので 日没 太陽 天文'},
+ {id:'currency',category:'life',title:'通貨換算',description:'日次の参考レートで金額を換算。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん',popular:true},
+ {id:'holiday',category:'life',title:'日本の祝日',description:'次の祝日や、収録されている年の祝日一覧。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー'},
+ {id:'time',category:'life',title:'世界時計',description:'登録済み都市のいまの時刻を比較。',query:'ロンドンと東京は今何時？',tags:'じこく じさ 時差 旅行',local:true},
+ {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
+ {id:'quakes',category:'life',title:'重要地震の公開記録',description:'USGSが重要と分類した過去7日の地震。',query:'日本周辺の最近の地震',tags:'じしん 防災 揺れ USGS'},
+ {id:'knowledge',category:'research',title:'百科事典',description:'Wikipediaの本文抜粋と元記事を表示。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア',popular:true},
+ {id:'dictionary',category:'research',title:'英英辞書・発音記号',description:'英単語の英語定義とIPA発音記号。',query:'辞書: hello',tags:'英語 えいご 英単語 意味 じしょ dictionary'},
+ {id:'books',category:'research',title:'本を探す',description:'キーワードから書名・著者・初刊年を検索。',query:'本: space',tags:'書籍 読書 ほん 著者 図書館'},
+ {id:'isbn',category:'research',title:'ISBNで本を紹介',description:'ISBNの検査数字を確認して基本書誌を紹介。',query:'ISBN: 9784780802047',tags:'本 書籍 読書 出版社 書誌 ISBN10 ISBN13'},
+ {id:'papers',category:'research',title:'生命科学の文献',description:'生命科学・医学分野の論文の書誌情報。',query:'論文: 睡眠',tags:'ろんぶん 研究 論文 文献 EuropePMC'},
+ {id:'country',category:'research',title:'国の首都・人口',description:'World Bankの国情報と公表年付き人口。',query:'フランスの人口',tags:'くに 首都 人口 統計 国情報'},
+ {id:'news',category:'research',title:'技術ニュース',description:'Hacker Newsの注目記事の原文タイトル。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN'},
+ {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
+ {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
+ {id:'date',category:'tools',title:'日付計算',description:'日数を足す・引く、曜日を確認。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
+ {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
+ {id:'compound',category:'tools',title:'まとめて質問する',description:'依頼を区切り、条件を引き継いで順に処理。',query:'5kmは何m？それとcmなら？そして今日から100日後は何日？',tags:'複数 いくつか まとめて 会話 続き',local:true},
+ {id:'ai-writing',category:'tools',title:'端末内AIで文章を書く',description:'モデルを読み込んでから、短い文章を生成。',query:'文章: お礼のメールを3文で書いて',tags:'AI LLM 作文 メール 下書き 生成 相談',local:true},
+ {id:'ai-translate',category:'research',title:'端末内AIで翻訳',description:'モデルを読み込んでから、短文を翻訳。',query:'翻訳: Good morning. を日本語にして',tags:'AI LLM 翻訳 ほんやく 英語 言い換え',local:true},
+ {id:'ai-code',category:'tools',title:'端末内AIでコード相談',description:'コードの説明や下書き。実行はしません。',query:'コード: JavaScriptのmapを短い例で説明して',tags:'AI LLM プログラミング コード JavaScript Python GAS',local:true}
+];
+const searchText=value=>value.normalize('NFKC').toLowerCase().replace(/[ァ-ヶ]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
+function filterFeatures(query='',category='all'){
+ const words=searchText(query).trim().split(/\s+/).filter(Boolean);
+ return FEATURE_CATALOG.filter(item=>(category==='all'||category==='local'&&item.local||item.category===category)&&words.every(word=>searchText([item.title,item.description,item.query,item.tags].join(' ')).includes(word)));
+}
+function mountCapabilities({list,filter,categories,status,empty,clear,makeElement}){
+ let category='all';
+ function update(){
+  const matches=filterFeatures(filter.value,category);list.replaceChildren();status.textContent=`${FEATURE_CATALOG.length}件中 ${matches.length}件`;
+  empty.hidden=!!matches.length;
+  for(const [id,label]of CATALOG_CATEGORIES.filter(([id])=>!['all','local'].includes(id))){
+   const items=matches.filter(item=>item.category===id);if(!items.length)continue;
+   const group=makeElement('section',undefined,'skill-group'),heading=makeElement('h3',label),grid=makeElement('div',undefined,'skills-grid');group.append(heading,grid);
+   for(const item of items){const button=makeElement('button',undefined,'skill-option');button.type='button';button.dataset.ask=item.query;
+    const head=makeElement('span',undefined,'skill-card-head');head.append(makeElement('strong',item.title),makeElement('span',item.local?'端末内':'データ照会','skill-badge'));
+    button.append(head,makeElement('span',item.description,'skill-description'),makeElement('small',item.query));grid.append(button);
+   }list.append(group);
+  }
+  for(const button of categories.children)button.setAttribute('aria-pressed',String(button.dataset.category===category));
+ }
+ for(const [id,label]of CATALOG_CATEGORIES){const button=makeElement('button',label);button.type='button';button.dataset.category=id;button.addEventListener('click',()=>{category=id;update();});categories.append(button);}
+ filter.addEventListener('input',update);clear.addEventListener('click',()=>{filter.value='';category='all';update();filter.focus();});update();
+}
+
+const LOCAL_MODELS=[
+ {id:'qwen3-light',name:'軽量会話',model:'Qwen3-0.6B-q4f16_1-MLC',repository:'mlc-ai/Qwen3-0.6B-q4f16_1-MLC',revision:'8c14ce481d4c692769976ad52afea453a102df19',runtime:'webllm',bytes:351517143,memoryMB:1404,role:'短文向け。日本語の文章品質には限界があります',license:'Apache-2.0',source:'https://huggingface.co/Qwen/Qwen3-0.6B'},
+ {id:'qwen3-chat',name:'会話・文章',model:'Qwen3-1.7B-q4f16_1-MLC',repository:'mlc-ai/Qwen3-1.7B-q4f16_1-MLC',revision:'80b3abcec6c3b3f5355dc0cc99cc4fb578f192bc',runtime:'webllm',bytes:984156278,memoryMB:2037,role:'会話・文章の下書き・要約',license:'Apache-2.0',source:'https://huggingface.co/Qwen/Qwen3-1.7B'},
+ {id:'qwen-coder',name:'コード相談',model:'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',repository:'mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',revision:'30184a4f713a9aaf6c548ace1290615d0ea041ff',runtime:'webllm',bytes:880289173,memoryMB:1630,role:'コードの説明・下書き。実行はしません',license:'Apache-2.0',source:'https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct'},
+ {id:'qwen-cpu',name:'互換モード',model:'onnx-community/Qwen2.5-0.5B-Instruct',repository:'onnx-community/Qwen2.5-0.5B-Instruct',revision:'22942cb7d7ba4cc81bb4673549ca4d4614469b5e',runtime:'transformers',dtype:'q8',bytes:520000000,role:'GPUなしで短文を生成。品質と速度には限界があります',license:'Apache-2.0',source:'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct'}
+];
+function localModel(id){const model=LOCAL_MODELS.find(m=>m.id===id);if(!model)throw Error('登録された端末内モデルを選択してください。');return model;}
+function explicitLocalPrompt(raw){const text=String(raw).normalize('NFKC').trim(),match=text.match(/^(AI|相談|文章|翻訳|要約|コード)[：:]\s*([\s\S]+)$/i);return match?{kind:match[1].toLowerCase(),text,content:match[2]}:null;}
+function dataRoutingText(raw){const explicit=explicitLocalPrompt(raw);return explicit?(explicit.kind==='ai'?explicit.content:null):raw;}
+function generationMessages(prompt,history=[],mode='chat'){
+ const system=mode==='explain'?'あなたは日本語の説明係です。与えられたデータだけを短く説明してください。数値・日付・出典を変更せず、不明な情報を補わないでください。':'あなたは日本語で簡潔に答えるアシスタントです。依頼文を繰り返さず、完成した文章・翻訳・説明を直接出力してください。現在の天気・為替・住所などを推測せず、アプリのデータ照会を案内してください。外部サービスの呼出しやコード実行をしたと偽らないでください。';
+ const messages=[{role:'system',content:system}];let room=700;
+ const recent=[];for(const m of history.slice(-6).reverse()){if(m.source!=='llm'||!['user','assistant'].includes(m.role)||typeof m.text!=='string')continue;const text=m.text.slice(0,Math.min(room,800));if(!text)break;recent.unshift({role:m.role,content:text});room-=text.length;}
+ if(String(prompt).length>2000)throw Error('端末内AIへの入力は2000文字以内で指定してください。');
+ messages.push(...recent,{role:'user',content:String(prompt)});return messages;
+}
+const visibleLocalText=text=>String(text).replace(/<think>[\s\S]*?<\/think>/g,'').replace(/<think>[\s\S]*$/g,'').replace(/<\/think>/g,'').trim();
+
+const LOCAL_AI_WORKER="let engine=null,runtime='',streamerClass=null,busy=false,qwen3=false;\nconst send=(id,type,data={})=>self.postMessage({id,type,...data});\nself.onmessage=async({data})=>{\n const {id,type,model,messages}=data;if(busy){send(id,'error',{message:'端末内AIは別の処理中です。'});return;}busy=true;\n try{\n  if(type==='load'){\n   if(!model||!['webllm','transformers'].includes(model.runtime)||!/^([\\w.-]+)\\/([\\w.-]+)$/.test(model.repository)||!/^[a-f0-9]{40}$/.test(model.revision))throw Error('モデル設定が無効です。');\n   runtime=model.runtime;qwen3=model.model.startsWith('Qwen3-');send(id,'progress',{text:'実行ライブラリを読み込んでいます…',progress:0});\n   if(runtime==='webllm'){\n    const lib=await import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/+esm');\n    const record=lib.prebuiltAppConfig.model_list.find(m=>m.model_id===model.model);if(!record)throw Error('選択モデルはこの実行版で利用できません。');\n    engine=new lib.MLCEngine({appConfig:{...lib.prebuiltAppConfig,model_list:[{...record,model:`https://huggingface.co/${model.repository}/resolve/${model.revision}/`,overrides:{...record.overrides,context_window_size:2048}}]},initProgressCallback:p=>send(id,'progress',{text:String(p.text||'モデルを準備しています…').slice(0,140),progress:p.progress})});\n    await engine.reload(model.model);\n   }else{\n    const lib=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1');\n    lib.env.allowLocalModels=false;lib.env.backends.onnx.wasm.numThreads=1;lib.env.backends.onnx.wasm.proxy=false;\n    lib.env.backends.onnx.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/';\n    streamerClass=lib.TextStreamer;\n    engine=await lib.pipeline('text-generation',model.repository,{revision:model.revision,dtype:model.dtype,device:'wasm',progress_callback:p=>send(id,'progress',{text:p.status==='progress'?`モデルファイルを取得中 · ${Math.round((p.loaded||0)/1000000)} MB`:'モデルを準備しています…',progress:Number.isFinite(p.progress)?p.progress/100:0})});\n   }\n   send(id,'done',{loaded:true});\n  }else if(type==='generate'){\n   if(!engine)throw Error('モデルを先に読み込んでください。');\n   if(!Array.isArray(messages)||messages.length>8||messages.some(m=>!['system','user','assistant'].includes(m.role)||typeof m.content!=='string'||m.content.length>5000))throw Error('会話の入力が無効です。');\n   let text='';\n   if(runtime==='webllm'){\n    const chunks=await engine.chat.completions.create({messages:qwen3?messages.map((m,i)=>i===messages.length-1?{...m,content:m.content+'\\n/no_think'}:m):messages,max_tokens:384,temperature:0.3,stream:true,...(qwen3?{extra_body:{enable_thinking:false}}:{})});\n    for await(const chunk of chunks){const token=chunk.choices?.[0]?.delta?.content||'';text+=token;if(token)send(id,'token',{text});}\n   }else{\n    const streamer=new streamerClass(engine.tokenizer,{skip_prompt:true,skip_special_tokens:true,callback_function:token=>{text+=token;send(id,'token',{text});}});\n    const result=await engine(messages,{max_new_tokens:160,do_sample:false,repetition_penalty:1.1,streamer});\n    text=result?.[0]?.generated_text?.at?.(-1)?.content||text;\n   }\n   send(id,'done',{text});\n  }else throw Error('対応していない操作です。');\n }catch(e){send(id,'error',{message:String(e.message||'端末内AIで問題が起きました。').replace(/https?:\\/\\/\\S+/g,'[配信先]').slice(0,220)});}finally{busy=false;}\n};\n";
+class LocalAI{
+ constructor(onState=()=>{}){this.onState=onState;this.phase='off';this.model=null;this.worker=null;this.pending=new Map();this.serial=0;}
+ get ready(){return this.phase==='ready';}
+ setState(phase,text,progress=null){this.phase=phase;this.onState({phase,text,progress,model:this.model});}
+ clear(message='端末内AIを解除しました。'){
+  this.worker?.terminate();this.worker=null;for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(Object.assign(Error(message),{name:'AbortError'}));}this.pending.clear();this.model=null;this.setState('off',message);
+ }
+ call(type,payload,onToken,timeout){
+  const id=++this.serial;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>this.clear('処理に時間がかかったため停止しました。再度モデルを読み込めます。'),timeout);this.pending.set(id,{resolve,reject,timer,onToken});this.worker.postMessage({id,type,...payload});});
+ }
+ async load(id){
+  const model=localModel(id);if(this.phase==='generating')throw Error('生成を停止してからモデルを変更してください。');this.clear('モデルを切り替えています…');this.model=model;this.setState('loading','ダウンロードを開始します…',0);
+  const blob=URL.createObjectURL(new Blob([LOCAL_AI_WORKER],{type:'text/javascript'}));this.worker=new Worker(blob,{type:'module'});URL.revokeObjectURL(blob);
+  this.worker.onmessage=({data})=>{const pending=this.pending.get(data.id);if(!pending)return;
+   if(data.type==='progress'){this.setState('loading',data.text,data.progress);return;}
+   if(data.type==='token'){pending.onToken?.(visibleLocalText(data.text));return;}
+   clearTimeout(pending.timer);this.pending.delete(data.id);data.type==='done'?pending.resolve(data):pending.reject(Error(data.message||'端末内AIで問題が起きました。'));
+  };
+  this.worker.onerror=()=>this.clear('この端末でモデルを起動できませんでした。別のモデルを選んでください。');
+  try{await this.call('load',{model},null,600000);this.setState('ready',`${model.name} · 利用できます`);}catch(e){if(this.worker)this.clear(e.message);throw e;}
+ }
+ async generate(prompt,history=[],onToken=()=>{},mode='chat'){
+  if(!this.ready)throw Error('先に端末内AIのモデルを読み込んでください。');this.setState('generating','端末内で生成しています…');
+  try{const result=await this.call('generate',{messages:generationMessages(prompt,history,mode)},onToken,180000);const text=visibleLocalText(result.text);if(!text)throw Error('文章が生成されませんでした。短い質問でもう一度試してください。');return text;}
+  finally{if(this.worker)this.setState('ready',`${this.model.name} · 利用できます`);}
+ }
+}
+
+function mountAIPanel({ai,el,link}){
+ const dialog=el('dialog');dialog.id='ai-dialog';dialog.setAttribute('aria-labelledby','ai-title');
+ const head=el('div',undefined,'dialog-head'),title=el('h2','端末内AI');title.id='ai-title';const close=el('button','×','icon-button');close.setAttribute('aria-label','端末内AIを閉じる');close.addEventListener('click',()=>dialog.close());head.append(title,close);dialog.append(head);
+ const intro=el('p','モデルを選んで端末に読み込むと、会話・翻訳・文章作成を利用できます。推論は端末内で行い、有料AI APIには接続しません。GAS接続時は、質問・生成文も通常の会話履歴として管理者のシートへ保存します。');dialog.append(intro);
+ const device=el('p','端末の対応状況を確認中…','info-note');device.id='ai-device';dialog.append(device);
+ const label=el('label','モデルを選ぶ','skills-search'),select=el('select');select.id='ai-model';for(const model of LOCAL_MODELS){const option=el('option',`${model.name} · ${model.model}`);option.value=model.id;select.append(option);}label.append(select);dialog.append(label);
+ select.value='qwen3-chat';
+ const detail=el('div',undefined,'model-detail'),terms=el('p','初回はモデルと実行ライブラリをダウンロードします。通信量・端末の空き容量・電力を使います。対応状況と速度は端末により異なります。読み込み解除は実行を止めますが、取得済みファイルはブラウザのキャッシュに残る場合があります。','info-note');dialog.append(detail,terms);
+ const controls=el('div',undefined,'ai-controls'),load=el('button','モデルをダウンロードして開始','new-chat'),unload=el('button','読み込み解除','history-item');load.id='ai-load';unload.id='ai-unload';controls.append(load,unload);dialog.append(controls);
+ const progress=el('progress');progress.id='ai-progress';progress.max=1;progress.hidden=true;const status=el('p','未読み込み','info-note');status.id='ai-status';status.setAttribute('role','status');dialog.append(progress,status);document.body.append(dialog);
+ const bar=el('div',undefined,'local-ai-bar'),open=el('button','✦ 端末内AI','text-button'),barStatus=el('span','未読み込み'),stop=el('button','停止','text-button');open.id='ai-open';barStatus.id='ai-bar-status';stop.id='ai-stop';stop.hidden=true;stop.addEventListener('click',()=>ai.clear('端末内AIの処理を停止しました。'));bar.append(open,barStatus,stop);document.querySelector('.composer-area').insertBefore(bar,document.querySelector('#chat-form'));
+ let gpu=false,checked=false;
+ function details(){const model=localModel(select.value);detail.replaceChildren();detail.append(el('strong',model.role),el('p',`モデル取得：約${Math.ceil(model.bytes/1000000)} MB ＋実行ライブラリ`),el('p',model.runtime==='webllm'?`GPUメモリ目安：約${(model.memoryMB/1000).toFixed(1)} GB（実行環境で変動）`:'CPUで実行します。処理に時間がかかる場合があります。'),link('モデル提供元・Apache 2.0ライセンス',model.source));updateButton();}
+ function updateButton(){const model=localModel(select.value),busy=['loading','generating'].includes(ai.phase);load.disabled=busy||checked&&model.runtime==='webllm'&&!gpu;select.disabled=busy;unload.disabled=ai.phase==='off';}
+ async function show(){dialog.showModal();if(!checked){try{const adapter=await navigator.gpu?.requestAdapter();gpu=!!adapter?.features.has('shader-f16');}catch{}checked=true;device.textContent=gpu?'この端末はGPUモードに対応しています。':'GPUモードの対応を確認できません。互換モードを試せます。';if(!gpu)select.value='qwen-cpu';details();}select.focus();}
+ open.addEventListener('click',show);select.addEventListener('change',details);unload.addEventListener('click',()=>ai.clear());load.addEventListener('click',async()=>{try{await ai.load(select.value);}catch(e){status.textContent=e.message;}});details();
+ return {show,update(state){const text=state.text||'未読み込み';status.textContent=text;barStatus.textContent=state.phase==='ready'?state.model?.name:state.phase==='loading'?'読み込み中…':state.phase==='generating'?'生成中…':'未読み込み';stop.hidden=!['loading','generating'].includes(state.phase);progress.hidden=state.phase!=='loading';if(Number.isFinite(state.progress))progress.value=Math.max(0,Math.min(1,state.progress));else progress.removeAttribute('value');updateButton();}};
+}
+
 const $=s=>document.querySelector(s);
 const cloud=new CloudDB();
 const providerCooldowns=new ProviderCooldowns();
+let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
 const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+names.localAI='端末内AI';
 const registry=[
+ ['端末内LLM','希望して読み込んだモデルで会話・文章生成','https://huggingface.co/Qwen','公開モデルはApache 2.0。WebLLMまたはTransformers.jsで端末内推論。モデルの初回取得が必要です。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
  ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
@@ -455,20 +576,28 @@ async function time(task,body){
  p(body,`表示時点の時刻です（端末の時計を使用）。端末時刻が正しいことを前提とします。`);state.context={...state.context,intent:'time',places:task.places};
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
-function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'天気・日の出、為替、百科事典、英英辞書、本、生命科学の文献、重要地震、国の人口・首都、技術ニュース、祝日、計算、単位換算、日付計算、世界時計に対応しています。');follows(body,['東京の明日の天気は？','辞書: hello','5kmは何m？','今日から100日後は何日？','本: space','技術ニュース']);}
+function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
 function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
+async function localAnswer(text,body,head){
+ if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
+ const model=localAI.model;head.querySelector('.tag').textContent='端末内LLM';body.append(el('h3',`${model.name} · 端末内で生成`));const output=el('div','生成しています…','local-generated');body.append(output);
+ const history=state.context.localHistory||[],answer=await localAI.generate(text,history,value=>{output.textContent=value||'生成しています…';scrollConversationToEnd();});output.replaceChildren();
+ const blocks=answer.split(/(```[^\n]*\n[\s\S]*?```)/g);for(const block of blocks){if(!block)continue;if(block.startsWith('```')&&block.endsWith('```')){const code=el('code',block.replace(/^```[^\n]*\n/,'').slice(0,-3).trimEnd()),pre=el('pre');pre.append(code);output.append(pre);}else output.append(el('p',block.trim()));}
+ source(body,model.model+' · Apache 2.0',model.source);p(body,'生成された文章です。最新の数値・天気などはデータ照会で確認できます。','sub');
+ state.context={...state.context,intent:'localAI',localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
+}
 async function ask(raw){
  const text=raw.trim();if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
  const user=el('div',undefined,'message user');user.append(el('div',text,'bubble'));$('#messages').append(user);state.transcript.push({role:'あなた',text});
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
-  const requests=requestSegments(text,parsePlan,state.context);loading.remove();
+  const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
   const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
-   const tasks=parsePlan(request,state.context);
-   if(!tasks.length){if(requests.length>1)p(body,`「${request}」は対応する処理を見つけられませんでした。`);if(!helpShown){help(body);helpShown=true;}continue;}
+   const explicitAI=explicitLocalPrompt(request),routingText=dataRoutingText(request),tasks=routingText===null?[]:parsePlan(routingText,state.context);
+   if(!tasks.length){if(localAI.ready||explicitAI){executed++;const section=el('section');body.append(section);try{await localAnswer(request,section,head);}catch(e){p(section,e.message,'error');}continue;}if(requests.length>1)p(body,`「${request}」は対応する処理を見つけられませんでした。`);if(!helpShown){help(body);helpShown=true;}continue;}
    for(const task of tasks){
     if(executed>=4){limited=true;break;}executed++;
     const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);
@@ -496,11 +625,10 @@ for(const [title,scope,url,terms] of registry){const row=el('div',undefined,'api
 for(const id of ['about','about-top'])$('#'+id).addEventListener('click',()=>$('#info').showModal());$('#close-info').addEventListener('click',()=>$('#info').close());$('#info').addEventListener('click',e=>{if(e.target===$('#info')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 $('#export').addEventListener('click',()=>{if(!state.transcript.length){$('#info').showModal();return;}const content=state.transcript.map(v=>`${v.role}\n${v.text}`).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='zero-conversation.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('#focus-chat').addEventListener('click',()=>$('#prompt').focus());
-const questionExamples=[['天気','東京と大阪の明日の天気を比較して'],['日の出・日の入り','東京の明日の日の出は？'],['通貨換算','100ユーロは何円？'],['百科事典','人工知能とは？'],['英英辞書・発音記号','辞書: hello'],['本を探す','本: space'],['生命科学の文献','論文: 睡眠'],['地震の公開記録','日本周辺の最近の地震'],['国の首都・人口','フランスの人口'],['技術ニュース','技術ニュース'],['日本の祝日','次の祝日は？'],['計算','計算: (1280 + 980) × 1.1'],['単位換算','5kmは何マイル？'],['日付計算','今日から100日後は何日？'],['日付の差','2026-10-25から2027-01-01まで何日？'],['世界時計','ロンドンと東京は今何時？']];
-questionExamples.splice(questionExamples.findIndex(([title])=>title==='本を探す')+1,0,['ISBNで本を紹介','ISBN: 9784780802047']);
-questionExamples.push(['郵便番号から住所','〒100-0014']);
-for(const [title,query]of questionExamples){const button=el('button',undefined,'skill-option');button.dataset.ask=query;button.append(el('strong',title),el('small',query));$('#skill-examples')?.append(button);}
-$('#discover-open')?.addEventListener('click',()=>$('#skills-dialog').showModal());$('#skills-close')?.addEventListener('click',()=>$('#skills-dialog').close());$('#skills-filter')?.addEventListener('input',e=>{for(const b of $('#skill-examples').children)b.hidden=!b.textContent.toLowerCase().includes(e.target.value.toLowerCase());});
+mountCapabilities({list:$('#skill-examples'),filter:$('#skills-filter'),categories:$('#skill-categories'),status:$('#skill-count'),empty:$('#skills-empty'),clear:$('#skills-clear'),makeElement:el});
+aiPanel=mountAIPanel({ai:localAI,el,link});
+function openSkills(){$('#skills-dialog').showModal();$('#skills-filter').focus();$('#skills-filter').select();}
+$('#discover-open')?.addEventListener('click',openSkills);$('#skills-close')?.addEventListener('click',()=>$('#skills-dialog').close());
 async function saveTurn(payload,body){
  $('#storage-note').textContent='会話を保存しています…';
  try{const result=await cloud.call('saveTurn',payload);$('#storage-note').textContent=result.saved?'スプレッドシートに保存済み':'保存停止中：'+result.reason;}
