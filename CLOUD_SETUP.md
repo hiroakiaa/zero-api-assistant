@@ -1,6 +1,6 @@
 # ZERO self-hosted inference
 
-Status: connection code and a loopback-only inference bridge are implemented. A loopback-only Ollama server and bridge have been exercised on the owner-authorized PC. An owner-approved temporary Cloudflare route is present, but authenticated transmission and GAS activation remain disabled while explicit key-use consent is pending. Local generation does not prove iPhone end-to-end operation.
+Status: the owner-authorized PC bridge is connected to the live GAS app through an approved temporary Cloudflare route. The owner explicitly approved storing the bridge secret in GAS and using it through the specified route. Actual live generation and spreadsheet history have been checked. iPhone hardware operation and long-term availability remain unverified.
 
 The path is browser → GAS → an owner-operated HTTPS bridge → the same host's local Ollama. Browser model downloads and paid hosted inference APIs are not used. A server still needs memory, storage, power, network access and uptime. Using an existing PC avoids a new inference API bill; it does not make those resources free.
 
@@ -23,13 +23,17 @@ If the Ollama desktop app is already running, it must be stopped before starting
 ollama pull qwen2.5:7b-instruct
 ```
 
-This currently has approximately 4.7 GB of weights; actual execution needs additional memory. This bridge uses only the tested non-reasoning `qwen2.5:7b-instruct` model. It rejects arbitrary models and cloud-hosted model tags. The model uses Apache 2.0; retain its notices on the server. Registry tags may change, so record the installed model digest and version before a production rollout.
+This currently has approximately 4.7 GB of weights; actual execution needs additional memory. General writing and code use the tested non-reasoning `qwen2.5:7b-instruct`. The optional translation route can use `qwen2.5:14b-instruct` (approximately 9.0 GB of additional weights and more execution memory). Only these approved local models are accepted; arbitrary models and cloud-hosted model tags are rejected. Both use Apache 2.0; retain their notices on the server. Registry tags may change, so record installed model digests and versions before a production rollout.
+
+For the optional translation route, first run `ollama pull qwen2.5:14b-instruct` on the server PC. This is a manual server download, never a browser download. Then set `ZERO_AI_TRANSLATION_MODEL=qwen2.5:14b-instruct` before starting the bridge. If this variable is omitted, translations use the general model. If the configured translation model is unavailable, the request fails; it does not download a model or silently switch to another provider.
 
 4. Create a secret in your own terminal and start the bridge. Do not paste the secret into chat, commit it, include it in a URL, or put it in browser JavaScript.
 
 ```powershell
 $env:ZERO_AI_SECRET = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
 $env:ZERO_AI_MODEL = 'qwen2.5:7b-instruct'
+# Optional, only after the additional model is installed and tested:
+# $env:ZERO_AI_TRANSLATION_MODEL = 'qwen2.5:14b-instruct'
 node cloud/CloudServer.mjs
 ```
 
