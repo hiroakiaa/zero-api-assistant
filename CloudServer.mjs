@@ -3,6 +3,7 @@ import {timingSafeEqual} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 
 const models=new Set(['qwen2.5:7b-instruct']);
+const translationModels=new Set(['qwen2.5:7b-instruct','qwen2.5:14b-instruct']);
 const guidance={文章:'指定された完成原稿を直接書いてください。',翻訳:'指定言語の翻訳文だけを出力し、内容を付け加えないでください。',要約:'与えられた文章だけを要約してください。',コード:'コードの説明や下書きを示し、実行したとは言わないでください。',general:'依頼に直接答えてください。'};
 // Only unambiguous exact Japanese prose requests are checked. Never infer a
 // constraint from conversation history, quoted source text, ranges or code.
@@ -30,16 +31,17 @@ function cloudRequestBody(req,timeoutMS){
   const timer=setTimeout(()=>fail(408,'input_timeout'),timeoutMS);req.on('data',onData);req.once('end',onEnd);req.once('aborted',onAborted);req.once('error',onError);
  });
 }
-export function createCloudServer({token,model='qwen2.5:7b-instruct',fetchImpl=fetch,timeoutMS=70000,inputTimeoutMS=10000}={}){
+export function createCloudServer({token,model='qwen2.5:7b-instruct',translationModel=model,fetchImpl=fetch,timeoutMS=70000,inputTimeoutMS=10000}={}){
  if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(token))throw Error('ZERO_AI_SECRET must be 32–128 URL-safe characters');
  if(!models.has(model))throw Error('Use an approved local Qwen2.5-Instruct model; hosted/cloud tags are not allowed');
+ if(!translationModels.has(translationModel))throw Error('Use an approved local translation model');
  if(!Number.isInteger(timeoutMS)||timeoutMS<1||timeoutMS>70000||!Number.isInteger(inputTimeoutMS)||inputTimeoutMS<1||inputTimeoutMS>10000)throw Error('Invalid timeout');let busy=false;
  const server=http.createServer(async(req,res)=>{
   const reply=(status,data,close=false)=>{if(res.destroyed||res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Zero-AI':'self-hosted-v1','X-Content-Type-Options':'nosniff',...(close?{Connection:'close'}:{})});res.end(JSON.stringify(data),close?()=>req.destroy():undefined);};
   // No CORS: only the server-to-server GAS connection is supported.
   const expected=Buffer.from('Bearer '+token),supplied=Buffer.from(String(req.headers.authorization||''));
   if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){req.resume();reply(401,{error:'unauthorized'});return;}
-  if(req.method==='GET'&&req.url==='/zero/health'){reply(200,{service:'zero-self-hosted',model,readyToAccept:!busy});return;}
+  if(req.method==='GET'&&req.url==='/zero/health'){reply(200,{service:'zero-self-hosted',model,translationModel,readyToAccept:!busy});return;}
   if(req.method!=='POST'||req.url!=='/zero/chat'){req.resume();reply(404,{error:'not_found'});return;}
   if(busy){req.resume();reply(429,{error:'busy'});return;}
   if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||'')){req.resume();reply(415,{error:'json_required'});return;}
@@ -49,7 +51,7 @@ export function createCloudServer({token,model='qwen2.5:7b-instruct',fetchImpl=f
    const raw=await cloudRequestBody(req,Math.min(inputTimeoutMS,timeoutMS));let input,messages;try{input=JSON.parse(raw.toString('utf8'));messages=cloudMessages(input);}catch{reply(400,{error:'invalid_input'});return;}
    const wanted=sentenceConstraint(input);
    for(let attempt=0;attempt<2;attempt++){
-    const response=await fetchImpl('http://127.0.0.1:11434/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:controller.signal,body:JSON.stringify({model,messages,stream:false,keep_alive:'5m',options:{num_ctx:4096,num_predict:256,temperature:0.3}})});
+    const response=await fetchImpl('http://127.0.0.1:11434/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:controller.signal,body:JSON.stringify({model:input.kind==='翻訳'?translationModel:model,messages,stream:false,keep_alive:'5m',options:{num_ctx:4096,num_predict:256,temperature:0.3}})});
     if(!response.ok){reply(502,{error:'local_model_unavailable'});return;}const result=await response.json(),text=result?.message?.content;
     if(result?.done!==true||typeof text!=='string'||!text.trim()||text.length>8000){reply(502,{error:'invalid_model_response'});return;}
     if(wanted&&result.done_reason==='stop'&&japaneseSentenceCount(text.trim())!==wanted){
@@ -63,5 +65,5 @@ export function createCloudServer({token,model='qwen2.5:7b-instruct',fetchImpl=f
  server.requestTimeout=75000;server.headersTimeout=10000;server.maxHeadersCount=30;server.maxConnections=10;return server;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
- try{const port=Number(process.env.ZERO_AI_PORT||8787);if(!Number.isInteger(port)||port<1024||port>65535)throw Error('Invalid port');const server=createCloudServer({token:process.env.ZERO_AI_SECRET,model:process.env.ZERO_AI_MODEL||'qwen2.5:7b-instruct'});server.listen(port,'127.0.0.1',()=>process.stdout.write('ZERO inference bridge listening on 127.0.0.1:'+port+' (PID '+process.pid+').\n'));}catch(error){process.stderr.write(error.message+'\n');process.exitCode=1;}
+ try{const port=Number(process.env.ZERO_AI_PORT||8787);if(!Number.isInteger(port)||port<1024||port>65535)throw Error('Invalid port');const server=createCloudServer({token:process.env.ZERO_AI_SECRET,model:process.env.ZERO_AI_MODEL||'qwen2.5:7b-instruct',...(process.env.ZERO_AI_TRANSLATION_MODEL?{translationModel:process.env.ZERO_AI_TRANSLATION_MODEL}:{})});server.listen(port,'127.0.0.1',()=>process.stdout.write('ZERO inference bridge listening on 127.0.0.1:'+port+' (PID '+process.pid+').\n'));}catch(error){process.stderr.write(error.message+'\n');process.exitCode=1;}
 }
