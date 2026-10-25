@@ -68,10 +68,13 @@ function validateAPI_(url){
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&params.list==='geosearch'){
   provider='knowledge';allowed=['action','format','origin','list','gscoord','gsradius','gslimit','gsnamespace','gsprimary'];expected={action:'query',format:'json',origin:'*',list:'geosearch',gslimit:'20',gsnamespace:'0',gsprimary:'primary'};
   const coordinates=(params.gscoord||'').split('|');if(coordinates.length!==2||coordinates.some(n=>! /^-?\d{1,3}(\.\d{1,4})?$/.test(n))||Math.abs(Number(coordinates[0]))>90||Math.abs(Number(coordinates[1]))>180||! /^(?:[1-9]\d{2,3}|10000)$/.test(params.gsradius||''))throw Error('周辺記事の座標・半径が無効です。');
+ }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&Object.prototype.hasOwnProperty.call(params,'pageids')){
+  provider='knowledge';allowed=['action','format','origin','prop','explaintext','exintro','inprop','ppprop','redirects','pageids','exchars'];expected={action:'query',format:'json',origin:'*',prop:'extracts|info|pageprops',explaintext:'1',exintro:'1',inprop:'url',ppprop:'disambiguation',redirects:'1',exchars:'1200'};
+  if(!/^[1-9][0-9]{0,11}$/.test(params.pageids||''))throw Error('記事IDは正の整数1件で指定してください。');
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'){
   provider='knowledge';expected={action:'query',format:'json',origin:'*',generator:'search',gsrlimit:'3'};
   if(params.prop==='coordinates'){allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','colimit'];expected.prop='coordinates';expected.colimit='1';}
-  else {allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','explaintext','exintro','exchars','inprop','redirects'];Object.assign(expected,{prop:'extracts|info',explaintext:'1',exintro:'1',inprop:'url',redirects:'1'});if(!['550','1800'].includes(params.exchars))throw Error('抜粋の長さが無効です。');}
+  else {allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','explaintext','exintro','exchars','inprop','redirects'];Object.assign(expected,{prop:'extracts|info',explaintext:'1',exintro:'1',inprop:'url',redirects:'1'});if(params.prop==='extracts|info|pageprops'){allowed.push('ppprop');expected.prop=params.prop;expected.ppprop='disambiguation';}if(!['550','1200'].includes(params.exchars))throw Error('抜粋の長さが無効です。');}
   if(!params.gsrsearch||params.gsrsearch.length>100)throw Error('知識検索の条件が無効です。');
  }else if(host==='holidays-jp.github.io'&&path==='/api/v1/date.json'){provider='holiday';allowed=[];
  }else if(host==='api.crossref.org'&&path==='/works'){
