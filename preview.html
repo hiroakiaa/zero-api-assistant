@@ -25,6 +25,7 @@ function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
  const nearby=parseNearby(text,context,cities);if(nearby.length)return nearby;
+ const convertedTime=parseTimeConversion(text,context);if(convertedTime.length)return convertedTime;
  const jpHolidays=parseJapaneseHolidays(text,context);if(jpHolidays.length)return jpHolidays;
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
@@ -34,7 +35,7 @@ function parsePlan(raw, context={}){
  const moneyTasks=parseCurrencyTasks(text,context);
  const found=cities.filter(c=>text.includes(c.name)||text.toLowerCase().includes(c.query.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
  const isWeather=/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯/.test(text);
- const isTime=/何時|時刻|時差|世界時計/.test(text);
+ const isTime=/何時|時刻|時差|世界時計/.test(text)&&!/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:\s]/.test(text);
  const isFollow=/^(?:じゃあ|では|それなら|それと|あと)?\s*(?:明日|明後日|あさって|今日|\d+日後|.{1,25}(?:なら|では|は)[？?]?$)/.test(text)||found.length>0&&text.length<25;
  if(isWeather || (context.intent==='weather'&&isFollow&&!moneyTasks.length&&!isTime&&!/とは|って何|について|検索|調べ|為替|換算|何円|祝日|計算/.test(text))){
   const explicit=text.match(/^(.{2,40}?)(?:の|は)(?:今日の|明日の|明後日の)?(?:天気|気温|雨|服装)/);
@@ -44,13 +45,13 @@ function parsePlan(raw, context={}){
  }
  if(context.pending==='weather'&&!tasks.length&&!moneyTasks.length&&!isTime&&!/祝日|計算|為替|とは|調べ/.test(text))tasks.push({kind:'weather',places:found.length?found:[{name:text,query:text}],offset:context.offset||0});
  tasks.push(...moneyTasks);
- if(isTime){const explicit=text.match(/^(.{2,30}?)(?:は|の)(?:今)?(?:何時|時刻)/);tasks.push({kind:'time',places:found.length?found:explicit?[{name:explicit[1],query:explicit[1]}]:context.places||[]});}
+ if(isTime){const explicit=text.match(/^(.{2,80}?)(?:は|の)(?:今)?(?:何時|時刻)/),clocks=clockCities(text,cities);tasks.push({kind:'time',places:clocks.length?clocks:explicit?[{name:explicit[1],query:explicit[1]}]:context.places||[]});}
  const calc=text.match(/^(?:計算(?:して)?[：:\s]*)?([\d\s.()+\-*/×÷^%]+)(?:を計算(?:して)?|は[？?]?|=[？?]?)?$/);
  if(calc&&/[+\-*/×÷^%]/.test(calc[1]))tasks.push({kind:'calc',expression:calc[1]});
  const knowledge=text.match(/^(.{1,100}?)(?:って何|とは(?:何)?|について(?:教えて|調べて|知りたい)?|を(?:調べて|検索して|教えて))[。？?]?$/);
  const prefix=text.match(/^(?:検索|調べる|知識)[：:\s]+(.{1,100})$/);
  if(knowledge||prefix)tasks.push({kind:'knowledge',query:(knowledge?.[1]||prefix[1]).trim()});
- if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(['weather','holiday'].includes(tasks[i].kind))tasks.splice(i,1);
+ if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(['weather','holiday','time'].includes(tasks[i].kind))tasks.splice(i,1);
  if(/^(もっと詳しく|詳しく|続き)[。？?]?$/.test(text)&&context.intent==='knowledge'&&context.query)tasks.push({kind:'knowledge',query:context.query,more:true});
  const extensions=parseExtensions(text,context,found);
  if(extensions.length){for(let i=tasks.length-1;i>=0;i--)if(tasks[i].kind==='knowledge'||tasks[i].kind==='weather'&&(!isWeather||extensions.some(t=>t.kind==='sun')))tasks.splice(i,1);}
@@ -299,7 +300,7 @@ function parseNearby(raw,context={},knownCities=[]){
   if(active&&/^(?:もっと広く|範囲を広げて)$/.test(text)){if(context.nearbyRadius>=10000)return nearbyError('検索半径は最大10kmです。別の基準地点を指定してください。');return[{kind:'nearby',point:context.nearbyPoint,radius:context.nearbyRadius<3000?3000:10000,page:0}];}
   if(/^(?:その周辺|その近く)(?:の)?(?:記事|百科事典記事)(?:は|を探して)?$/.test(text)){
    const point=active?context.nearbyPoint:context.places?.length===1?context.places[0]:null;
-   return point?[{kind:'nearby',point,radius:1000,page:0}]:nearbyError('基準にする地点を指定してください。例：「周辺記事: 京都駅」。');
+   return point?[{kind:'nearby',...(Number.isFinite(point.latitude)?{point}:{place:{name:point.name,query:point.query||point.name}}),radius:1000,page:0}]:nearbyError('基準にする地点を指定してください。例：「周辺記事: 京都駅」。');
   }
   let radius=1000;const radiusSuffix=text.match(new RegExp(`(?:[、,\\s]+)半径${radiusPattern}$`,'i'));
   if(radiusSuffix){radius=nearbyRadius(radiusSuffix[1],radiusSuffix[2]);text=text.slice(0,radiusSuffix.index).trim();}
@@ -355,6 +356,82 @@ function createNearbyHandler({getJSON,el,p,link,source,state,follows}){
   source(body,'Wikipedia · 記事の著者 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',response);
   state.context={...state.context,intent:'nearby',pending:null,nearbyPoint:point,nearbyRadius:radius,nearbyPage:task.page};
   follows(body,[...(result.rows.length>(task.page+1)*5?['他の記事']:[]),...(radius<10000?['もっと広く']:[]),'京都なら？']);
+ };
+}
+
+const extraTimeCities=[
+ ['ロサンゼルス','Los Angeles','America/Los_Angeles'],['シカゴ','Chicago','America/Chicago'],['ホノルル','Honolulu','Pacific/Honolulu'],['バンクーバー','Vancouver','America/Vancouver'],['トロント','Toronto','America/Toronto'],['ベルリン','Berlin','Europe/Berlin'],['ローマ','Rome','Europe/Rome'],['マドリード','Madrid','Europe/Madrid'],['デリー','Delhi','Asia/Kolkata'],['カトマンズ','Kathmandu','Asia/Kathmandu'],['バンコク','Bangkok','Asia/Bangkok'],['ホーチミン','Ho Chi Minh','Asia/Ho_Chi_Minh'],['上海','Shanghai','Asia/Shanghai'],['北京','Beijing','Asia/Shanghai'],['香港','Hong Kong','Asia/Hong_Kong'],['ドバイ','Dubai','Asia/Dubai'],['パース','Perth','Australia/Perth'],['オークランド','Auckland','Pacific/Auckland'],['サンパウロ','Sao Paulo','America/Sao_Paulo'],['ヨハネスブルク','Johannesburg','Africa/Johannesburg'],['キリスィマスィ','Kiritimati','Pacific/Kiritimati'],['アピア','Apia','Pacific/Apia'],['UTC','UTC','UTC']
+].map(([name,query,timezone])=>({name,query,timezone}));
+function clockCities(text,base=[]){return [...base,...extraTimeCities].filter(city=>[city.name,city.query].some(alias=>/^[A-Za-z]/.test(alias)?new RegExp(`(?<![A-Za-z])${alias.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}(?![A-Za-z])`,'i').test(text):text.includes(alias)));}
+function checkedZone(zone){if(typeof zone!=='string'||zone.length>80||zone!=='UTC'&&!/^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+){1,2}$/.test(zone))throw Error('都市名かIANAタイムゾーン名を指定してください。例：東京、ニューヨーク、Asia/Tokyo。');try{new Intl.DateTimeFormat('en',{timeZone:zone}).format(0);}catch{throw Error('この端末で対応しているタイムゾーンを指定してください。');}return zone;}
+function resolveTimeCity(value,base=[]){if(value&&typeof value==='object'){const name=value.name||value.timezone;if(typeof name!=='string'||!name.trim()||name.length>80)throw Error('都市名を確認してください。');return{name,timezone:checkedZone(value.timezone)};}if(typeof value!=='string'||value.length>80)throw Error('都市名を確認してください。');const text=value.trim(),city=[...base,...extraTimeCities].find(city=>city.name===text||city.query?.toLowerCase()===text.toLowerCase());return city?{name:city.name,timezone:checkedZone(city.timezone)}:{name:text,timezone:checkedZone(text)};}
+const tcDate='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日|今日|明日|明後日)';
+const tcTime='(?:(?:午前|午後)?\\d{1,2}(?::\\d{2}(?::\\d{2})?|時(?:\\d{1,2}分)?))';
+const timeError=error=>[{kind:'timeConvert',error}];
+function parseTimeConversion(raw,context={}){
+ let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,''),occurrence=null;
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|辞書|学術)[：:\s]|とは|って何|について/.test(text))return [];
+ const active=context.intent==='timeConvert',pending=active&&context.pending==='timeConvertChoice'?context.timePending:null;
+ if(pending&&/^(早い方|遅い方)$/.test(text))return[{...pending,occurrence:text==='早い方'?'earlier':'later'}];
+ const suffix=text.match(/[、,\s]*(早い方|遅い方)$/);if(suffix){occurrence=suffix[1]==='早い方'?'earlier':'later';text=text.slice(0,suffix.index);}
+ const structured=text.match(new RegExp(`^時刻変換[：:]\\s*(.{1,80}?)\\s+(${tcDate})\\s+(${tcTime})\\s*(?:→|から)\\s*(.{1,80})$`));
+ const ending='(?:で|では)(?:何時|何時ですか|何時になる|何時になりますか)';
+ const natural=text.match(new RegExp(`^(.{1,80}?)(?:の|で)(${tcDate})(?:の|\\s)*(${tcTime})は(.{1,80}?)${ending}$`));
+ const clockOnly=text.match(new RegExp(`^(.{1,80}?)の(${tcTime})は(.{1,80}?)${ending}$`));
+ const match=structured||natural||clockOnly&&[clockOnly[0],clockOnly[1],'今日',clockOnly[2],clockOnly[3]];
+ if(match)return[{kind:'timeConvert',from:match[1].trim(),date:match[2],time:match[3],to:match[4].trim(),occurrence}];
+ if(active){
+  const basis=pending||context.timeRequest;
+  if(basis){
+   const clock=text.match(new RegExp(`^(${tcTime})(?:なら|では|は)$`));if(clock)return[{...basis,instant:undefined,time:clock[1],occurrence}];
+   const date=text.match(new RegExp(`^(${tcDate})(?:なら|では|は)$`));if(date)return[{...basis,instant:undefined,date:date[1],occurrence}];
+   const target=text.match(/^(.{1,80}?)(?:なら|では)$/);if(target)return[{...basis,instant:undefined,to:target[1],occurrence}];
+  }
+  if(/^(?:逆にすると|逆方向)$/.test(text)&&context.timeInstant&&context.timeRequest)return[{kind:'timeConvert',from:context.timeRequest.to,to:context.timeRequest.from,instant:context.timeInstant,occurrence:null}];
+ }
+ if(/^時刻変換[：:]/.test(text))return timeError('例：「時刻変換: 東京 2026-11-01 10:00 → ニューヨーク」の形で指定してください。');
+ if(/何時|時差/.test(text)&&!/日の出|日の入り|日没|天気|祝日/.test(text)&&(/\d{4}(?:[-/]\d|年\d)|明日|明後日/.test(text)||new RegExp(tcTime).test(text)))return timeError('日時を含む時差の質問は、変換元と変換先を指定してください。例：「時刻変換: 東京 2026-11-01 10:00 → ニューヨーク」。');
+ return [];
+}
+const tcPad=n=>String(n).padStart(2,'0');
+const tcISODate=parts=>`${String(parts.year).padStart(4,'0')}-${tcPad(parts.month)}-${tcPad(parts.day)}`;
+const tcClock=parts=>`${tcPad(parts.hour)}:${tcPad(parts.minute)}${parts.second?':'+tcPad(parts.second):''}`;
+const tcFormatters=new Map();
+function timeParts(stamp,zone){let formatter=tcFormatters.get(zone);if(!formatter){checkedZone(zone);formatter=new Intl.DateTimeFormat('en-GB-u-ca-gregory-nu-latn',{timeZone:zone,era:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});if(tcFormatters.size>=64)tcFormatters.delete(tcFormatters.keys().next().value);tcFormatters.set(zone,formatter);}const p=Object.fromEntries(formatter.formatToParts(new Date(stamp)).map(p=>[p.type,p.value]));return{year:p.era==='BC'?1-Number(p.year):Number(p.year),month:Number(p.month),day:Number(p.day),hour:Number(p.hour),minute:Number(p.minute),second:Number(p.second)};}
+function timeUTC(parts){const date=new Date(0);date.setUTCFullYear(parts.year,parts.month-1,parts.day);date.setUTCHours(parts.hour||0,parts.minute||0,parts.second||0,0);return date.getTime();}
+function zoneOffset(stamp,zone){return timeUTC(timeParts(stamp,zone))-stamp;}
+function offsetLabel(ms){const seconds=Math.abs(ms)/1000,hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),rest=seconds%60;return`UTC${ms<0?'-':'+'}${tcPad(hours)}:${tcPad(minutes)}${rest?':'+tcPad(rest):''}`;}
+function localTimeCandidates(dateText,timeText,zone){
+ checkedZone(zone);const date=parseCivilDate(dateText),match=String(timeText).match(/^(午前|午後)?(\d{1,2})(?::(\d{2})(?::(\d{2}))?|時(?:(\d{1,2})分)?)$/);
+ if(!match)throw Error('時刻は24時間表記のHH:MM、または午前・午後を付けた時刻で指定してください。');
+ let hour=Number(match[2]);const minute=Number(match[3]||match[5]||0),second=Number(match[4]||0);if(minute>59||second>59||hour>23||match[1]&&(hour<1||hour>12))throw Error('時刻は00:00〜23:59:59、午前・午後は1〜12時で指定してください。');if(match[1])hour=hour%12+(match[1]==='午後'?12:0);
+ const wanted={year:date.getUTCFullYear(),month:date.getUTCMonth()+1,day:date.getUTCDate(),hour,minute,second},naive=timeUTC(wanted),offsets=new Set();
+ // Sample both sides of transitions, then accept only exact local-clock round trips.
+ for(let hours=-48;hours<=48;hours++)offsets.add(zoneOffset(naive+hours*3600000,zone));
+ return [...offsets].map(offset=>naive-offset).filter(stamp=>{const p=timeParts(stamp,zone);return Object.keys(wanted).every(key=>wanted[key]===p[key]);}).sort((a,b)=>a-b);
+}
+function convertTime(task,base=[],now=Date.now()){
+ if(task.error)throw Error(task.error);const from=resolveTimeCity(task.from,base),to=resolveTimeCity(task.to,base);let stamp,request;
+ if(task.instant!==undefined){if(typeof task.instant!=='string'||! /^(?:\d{4}|\+\d{6})-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(task.instant)||!Number.isFinite(Date.parse(task.instant))||new Date(task.instant).toISOString()!==task.instant)throw Error('逆方向へ変換する元の日時を確認できませんでした。');stamp=Date.parse(task.instant);}
+ else {
+  let date=task.date;if(['今日','明日','明後日'].includes(date)){const current=timeParts(now,from.timezone),shift={今日:0,明日:1,明後日:2}[date],civil=parseCivilDate(tcISODate(current));civil.setUTCDate(civil.getUTCDate()+shift);date=civil.toISOString().slice(0,10);}
+  const candidates=localTimeCandidates(date,task.time,from.timezone);request={kind:'timeConvert',from,to,date,time:task.time,occurrence:null};
+  if(!candidates.length)throw Error('その現地時刻は、夏時間などの時差変更により存在しません。別の時刻を指定してください。');
+  if(candidates.length>1&&!['earlier','later'].includes(task.occurrence))throw Object.assign(Error('その現地時刻は時差変更で複数回あります。「早い方」か「遅い方」を選んでください。'),{code:'ambiguous',request,candidates});
+  stamp=task.occurrence==='later'?candidates.at(-1):candidates[0];
+ }
+ const source=timeParts(stamp,from.timezone),target=timeParts(stamp,to.timezone);if([source,target].some(p=>p.year<1||p.year>9999))throw Error('変換結果の日付が西暦1〜9999年の範囲を超えています。');
+ return{instant:new Date(stamp).toISOString(),dayShift:(parseCivilDate(tcISODate(target))-parseCivilDate(tcISODate(source)))/86400000,from:{...from,date:tcISODate(source),time:tcClock(source),offset:offsetLabel(zoneOffset(stamp,from.timezone))},to:{...to,date:tcISODate(target),time:tcClock(target),offset:offsetLabel(zoneOffset(stamp,to.timezone))},request:{kind:'timeConvert',from,to,date:tcISODate(source),time:tcClock(source),occurrence:null}};
+}
+function createTimeConversionHandler({el,p,state,follows,cities,now=()=>Date.now()}){
+ return(task,body)=>{
+  state.context={...state.context,pending:null,timePending:null,lastDate:null};let result;
+  try{result=convertTime(task,cities,now());}catch(e){if(e.code!=='ambiguous')throw e;p(body,e.message);for(const [i,stamp]of e.candidates.entries())p(body,`${i===0?'早い方':'遅い方'}：${new Date(stamp).toISOString().replace('T',' ').replace('.000Z',' UTC')}（${offsetLabel(zoneOffset(stamp,e.request.from.timezone))}）`,'sub');follows(body,['早い方','遅い方']);state.context={...state.context,intent:'timeConvert',pending:'timeConvertChoice',timePending:e.request};return;}
+  body.append(el('h3','同じ瞬間の現地日時'));const grid=el('div',undefined,'result-grid');
+  for(const [label,city]of [['変換元',result.from],['変換先',result.to]]){const card=el('div',undefined,'result-card');card.append(el('div',`${label}：${city.name}`,'city'),el('div',city.date,'sub'),el('div',city.time,'big'),el('div',`${city.timezone} · ${city.offset}`,'details'));grid.append(card);}body.append(grid);
+  if(result.dayShift)p(body,`変換先の日付は、変換元より${Math.abs(result.dayShift)}日${result.dayShift<0?'前':'後'}です。`);
+  p(body,`UTC：${result.instant.replace('T',' ').replace('.000Z','')}。端末のタイムゾーンデータで計算しました。時差・夏時間は指定日時の値です。`,'sub');
+  state.context={...state.context,intent:'timeConvert',pending:null,timePending:null,timeRequest:result.request,timeInstant:result.instant,lastDate:result.to.timezone==='Asia/Tokyo'?result.to.date:null};follows(body,['14:30なら？','ロンドンなら？','逆にすると？']);
  };
 }
 
@@ -775,7 +852,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -789,6 +866,7 @@ const FEATURE_CATALOG=[
  {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
  {id:'ukHoliday',category:'life',title:'英国の祝日を地域別に確認',description:'英国政府のバンクホリデー。3地域の違いと振替日を表示。',query:'2027年のイギリスの祝日',tags:'海外 英国 イギリス イングランド ウェールズ スコットランド 北アイルランド 休み 連休 旅行 祝日 bank holiday'},
  {id:'time',category:'life',title:'世界時計',description:'登録済み都市のいまの時刻を比較。',query:'ロンドンと東京は今何時？',tags:'じこく じさ 時差 旅行',local:true},
+ {id:'timeConvert',category:'life',title:'都市間で日時を変換',description:'日付のずれと夏時間を反映。重複する現地時刻は確認します。',query:'時刻変換: 東京 2026-11-01 10:00 → ニューヨーク',tags:'時差 会議 予定 日時 時刻 夏時間 DST 海外 旅行 タイムゾーン',local:true},
  {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
  {id:'quakes',category:'life',title:'重要地震の公開記録',description:'USGSが重要と分類した過去7日の地震。',query:'日本周辺の最近の地震',tags:'じしん 防災 揺れ USGS'},
  {id:'knowledge',category:'research',title:'百科事典',description:'Wikipediaの本文抜粋と元記事を表示。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア',popular:true},
@@ -988,6 +1066,7 @@ names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
 names.ukHoliday='海外の祝日';
 names.nearby='周辺の記事';
+names.timeConvert='日時の時差変換';
 const registry=[
  ['端末内LLM','起動時に全モデルを準備して会話・文章生成','https://huggingface.co/Qwen','公開モデルはApache 2.0。初回約2.7GB＋実行ファイル。対応端末で順番に準備し、1モデルずつ実行します。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
@@ -1044,9 +1123,9 @@ async function knowledge(task,body){
 }
 async function time(task,body){
  if(!task.places.length){p(body,'都市名と「何時？」を入力してください。例：パリは今何時？');return;}
- body.append(el('h3','世界のいま'));const grid=el('div',undefined,'result-grid');body.append(grid);
- for(const city of task.places.slice(0,3)){if(!city.timezone||city.timezone==='UTC'){p(body,`「${city.name}」の現地時間帯は未登録です。東京・ロンドン・パリなどの登録済み都市を指定してください。`);continue;}const place=await resolveCity(city);const timezone=place.timezone,now=new Date(),card=el('div',undefined,'result-card');card.append(el('div',place.name,'city'),el('div',new Intl.DateTimeFormat('ja-JP',{timeZone:timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(now),'big'),el('div',`${localDate(timezone)} · ${timezone}`,'sub'));grid.append(card);}
- p(body,`表示時点の時刻です（端末の時計を使用）。端末時刻が正しいことを前提とします。`);state.context={...state.context,intent:'time',places:task.places};
+ body.append(el('h3','世界のいま'));const grid=el('div',undefined,'result-grid'),valid=[];body.append(grid);
+ for(const city of task.places.slice(0,3)){let place;try{place=resolveTimeCity(city.timezone?city:city.query||city.name,cities);}catch(e){p(body,`「${city.name}」：${e.message}`,'error');continue;}const timezone=place.timezone,now=new Date(),card=el('div',undefined,'result-card');card.append(el('div',place.name,'city'),el('div',new Intl.DateTimeFormat('ja-JP',{timeZone:timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(now),'big'),el('div',`${localDate(timezone)} · ${timezone}`,'sub'));grid.append(card);valid.push({...city,...place});}
+ p(body,`表示時点の時刻です（端末の時計を使用）。端末時刻が正しいことを前提とします。`);if(valid.length)state.context={...state.context,intent:'time',pending:null,places:valid};
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
@@ -1069,7 +1148,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
