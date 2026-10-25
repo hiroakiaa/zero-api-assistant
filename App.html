@@ -616,6 +616,48 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
  };
 }
 
+const COUNTRY_DIRECTORY_URL='https://api.worldbank.org/v2/country?format=json&per_page=400';
+const countryKey=value=>String(value).normalize('NFKC').trim().replaceAll('’',"'").replace(/\s+/g,' ').toLowerCase();
+function validCountryQuery(value){return typeof value==='string'&&value.trim().length>0&&value.length<=100&&/^[\p{L}\p{M}\d .,'’()&・\-]+$/u.test(value);}
+function splitStatCountries(text){
+ const values=[],pairs={'「':'」','『':'』','"':'"','“':'”'};let buffer='',close=null,quoted=false;
+ const push=()=>{const value=buffer.trim();if(value)values.push({value,quoted});buffer='';quoted=false;};
+ for(let i=0;i<text.length;i++){
+  const ch=text[i];if(close){if(ch===close)close=null;else buffer+=ch;continue;}
+  if(pairs[ch]){close=pairs[ch];quoted=true;continue;}
+  const and=text.slice(i).match(/^\s+and\s+/i);if(and){push();i+=and[0].length-1;continue;}
+  if(/[と、,\/]/.test(ch)){push();continue;}buffer+=ch;
+ }
+ if(close)throw Error('国名を囲む引用符を閉じてください。');push();
+ return values.flatMap(({value,quoted})=>!quoted&&/^[A-Z]{2,3}(?:\s+[A-Z]{2,3})+$/.test(value)?value.split(/\s+/):[value]);
+}
+function buildCountryDirectory(data,displayNames){
+ if(!Array.isArray(data)||data.length!==2||!data[0]||!Array.isArray(data[1]))throw Error('国一覧の応答形式を確認できませんでした。');
+ const meta=data[0],rows=data[1];if(meta.page!==1||meta.pages!==1||!Number.isInteger(meta.total)||meta.total!==rows.length||rows.length<1||rows.length>400)throw Error('国一覧の一部しか取得できなかったため、照合を停止しました。');
+ if(displayNames===undefined)try{displayNames=typeof Intl.DisplayNames==='function'?new Intl.DisplayNames(['ja'],{type:'region'}):null;}catch{displayNames=null;}
+ const byKey=new Map(),byCode=new Map();
+ function add(key,record){const normalized=countryKey(key);if(!byKey.has(normalized))byKey.set(normalized,new Map());byKey.get(normalized).set(record.code,record);}
+ for(const row of rows){
+  if(!row||typeof row.region?.id!=='string')throw Error('国一覧の地域区分を確認できませんでした。');
+  if(row.region.id==='NA')continue;
+  if(!/^[A-Z]{3}$/.test(row.id)||!/^[A-Z]{2}$/.test(row.iso2Code)||!/^[A-Z]{3}$/.test(row.region.id)||typeof row.name!=='string'||!row.name.trim()||row.name.length>160||/[\u0000-\u001f]/.test(row.name)||byCode.has(row.id))throw Error('国一覧のコードや名称を確認できませんでした。');
+  let label=row.name;try{const localized=displayNames?.of(row.iso2Code);if(localized&&localized!==row.iso2Code)label=localized;}catch{}
+  const record={code:row.id,name:label};byCode.set(record.code,record);for(const key of [row.id,row.iso2Code,row.name,label])add(key,record);
+ }
+ if(!byCode.size)throw Error('照合できる国・地域がありませんでした。');
+ return {size:byCode.size,resolve(query){const matches=byKey.get(countryKey(query));if(!matches?.size)throw Error(`「${query}」を国・地域一覧で確認できませんでした。国コード（例：CHE）か一覧の正式名で指定してください。`);if(matches.size!==1)throw Error(`「${query}」には複数の候補があります。国コードで指定してください。`);return {...matches.values().next().value};}};
+}
+function createCountryResolver(getJSON,knownCountries){
+ let listing=null,meta=null;
+ return {get meta(){return meta;},async resolve(country){
+  if(country.code&&knownCountries.has(country.code))return {...country};
+  const query=country.code||country.query||country.name;
+  if(!validCountryQuery(query))throw Error('国名または2・3文字の国コードを確認してください。');
+  if(!listing)listing=getJSON(COUNTRY_DIRECTORY_URL,86400000).then(result=>{const index=buildCountryDirectory(result.data);meta=result;return index;});
+  const index=await listing;return index.resolve(query);
+ }};
+}
+
 const countryIndicators={population:{id:'SP.POP.TOTL',label:'人口',unit:'人',note:'年次の人口統計です。リアルタイムの人口ではありません。'},gdp:{id:'NY.GDP.MKTP.CD',label:'GDP（名目米ドル）',unit:'米ドル',note:'当年価格・米ドル換算のGDPです。実質GDP・購買力平価・成長率ではありません。'},gdpPerCapita:{id:'NY.GDP.PCAP.CD',label:'1人当たりGDP（名目米ドル）',unit:'米ドル/人',note:'当年価格・米ドル換算の1人当たりGDPです。個人の所得や給与ではありません。'},life:{id:'SP.DYN.LE00.IN',label:'平均寿命（出生時）',unit:'年',note:'出生時の平均余命の年次統計です。個人の余命を予測する値ではありません。'}};
 const statCountries=new Map(countryAliases.flatMap(([name,code])=>[[name,{name,code}],[code,{name:countryAliases.find(c=>c[1]===code)[0],code}]]));
 const statError=error=>[{kind:'countryStat',error}];
@@ -630,17 +672,19 @@ function parseCountryStats(raw,context={}){
  if(!found.length&&!active&&!explicit)return [];
  if(found.length===1&&found[0]==='population'&&/首都|国情報/.test(text))return [];
  if(found.length>1)return statError('指標は1件ずつ指定してください。例：「日本のGDP」。別の指標は改行して質問できます。');
+ if(found.length&&/実質|PPP|購買力|成長率|密度|所得|給与|女性|男性/i.test(text))return statError('実質値・PPP・成長率・人口密度・男女別には対応していません。指標を変更せず、別の条件として指定してください。');
  const metric=found[0]||(active?context.countryMetric:null);
  if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命のいずれかを指定してください。');
- if(!found.length&&!explicit){const probe=statCountryText(text.replace(/\d{4}年|最新(?:の)?/g,''));if(probe&&probe.split(/(?:と|、|,|\/|\s)+/).filter(Boolean).some(token=>!statCountries.has(token)&&!statCountries.has(token.toUpperCase())))return [];}
+ if(!found.length&&!explicit){const probe=statCountryText(text.replace(/\d{4}年|最新(?:の)?/g,''));if(probe){let tokens;try{tokens=splitStatCountries(probe);}catch{return [];}const unknown=tokens.some(token=>!statCountries.has(token)&&!statCountries.has(token.toUpperCase()));if(unknown&&(!(context.pending==='countryStat'||/(?:なら|では|は)$/.test(text)||/^[A-Za-z]{2,3}$/.test(probe))||/天気|時刻|明日|今日|昨日|来年|去年|来週|先週/.test(probe)||tokens.some(token=>!validCountryQuery(token))))return [];}}
  const years=[...text.matchAll(/(\d{4})年/g)];
  if(years.length>1)return statError('統計の年は1年ずつ指定してください。');
  const latest=/最新/.test(text);text=text.replace(/最新(?:の)?/g,'');
  let year=years.length?Number(years[0][1]):null;if(years.length)text=text.replace(years[0][0],'');
  const follow=/なら|では/.test(text);
  text=statCountryText(text);
- const tokens=text?text.split(/(?:と|、|,|\/|\s)+/).filter(Boolean):[];
- const countries=[];for(const token of tokens){const country=statCountries.get(token)||statCountries.get(token.toUpperCase());if(!country){if(!found.length&&!explicit)return [];return statError('対応する国名または国コードを指定してください。例：「日本のGDP」「JPNの平均寿命」。実質値・成長率・期間集計には対応していません。');}if(!countries.some(c=>c.code===country.code))countries.push({...country});}
+ let tokens;try{tokens=text?splitStatCountries(text):[];}catch(error){return statError(error.message);}
+ tokens=tokens.flatMap(token=>{const parts=token.split(/\s+/);return parts.length>1&&parts.every(part=>statCountries.has(part)||statCountries.has(part.toUpperCase()))?parts:[token];});
+ const countries=[];for(const token of tokens){if(!validCountryQuery(token)||/中国(?:地方|山地|自動車道)|日本海|都道府県/.test(token))return statError('国・地域名または2・3文字の国コードで指定してください。');const country=statCountries.get(token)||statCountries.get(token.toUpperCase())||{name:token,query:token,code:null};if(!countries.some(c=>(c.code||c.query)===(country.code||country.query)))countries.push({...country});}
  if(!found.length&&!countries.length&&!years.length&&!latest)return [];
  if(countries.length>3)return statError('比較する国は3か国までで指定してください。');
  if(!countries.length&&active)countries.push(...(context.statCountries||[]));
@@ -651,7 +695,7 @@ function parseCountryStats(raw,context={}){
 function validateStatTask(task,now=new Date()){
  if(task.error)throw Error(task.error);
  if(!Object.hasOwn(countryIndicators,task.metric))throw Error('対応する統計指標を指定してください。');
- if(!Array.isArray(task.countries)||task.countries.length>3||task.countries.some(c=>!c||!statCountries.has(c.code)||typeof c.name!=='string'||c.name.length>40))throw Error('対応する国を3か国まで指定してください。');
+ if(!Array.isArray(task.countries)||task.countries.length>3||task.countries.some(c=>!c||typeof c.name!=='string'||!c.name.trim()||c.name.length>160||/[\u0000-\u001f]/.test(c.name)||!(typeof c.code==='string'&&/^[A-Z]{3}$/.test(c.code)||c.code===null&&validCountryQuery(c.query))))throw Error('対応する国・地域を3件まで指定してください。');
  if(task.year!==null&&(!Number.isInteger(task.year)||task.year<1960||task.year>Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4))))throw Error('統計の年は1960年以降、今年（日本時間）までで指定してください。');
  return countryIndicators[task.metric];
 }
@@ -666,23 +710,27 @@ function countryStatRow(data,code,indicator,year,now=new Date()){
  return row;
 }
 function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date()}){
+ const directory=createCountryResolver(getJSON,statCountries);
  return async function countryStat(task,body){
   const indicator=validateStatTask(task,now());
   if(!task.countries.length){state.context={...state.context,intent:'countryStat',lastDate:null,pending:'countryStat',countryMetric:task.metric,statYear:task.year,statCountries:[]};p(body,`${indicator.label}を調べる国を指定してください。`);follows(body,['日本なら？','アメリカなら？','フランスなら？']);return;}
-  const results=await Promise.allSettled(task.countries.map(async country=>{const url=`https://api.worldbank.org/v2/country/${country.code}/indicator/${indicator.id}?format=json&source=2&${task.year===null?'mrnev=1':'date='+task.year}&per_page=1`,result=await getJSON(url,86400000);return {country,url,result,row:countryStatRow(result.data,country.code,indicator.id,task.year,now())};}));
+  const requests=new Map();
+  const results=await Promise.allSettled(task.countries.map(async requested=>{const country=await directory.resolve(requested),url=`https://api.worldbank.org/v2/country/${country.code}/indicator/${indicator.id}?format=json&source=2&${task.year===null?'mrnev=1':'date='+task.year}&per_page=1`;if(!requests.has(url))requests.set(url,getJSON(url,86400000));const result=await requests.get(url);return {country,url,result,row:countryStatRow(result.data,country.code,indicator.id,task.year,now())};}));
   body.append(el('h3',indicator.label+(task.year===null?' · 最新の収録値':` · ${task.year}年`)));const grid=el('div',undefined,'result-grid');body.append(grid);const ok=[];
   for(let i=0;i<results.length;i++){
    const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}
-   const v=result.value;ok.push(v.country);const card=el('div',undefined,'result-card');card.append(el('div',v.country.name,'city'));
+   const v=result.value;if(ok.some(c=>c.code===v.country.code))continue;ok.push(v.country);const card=el('div',undefined,'result-card');card.append(el('div',v.country.name,'city'));
    if(v.row){const formatted=new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2,...(task.metric==='gdp'?{notation:'compact'}:{})}).format(v.row.value);card.append(el('div',formatted,'big'),el('div',`${indicator.unit} · ${v.row.date}年`,'details'));if(task.metric==='gdp')card.append(el('div',`元データ：${new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(v.row.value)} 米ドル`,'sub'));}
    else card.append(el('div','未収録','big'),el('div',task.year===null?'この条件で数値を取得できませんでした。':`${task.year}年の数値は未収録です。`,'details'));
    grid.append(card);source(body,`World Bank · ${indicator.id}`,v.url,v.result);
   }
   if(!ok.length)return;
+  if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);
   p(body,indicator.note);if(task.countries.length>1&&task.year===null)p(body,'最新の収録年は国ごとに異なる場合があります。同じ年で比べるには「2020年なら？」のように指定してください。');
   p(body,'出典：World Bank, World Development Indicators。表示桁を丸め、指標名を日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
-  if(ok.length<task.countries.length)p(body,'一部の国を取得できませんでした。次の年・指標の質問でも、指定した比較対象の国は維持します。');
-  state.context={...state.context,intent:'countryStat',lastDate:null,pending:null,countryMetric:task.metric,statYear:task.year,statCountries:task.countries.map(country=>({...country}))};follows(body,['2020年なら？','最新では？',task.metric==='life'?'人口は？':'平均寿命は？']);
+  if(results.some(result=>result.status==='rejected'))p(body,'一部の国を取得できませんでした。次の年・指標の質問でも、指定した比較対象の国は維持します。');
+  const nextCountries=results.map((result,i)=>result.status==='fulfilled'?result.value.country:task.countries[i]).filter((country,i,all)=>all.findIndex(other=>(other.code||other.query||other.name)===(country.code||country.query||country.name))===i);
+  state.context={...state.context,intent:'countryStat',lastDate:null,pending:null,countryMetric:task.metric,statYear:task.year,statCountries:nextCountries.map(country=>({...country}))};follows(body,['2020年なら？','最新では？',task.metric==='life'?'人口は？':'平均寿命は？']);
  };
 }
 
@@ -1030,7 +1078,7 @@ const FEATURE_CATALOG=[
  {id:'papers',category:'research',title:'生命科学の文献',description:'生命科学・医学分野の論文の書誌情報。',query:'論文: 睡眠',tags:'ろんぶん 研究 論文 文献 EuropePMC'},
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
- {id:'country',category:'research',title:'国の統計・首都',description:'人口・名目GDP・1人当たりGDP・平均寿命。統計年を指定し3か国まで比較。',query:'日本とアメリカのGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済'},
+ {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
  {id:'news',category:'research',title:'技術ニュース',description:'Hacker Newsの注目記事の原文タイトル。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN'},
  {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
  {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
