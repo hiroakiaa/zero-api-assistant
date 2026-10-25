@@ -21,6 +21,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
  const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
@@ -327,6 +328,60 @@ function createBusinessHandler({getJSON,el,p,source,state,localDate}){
  };
 }
 
+const CROSSREF_FIELDS='DOI,title,author,published,container-title,type';
+function normalizeDOI(raw){
+ let value=String(raw).trim().replace(/^doi\s*[:：]\s*/i,'').replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,'');
+ if(!/^10\.\d{4,9}\/[A-Za-z0-9._;()/:+\-]{1,180}$/.test(value)||/(?:^|\/)\.{1,2}(?:\/|$)/.test(value))throw Error('DOIの形式を確認してください。例：10.1038/nphys1170。一部の記号を含む識別子は未対応です。');
+ return value;
+}
+function parseCrossrefTasks(raw,context={}){
+ const text=raw.trim(),query=text.match(/^(?:学術検索|学術|Crossref)[：:]\s*([\s\S]*)$/i);
+ if(query)return[{kind:'scholar',query:query[1].trim(),page:0}];
+ if(/^(?:学術検索の続き|学術の続き|次の学術資料)[。？?]?$/.test(text)||/^(?:続き|ほかには|他には)[。？?]?$/.test(text)&&context.intent==='scholar')return[{kind:'scholar',query:context.scholarQuery||'',page:Number.isInteger(context.scholarPage)?context.scholarPage+1:0}];
+ if(/^doi\s*[:：]/i.test(text)||/^https?:\/\/(?:dx\.)?doi\.org\//i.test(text))return[{kind:'doi',doi:text}];
+ return[];
+}
+function crossrefURL(task){
+ const params=new URLSearchParams();
+ if(task.kind==='doi'){params.set('filter','doi:'+normalizeDOI(task.doi));params.set('rows','1');}
+ else{if(typeof task.query!=='string'||!task.query.trim()||task.query.length>100||/[\u0000-\u001f]/.test(task.query)||!Number.isInteger(task.page)||task.page<0||task.page>4)throw Error('学術検索は100文字以内、先頭から5ページまで指定できます。');params.set('query.bibliographic',task.query.trim());params.set('rows','3');params.set('offset',String(task.page*3));}
+ params.set('select',CROSSREF_FIELDS);return'https://api.crossref.org/works?'+params;
+}
+const metadataText=value=>typeof value==='string'?value.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim():'';
+function crossrefRecord(item){
+ if(!item||typeof item!=='object')throw Error('書誌情報の形式が不正です。');const doi=normalizeDOI(item.DOI);
+ const title=metadataText(Array.isArray(item.title)?item.title[0]:null)||'タイトル未登録',container=metadataText(Array.isArray(item['container-title'])?item['container-title'][0]:null);
+ const authors=(Array.isArray(item.author)?item.author:[]).map(a=>metadataText(a?.name||[a?.given,a?.family].filter(v=>typeof v==='string').join(' '))).filter(Boolean);
+ const parts=item.published?.['date-parts']?.[0];let published='刊行日未登録';
+ if(Array.isArray(parts)&&parts.length>=1&&parts.length<=3&&parts.every(Number.isInteger)&&parts[0]>=1&&parts[0]<=9999){const [year,month,day]=parts;if((month===undefined||month>=1&&month<=12)&&(day===undefined||day>=1&&day<=new Date(Date.UTC(year,month,0)).getUTCDate()))published=parts.map((v,i)=>i?String(v).padStart(2,'0'):String(v).padStart(4,'0')).join('-');}
+ const types={'journal-article':'学術誌論文','proceedings-article':'会議論文','book-chapter':'書籍章',book:'書籍',monograph:'単行書','posted-content':'投稿資料・プレプリント等',dataset:'データセット',report:'報告書',dissertation:'学位論文','peer-review':'査読記録',other:'その他の資料'};
+ return{doi,title,container,authors:authors.slice(0,4).join(' / ')+(authors.length>4?' ほか':''),published,type:Object.hasOwn(types,item.type)?types[item.type]:metadataText(item.type)||'種別未登録',url:'https://doi.org/'+doi};
+}
+function crossrefResults(data,task){
+ if(data?.status!=='ok'||!Array.isArray(data.message?.items))throw Error('Crossrefの検索応答を確認できませんでした。');
+ const records=[];let skipped=0;for(const item of data.message.items.slice(0,task.kind==='doi'?1:3)){try{const record=crossrefRecord(item);if(task.kind==='doi'&&record.doi.toLowerCase()!==normalizeDOI(task.doi).toLowerCase())throw Error('DOI mismatch');records.push(record);}catch{skipped++;}}
+ const offset=task.kind==='doi'?0:task.page*3,total=Number(data.message['total-results']);
+ if(!Number.isInteger(data.message.query?.['start-index'])||data.message.query['start-index']!==offset)throw Error('検索ページの応答が要求と一致しません。');
+ return{records,skipped,hasMore:task.kind!=='doi'&&Number.isFinite(total)&&total>offset+data.message.items.length&&data.message.items.length===3};
+}
+let crossrefFinished=0;
+function createCrossrefHandlers({getJSON,el,p,link,source,state,follows}){
+ const run=async(task,body)=>{
+  if(task.kind==='scholar'&&task.page>4){p(body,'学術検索は先頭から5ページまでです。検索語を絞ってください。');return;}
+  const url=crossrefURL(task),delay=Math.min(1100,1100-(Date.now()-crossrefFinished));if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));
+  let response;try{response=await getJSON(url,3600000);}finally{crossrefFinished=Date.now();}
+  const result=crossrefResults(response.data,task);body.append(el('h3',task.kind==='doi'?'DOIから書誌情報を確認':'学術資料を検索'));
+  if(!result.records.length)p(body,result.skipped?'返された資料のDOIや書誌形式を確認できませんでした。':'Crossrefの登録情報に該当する資料がありません。他の登録機関のDOIは見つからない場合があります。');
+  for(const item of result.records){const card=el('div',undefined,'wiki-result');card.append(link(item.title,item.url));p(card,item.type+' ／ '+item.published+(item.container?' ／ '+item.container:''),'details');if(item.authors)p(card,item.authors);p(card,'DOI: '+item.doi,'sub');body.append(card);}
+  if(result.skipped)p(body,`${result.skipped}件はDOIや書誌形式を確認できないため表示していません。`);
+  p(body,'出版社等が登録した書誌情報です。抄録・本文は表示しません。本文の公開条件はDOIリンク先で確認できます。','sub');
+  source(body,'Crossref · 公開書誌API','https://www.crossref.org/documentation/retrieve-metadata/rest-api/',response);
+  state.context={...state.context,intent:task.kind,...(task.kind==='scholar'?{scholarQuery:task.query,scholarPage:task.page}:{})};
+  if(result.hasMore&&task.page<4)follows(body,['学術検索の続き']);
+ };
+ return{scholar:run,doi:run};
+}
+
 function isbn13(raw){
  const value=String(raw).normalize('NFKC').toUpperCase().replace(/[\s\u2010-\u2015-]/g,'');
  const error=()=>{throw Error('ISBNの桁数と末尾の検査数字を確認してください。ISBN-10または978/979で始まるISBN-13に対応します。');};
@@ -428,7 +483,7 @@ function requestSegments(raw,recognize,context={}){
   if(stack.length){buffer+=ch;if(ch==='\\'&&stack.at(-1)==='"'&&i+1<text.length){buffer+=text[++i];}else if(ch===stack.at(-1))stack.pop();else if(pairs[ch]&&ch!=='"')stack.push(pairs[ch]);i++;continue;}
   if(pairs[ch]){stack.push(pairs[ch]);buffer+=ch;i++;continue;}
   const connector=text.slice(i).match(/^(?:(?:それと|そして|加えて)(?:[、,\s]*)|あと[、,\s]+)/);
-  const queryText=/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる)[：:\s]/.test(buffer)&&!/[?、,」』”"]\s*$/.test(buffer);
+  const queryText=/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|学術検索|学術|Crossref)[：:\s]/i.test(buffer)&&!/[?、,」』”"]\s*$/.test(buffer);
   if(connector&&!queryText){push();strong=true;i+=connector[0].length;continue;}
   if(/[。;\n\r]/.test(ch)){push();i++;continue;}
   buffer+=ch;i++;
@@ -454,6 +509,8 @@ const FEATURE_CATALOG=[
  {id:'books',category:'research',title:'本を探す',description:'キーワードから書名・著者・初刊年を検索。',query:'本: space',tags:'書籍 読書 ほん 著者 図書館'},
  {id:'isbn',category:'research',title:'ISBNで本を紹介',description:'ISBNの検査数字を確認して基本書誌を紹介。',query:'ISBN: 9784780802047',tags:'本 書籍 読書 出版社 書誌 ISBN10 ISBN13'},
  {id:'papers',category:'research',title:'生命科学の文献',description:'生命科学・医学分野の論文の書誌情報。',query:'論文: 睡眠',tags:'ろんぶん 研究 論文 文献 EuropePMC'},
+ {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
+ {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
  {id:'country',category:'research',title:'国の首都・人口',description:'World Bankの国情報と公表年付き人口。',query:'フランスの人口',tags:'くに 首都 人口 統計 国情報'},
  {id:'news',category:'research',title:'技術ニュース',description:'Hacker Newsの注目記事の原文タイトル。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN'},
  {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
@@ -611,6 +668,7 @@ const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],
 const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.businessDays='営業日計算';
+names.scholar='学術資料';names.doi='DOIの書誌';
 const registry=[
  ['端末内LLM','起動時に全モデルを準備して会話・文章生成','https://huggingface.co/Qwen','公開モデルはApache 2.0。初回約2.7GB＋実行ファイル。対応端末で順番に準備し、1モデルずつ実行します。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
@@ -620,7 +678,8 @@ const registry=[
  ['ブラウザ内処理','計算・単位換算・日付計算・世界時計',null,'外部APIへの通信なし。日付計算の「今日」は日本時間です。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
  ...extraRegistry,
  ['openBD','ISBNから本を紹介','https://openbd.jp/','本の紹介目的で無償利用。書誌を改変せず表示し、更新を反映します。利用条件：https://openbd.jp/terms/'],
- ['日本の郵便番号API','郵便番号から住所候補を表示','https://github.com/ttskch/jp-postal-code-api','無料・商用可と明記された公開API。日本郵便の公開データを再配信。公開実装はMITライセンス。']
+ ['日本の郵便番号API','郵便番号から住所候補を表示','https://github.com/ttskch/jp-postal-code-api','無料・商用可と明記された公開API。日本郵便の公開データを再配信。公開実装はMITライセンス。'],
+ ['Crossref','分野をまたぐ学術資料検索・DOIの書誌確認','https://www.crossref.org/documentation/retrieve-metadata/rest-api/','登録不要の無償公開API。基本書誌だけを表示し、抄録・本文は表示しません。GASでは同時照会1件・完了後1.1秒以上の間隔とキャッシュを適用します。']
 ];
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function link(title,url){try{if(!/^https?:$/.test(new URL(url).protocol))return el('span',title);}catch{return el('span',title);}const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
@@ -706,7 +765,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
