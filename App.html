@@ -591,6 +591,13 @@ function deviceToken(){const key='zero.device.v1';let value;try{value=localStora
 function cacheDeadline(at,ttl,now=Date.now()){
  const fetched=Date.parse(at);return Number.isFinite(fetched)?Math.min(now+ttl,fetched+ttl):now;
 }
+function unpackCloudJSON(payload){
+ if(!payload||typeof payload!=='object')throw Error('GASの応答形式を確認できませんでした。');
+ if(!Object.hasOwn(payload,'dataJSON'))return payload;
+ if(typeof payload.dataJSON!=='string'||payload.dataJSON.length>150000)throw Error('年別データの受け渡し形式が不正です。');
+ let data;try{data=JSON.parse(payload.dataJSON);}catch{throw Error('年別データを読み取れませんでした。');}
+ const {dataJSON,...meta}=payload;return {...meta,data};
+}
 class CloudDB{
  constructor(){this.available=!!globalThis.google?.script?.run;this.token=this.available?deviceToken():null;}
  call(action,payload={}){if(!this.available)return Promise.reject(Error('GASに接続されていません。'));return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('GASの応答に時間がかかっています。保存済みか履歴で確認してください。')),45000);google.script.run.withSuccessHandler(result=>{clearTimeout(timer);result?.ok?resolve(result.data):reject(Object.assign(Error(result?.error||'GASの処理に失敗しました。'),Number.isFinite(result?.retryAt)?{retryAt:result.retryAt}:{}));}).withFailureHandler(()=>{clearTimeout(timer);reject(Error('GASと通信できません。ページを開き直してください。'));}).api({action,token:this.token,payload});});}
@@ -768,7 +775,7 @@ function countryStatRow(data,code,indicator,year,now=new Date()){
  const row=data[1][0],maxYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));
  if(row?.countryiso3code!==code||row?.indicator?.id!==indicator||!/^\d{4}$/.test(row.date)||Number(row.date)<1960||Number(row.date)>maxYear||year!==null&&row.date!==String(year))throw Error('指定した国・指標・統計年と異なる応答のため、表示を停止しました。');
  if(row.value===null)return null;
- if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value))throw Error('統計の数値を確認できませんでした。');
+ if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value))throw Error(`${row.date}年の統計の数値を確認できませんでした。`);
  return row;
 }
 function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date()}){
@@ -846,7 +853,7 @@ function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=(
   const valid=results.filter(r=>r.status==='fulfilled').map(r=>r.value),values=valid.flatMap(v=>v.rows.filter(r=>r.value!==null).map(r=>r.value)),maximum=Math.max(1,...values),format=value=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2}).format(value);
   body.append(el('h3',`${indicator.label}の推移 · ${task.from}〜${task.to}年`));if(values.length)p(body,`グラフの共通目盛：0〜${format(maximum)} ${indicator.unit}。未収録の年では線を切ります。`,'sub');
   const shown=new Set();for(let i=0;i<results.length;i++){const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}const value=result.value;if(shown.has(value.country.code))continue;shown.add(value.country.code);body.append(el('h3',value.country.name));if(value.rows.some(row=>row.value!==null)){body.append(plot(value.rows,maximum,`${value.country.name} ${indicator.label} ${task.from}〜${task.to}年`));p(body,`${task.from}年 — ${task.to}年`,'sub');}else p(body,'この期間の数値は未収録です。');const table=el('table',undefined,'trend-table'),head=el('thead'),heading=el('tr');heading.append(el('th','年'),el('th',indicator.unit+'（丸め表示）'));head.append(heading);table.append(head);const tbody=el('tbody');for(const row of value.rows){const tr=el('tr');tr.append(el('th',String(row.year)),el('td',row.value===null?'未収録':format(row.value)));tbody.append(tr);}table.append(tbody);body.append(table);source(body,`World Bank · ${indicator.id}`,value.url,value.result);}
-  if(!valid.length)return;if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'未収録を0や他年の値で補わず、将来の予測や変化の原因は生成していません。出典：World Bank, World Development Indicators。表示桁を丸め、指標名を日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
+  if(!valid.length)return;if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'年別の公表値です。未収録は表に明示し、表示桁を丸めています。出典：World Bank, World Development Indicators。指標名は日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
   const next=results.map((r,i)=>r.status==='fulfilled'?r.value.country:task.countries[i]).filter((country,index,all)=>all.findIndex(c=>(c.code||c.query||c.name)===(country.code||country.query||country.name))===index);state.context={...state.context,intent:'countryTrend',lastDate:null,pending:null,countryMetric:task.metric,statCountries:next,trendFrom:task.from,trendTo:task.to};follows(body,['過去5年なら？',task.metric==='life'?'人口は？':'平均寿命は？','スイスなら？']);
  };
 }
@@ -1405,7 +1412,7 @@ function stats(){ $('#stats').textContent=`API照会 ${state.calls}回${state.hi
 async function getJSON(url,ttl=900000){
  const existing=state.cache.get(url);if(existing&&existing.until>Date.now()){state.hits++;stats();return {...existing.payload,cache:true};}
  providerCooldowns.assertReady(url);
- if(cloud.available){state.calls++;stats();let payload;try{payload=await cloud.call('fetch',{url});}catch(e){if(Number.isFinite(e.retryAt))providerCooldowns.stop(url,e.retryAt);throw e;}if(payload.cache){state.hits++;stats();}if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:cacheDeadline(payload.at,ttl),payload});return payload;}
+ if(cloud.available){state.calls++;stats();let payload;try{payload=unpackCloudJSON(await cloud.call('fetch',{url}));}catch(e){if(Number.isFinite(e.retryAt))providerCooldowns.stop(url,e.retryAt);throw e;}if(payload.cache){state.hits++;stats();}if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:cacheDeadline(payload.at,ttl),payload});return payload;}
  state.calls++;stats();const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),12000);
  try{const r=await fetch(url,{signal:abort.signal,credentials:'omit',...(new URL(url).hostname==='ja.wikipedia.org'?{headers:{'Api-User-Agent':'ZERO-API-Assistant/3.0 (https://github.com/hiroakiaa/zero-api-assistant)'}}:{})});if([429,503].includes(r.status)){const provider=new URL(url).hostname==='freedictionaryapi.com'?'dictionary':'other',until=retryDeadline(provider,r.headers.get('Retry-After'),Date.now(),r.status);providerCooldowns.stop(url,until);throw Object.assign(Error(cooldownMessage(until)),{retryAt:until});}if(!r.ok)throw Error(`提供元がHTTP ${r.status}を返しました。時間を置いて試してください。`);const data=await r.json();if(data.error)throw Error('提供元からデータを取得できませんでした。');const payload={data,at:new Date().toISOString(),cache:false};if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:Date.now()+ttl,payload});return payload;}
  catch(e){if(e.name==='AbortError')throw Error('応答に時間がかかったため、通信を中止しました。もう一度試してください。');if(e instanceof TypeError)throw Error('APIに接続できませんでした。ネットワークや提供元の制限をご確認ください。');throw e;}finally{clearTimeout(timer);}
