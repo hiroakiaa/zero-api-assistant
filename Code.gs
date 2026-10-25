@@ -91,7 +91,7 @@ function validateAPI_(url){
  }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
   provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
  }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
- }else if(host==='earthquake.usgs.gov'&&path==='/earthquakes/feed/v1.0/summary/significant_week.geojson'){provider='quakes';allowed=[];
+ }else if(host==='earthquake.usgs.gov'&&/^\/earthquakes\/feed\/v1\.0\/summary\/(?:significant_(?:hour|day|week|month)|4\.5_day)\.geojson$/.test(path)){provider='quakes';allowed=[];
  }else if(host==='api.worldbank.org'&&path==='/v2/country'){provider='country';allowed=['format','per_page'];expected={format:'json',per_page:'400'};
  }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN))?$/.test(path)){
   provider='country';
@@ -110,7 +110,7 @@ function validateAPI_(url){
 }
 function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
- const rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
+ const rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='quakes'?'quakes-v43:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
  const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
  const crossrefLease=provider==='crossref'?reserveCrossref_():null;try{
  const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
@@ -121,7 +121,7 @@ function fetchAPI_(url){
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  const expires=responseHeaders.Expires||responseHeaders.expires;
- const result=Object.assign(rangeJSON?{dataJSON:text}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
+ const result=Object.assign(rangeJSON?{dataJSON:text}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=provider==='quakes'?300:['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(crossrefLease)releaseCrossref_(crossrefLease);}
 }
 function reserveCrossref_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('学術検索が混み合っています。');try{const props=PropertiesService.getScriptProperties();if(Number(props.getProperty('CROSSREF_BUSY_UNTIL')||0)>Date.now())throw Error('学術検索は別の照会中です。少し待って試してください。');const delay=1100-(Date.now()-Number(props.getProperty('CROSSREF_LAST_END')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));const lease=Utilities.getUuid();props.setProperties({CROSSREF_LEASE:lease,CROSSREF_BUSY_UNTIL:String(Date.now()+360000)});return lease;}finally{lock.releaseLock();}}
