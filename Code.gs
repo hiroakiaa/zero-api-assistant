@@ -20,7 +20,7 @@ function api(request){
    case 'getConversation':data=getConversation_(owner,payload.id);break;
   }
   return {ok:true,data:data};
- }catch(e){return {ok:false,error:safeError_(e)};}
+ }catch(e){return Object.assign({ok:false,error:safeError_(e)},Number.isFinite(e.retryAt)?{retryAt:e.retryAt}:{});}
 }
 function hash_(text){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(text),Utilities.Charset.UTF_8).map(b=>('0'+((b+256)%256).toString(16)).slice(-2)).join('');}
 function safeError_(e){const m=String(e.message||'処理できませんでした。');return m.length>180?'GASの処理に失敗しました。管理者にご確認ください。':m.replace(/https?:\/\/\S+/g,'[接続先]');}
@@ -89,10 +89,15 @@ function validateAPI_(url){
 function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
  const cache=CacheService.getScriptCache(),key='api:'+hash_(url),hit=cache.get(key);if(hit)return Object.assign(JSON.parse(hit),{cache:true});
+ const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
  const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
  if(provider==='books'){const serial=LockService.getScriptLock();if(!serial.tryLock(5000))throw Error('書籍検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),delay=1100-(Date.now()-Number(props.getProperty('LAST_BOOK_FETCH')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));props.setProperties({LAST_BOOK_FETCH:String(Date.now())});}finally{serial.releaseLock();}}
- const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:provider==='weather',headers:{'User-Agent':'ZERO-API-Assistant/3.0 github.com/hiroakiaa/zero-api-assistant'}}),status=response.getResponseCode();if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
+ const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:provider==='weather',headers:{'User-Agent':'ZERO-API-Assistant/3.0 github.com/hiroakiaa/zero-api-assistant'}}),status=response.getResponseCode(),responseHeaders=response.getHeaders?response.getHeaders():{};
+ if([429,503].includes(status)){const key=Object.keys(responseHeaders).find(k=>k.toLowerCase()==='retry-after');let until=retryDeadline_(provider,key?responseHeaders[key]:null,Date.now(),status);const waitLock=LockService.getScriptLock();if(!waitLock.tryLock(5000))throw Error('混み合っています。');try{until=Math.max(Number(providerProps.getProperty('COOLDOWN_'+provider)||0),until);providerProps.setProperties({['COOLDOWN_'+provider]:String(until)});}finally{waitLock.releaseLock();}throw Object.assign(Error(cooldownMessage_(until)),{retryAt:until});}
+ if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
- const responseHeaders=response.getHeaders?response.getHeaders():{},expires=responseHeaders.Expires||responseHeaders.expires;
+ const expires=responseHeaders.Expires||responseHeaders.expires;
  const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=provider==='isbn'?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
 }
+function retryDeadline_(provider,retryAfter,now,status){const value=String(retryAfter??'').trim();let deadline;if(/^\d+$/.test(value)&&Number.isFinite(Number(value)*1000))deadline=now+Number(value)*1000;else if(value)deadline=Date.parse(value);if(Number.isFinite(deadline)&&deadline>now&&deadline<=8640000000000000)return deadline;return provider==='dictionary'&&status===429?(Math.floor(now/3600000)+1)*3600000:now+60000;}
+function cooldownMessage_(until){return '提供元への新しい照会を '+Utilities.formatDate(new Date(until),'Asia/Tokyo','yyyy-MM-dd HH:mm:ss')+'（日本時間）まで停止しています。';}
