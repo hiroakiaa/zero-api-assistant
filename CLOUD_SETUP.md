@@ -1,6 +1,6 @@
 # ZERO self-hosted inference
 
-Status: connection code and a loopback-only inference bridge are implemented. A loopback-only Ollama server and bridge have been exercised on the owner-authorized PC. No public route or GAS production connection is configured yet. Local generation does not prove iPhone end-to-end operation.
+Status: connection code and a loopback-only inference bridge are implemented. A loopback-only Ollama server and bridge have been exercised on the owner-authorized PC. An owner-approved temporary Cloudflare route is present, but authenticated transmission and GAS activation remain disabled while explicit key-use consent is pending. Local generation does not prove iPhone end-to-end operation.
 
 The path is browser → GAS → an owner-operated HTTPS bridge → the same host's local Ollama. Browser model downloads and paid hosted inference APIs are not used. A server still needs memory, storage, power, network access and uptime. Using an existing PC avoids a new inference API bill; it does not make those resources free.
 
@@ -58,14 +58,17 @@ In the Apps Script project's **Script properties**, configure:
 
 The app receives only a configured/not-configured flag. It never receives the URL or secret. No new Google OAuth scopes are required beyond the existing external-request scope, and no first-time permission approval is accepted automatically.
 
+The owner-approved test deployment currently uses Cloudflare Quick Tunnel. Its hostname changes when the tunnel restarts, so update `ZERO_AI_URL` after checking the replacement endpoint. Keep `ZERO_AI_ENABLED` false while a replacement is unverified. This route has no uptime guarantee, and generation stops while the PC sleeps or its processes stop. No automatic startup or restart has been configured. The owner separately approved saving the bridge key in GAS and sending authentication through the specified tunnel; the key is excluded from published files.
+
 ## Behavior and rollout
 
 - Registered API/calculation requests continue to use their existing handlers first. Writing, translation, summaries, code help and unsupported conversational prompts use the configured cloud server.
 - Only the current prompt and up to four recent generated messages, totaling at most 700 history characters, are sent to the inference server. API answers and local-model history are not automatically sent. The prompt is at most 2,000 characters; the current chat field is more restrictive.
 - No browser credentials, remote endpoints, model choices, tools or execution options can be supplied in a generation request. The bridge calls only `http://127.0.0.1:11434/api/chat` with a fixed local model, no reasoning-model switch, no tools, and a bounded output.
-- One generation at a time is accepted. GAS shares a maximum of 100 attempts per Japan-calendar day across users. Failures count as attempts. The bridge rejects concurrent requests rather than maintaining an unbounded queue. There is no paid or local-download fallback.
+- One generation at a time is accepted. GAS shares a maximum of 100 attempts per Japan-calendar day across users. Failures count as attempts. The bridge rejects concurrent requests rather than maintaining an unbounded queue. Request-body reception has a 10-second deadline and a 16,000-byte limit, including chunked requests without Content-Length. Incomplete bodies, oversized bodies and disconnected clients release the generation slot; disconnects during generation abort the local upstream request. There is no paid or local-download fallback.
 - Request bodies, generated answers and secrets are not logged by the bridge. GAS conversation history continues to use the existing private spreadsheet when enabled. No prompt/answer cache is added.
 - Generated text is returned without model/license/source footers. Incomplete output is identified rather than treated as complete.
+- For unambiguous Japanese prose requests of one to eight exact sentences, the bridge checks sentence boundaries with `Intl.Segmenter`. A completed answer with the wrong count gets at most one rewrite on the same local model, within the original timeout and generation slot. A second mismatch fails instead of reporting a conforming answer. Translation, code, quoted source text, ranges and approximate limits are excluded. Truncated output keeps its incomplete status. This check does not establish factual correctness or compliance with every other writing instruction.
 - Before retiring the device-local option, verify real text quality, latency, concurrency behavior, outages, restarts and iPhone browser use on the selected host. Keep model downloads manual until this has passed.
 
 Official references: [Ollama chat API](https://docs.ollama.com/api/chat), [local-only mode and networking](https://docs.ollama.com/faq), [Qwen2.5-7B-Instruct model registry](https://ollama.com/library/qwen2.5:7b-instruct), [model license](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct).
