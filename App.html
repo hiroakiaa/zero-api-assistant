@@ -19,6 +19,7 @@
 .wiki-choices{display:grid;gap:8px;margin-top:10px}.wiki-choices .history-item{width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
 
 .transcript-actions{display:flex;gap:8px;flex-wrap:wrap}.transcript-preview{max-height:50dvh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;font-size:11px;line-height:1.8;padding:12px;background:#141418;border:1px solid #363640;border-radius:10px}.transcript-actions button{max-width:100%}
+.local-generated{min-width:0;max-width:100%;overflow-wrap:anywhere}.local-generated pre{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.local-generated pre code{white-space:pre;overflow-wrap:normal;word-break:normal}.local-generated pre:focus-visible{outline:2px solid #b9b9c7;outline-offset:2px}.local-generated ul,.local-generated ol{padding-left:1.6em;margin:10px 0;white-space:normal}.local-generated li{white-space:pre-wrap;margin:5px 0}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -1747,6 +1748,32 @@ class ModelLoadRecovery{
  }
 }
 
+const generatedSources=new WeakMap();
+function generatedBlocks(text){
+ const blocks=[],lines=String(text).replace(/\r\n?/g,'\n').split('\n');let paragraph=[],list=null,fence=null,code=[];
+ const flush=()=>{if(paragraph.length){blocks.push({type:'paragraph',text:paragraph.join('\n')});paragraph=[];}if(list){blocks.push(list);list=null;}};
+ for(const line of lines){
+  const marker=line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  if(fence){if(marker&&marker[1][0]===fence[0]&&marker[1].length>=fence.length&&!marker[2].trim()){blocks.push({type:'code',text:code.join('\n')});fence=null;code=[];}else code.push(line);continue;}
+  if(marker){flush();fence=marker[1];continue;}
+  if(!line.trim()){flush();continue;}
+  const item=line.match(/^(?:([-+*]) |([1-9][0-9]{0,2})[.)] )(.*)$/);
+  if(item){const type=item[1]?'unordered':'ordered',number=Number(item[2]);if(paragraph.length||list&&(list.type!==type||type==='ordered'&&number!==list.start+list.items.length))flush();if(!list)list={type,start:type==='ordered'?number:undefined,items:[]};list.items.push(item[3]);continue;}
+  if(list)flush();paragraph.push(line);
+ }
+ if(fence)blocks.push({type:'code',text:code.join('\n')});flush();return blocks;
+}
+function renderGeneratedAnswer(output,text,el){
+ output.replaceChildren();generatedSources.set(output,text);
+ for(const block of generatedBlocks(text)){
+  if(block.type==='code'){const pre=el('pre');pre.tabIndex=0;pre.append(el('code',block.text));output.append(pre);}
+  else if(block.items){const list=el(block.type==='ordered'?'ol':'ul');if(block.type==='ordered')list.start=block.start;for(const item of block.items)list.append(el('li',item));output.append(list);}
+  else output.append(el('p',block.text));
+ }
+}
+// Keep the original fenced code and list markers when saving/exporting a turn.
+function generatedTranscriptText(body){const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');}
+
 function cloudGenerationInput(raw,history=[]){
  const explicit=explicitLocalPrompt(raw),prompt=explicit?.content||raw,kind=['文章','翻訳','要約','コード'].includes(explicit?.kind)?explicit.kind:'general';
  if(typeof prompt!=='string'||!prompt.trim()||prompt.length>2000)throw Error('クラウドAIへの入力は1〜2000文字で指定してください。');
@@ -1760,7 +1787,7 @@ function createCloudAnswer({cloud,state,el,p,scroll=()=>{}}){
   const input=cloudGenerationInput(raw,state.context.cloudHistory||[]),result=await cloud.call('generate',input);
   if(!result||typeof result.text!=='string'||result.text.length>8000||!['stop','length','unknown'].includes(result.finishReason))throw Error('クラウドAIの応答を確認できませんでした。');
   const text=visibleLocalText(result.text);if(!text)throw Error('文章が生成されませんでした。');head.querySelector('.tag').textContent='クラウドAI';
-  const outcome=generationResult(text,result.finishReason),output=el('div',undefined,'local-generated');output.append(el('p',outcome.text));body.append(output);scroll();if(!outcome.complete){p(body,outcome.notice,'error');return false;}
+  const outcome=generationResult(text,result.finishReason),output=el('div',undefined,'local-generated');renderGeneratedAnswer(output,outcome.text,el);body.append(output);scroll();if(!outcome.complete){p(body,outcome.notice,'error');return false;}
   state.context={...state.context,intent:'cloudAI',cloudHistory:cloudConversationHistory([...(state.context.cloudHistory||[]),{role:'user',text:raw,source:'llm'},{role:'assistant',text,source:'llm'}]).map(m=>({...m,source:'llm'}))};return true;
  };
 }
@@ -1903,8 +1930,7 @@ async function localAnswer(text,body,head){
  const history=state.context.localHistory||[];let partial='',answer;
  let outcome;try{outcome=await localAI.generate(text,history,value=>{partial=value;output.textContent=value||'生成しています…';scrollConversationToEnd(false);});answer=outcome.text;}
  catch(e){output.textContent=partial||'生成を完了できませんでした。';if(partial){p(body,'未完の生成文です。処理が止まる前までを表示しています。','sub');}throw e;}
- output.replaceChildren();
- const blocks=answer.split(/(```[^\n]*\n[\s\S]*?```)/g);for(const block of blocks){if(!block)continue;if(block.startsWith('```')&&block.endsWith('```')){const code=el('code',block.replace(/^```[^\n]*\n/,'').slice(0,-3).trimEnd()),pre=el('pre');pre.append(code);output.append(pre);}else output.append(el('p',block.trim()));}
+ renderGeneratedAnswer(output,answer,el);
  if(!outcome.complete){p(body,outcome.notice,'error');return false;}
  state.context={...state.context,intent:'localAI',localTask:route.task,localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
 }
@@ -1931,7 +1957,7 @@ async function ask(raw,displayText){
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
  finally{
   const followupTexts=new Set([...body.querySelectorAll('.followups button')].map(b=>b.textContent));
-  const answerText=body.innerText.split('\n').filter(line=>!followupTexts.has(line.trim())).join('\n'),answerSources=transcriptSources([...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})));state.transcript.push({role:'ZERO',text:answerText,sources:answerSources});
+  const answerText=generatedTranscriptText(body).split('\n').filter(line=>!followupTexts.has(line.trim())).join('\n'),answerSources=transcriptSources([...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})));state.transcript.push({role:'ZERO',text:answerText,sources:answerSources});
   if(cloud.available&&state.historyEnabled){const payload={conversationId:state.conversationId,requestId:crypto.randomUUID(),userText:shownText,assistantText:answerText,sources:answerSources,context:state.context};await saveTurn(payload,body);}
   state.busy=false;$('#send').disabled=false;$('#prompt').disabled=false;$('#prompt').focus({preventScroll:true});scrollConversationToEnd();
  }
@@ -1966,7 +1992,7 @@ async function showHistory(){
 async function loadConversation(id){
  if(state.busy)return;state.busy=true;
  try{const saved=await cloud.call('getConversation',{id});$('#messages').replaceChildren();$('#welcome').hidden=true;state.context=saved.context;state.conversationId=saved.id;state.transcript=[];
- for(const m of saved.messages){const message=el('article',undefined,`message ${m.role==='user'?'user':'assistant'}`);if(m.role==='user')message.append(el('div',m.text,'bubble'));else{const body=el('div',undefined,'answer-body');p(body,m.text);for(const s of transcriptSources(m.sources))source(body,s.title,s.url);message.append(body);}$('#messages').append(message);state.transcript.push({role:m.role==='user'?'あなた':'ZERO',text:m.text,sources:transcriptSources(m.sources)});}
+ for(const m of saved.messages){const message=el('article',undefined,`message ${m.role==='user'?'user':'assistant'}`);if(m.role==='user')message.append(el('div',m.text,'bubble'));else{const body=el('div',undefined,'answer-body'),output=el('div',undefined,'local-generated');renderGeneratedAnswer(output,m.text,el);body.append(output);for(const s of transcriptSources(m.sources))source(body,s.title,s.url);message.append(body);}$('#messages').append(message);state.transcript.push({role:m.role==='user'?'あなた':'ZERO',text:m.text,sources:transcriptSources(m.sources)});}
  updateContext();$('#history-dialog').close();$('#storage-note').textContent='保存した会話を読み込みました。';$('#conversation').scrollTop=$('#conversation').scrollHeight;
  }catch(e){p($('#history-list'),e.message,'error');}finally{state.busy=false;}
 }
