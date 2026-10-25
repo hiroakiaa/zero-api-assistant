@@ -63,7 +63,8 @@ function validateAPI_(url){
   provider='weather';allowed=path.includes('/sunrise/')?['lat','lon','date','offset']:['lat','lon'];
   if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
   if(path.includes('/sunrise/')&&(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!/^[-+]\d{2}:\d{2}$/.test(params.offset||'')))throw Error('天文の検索条件が無効です。');
- }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=[];
+ }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=['date'];
+  if(Object.prototype.hasOwnProperty.call(params,'date')){const value=params.date,date=new Date(value+'T00:00:00Z'),today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value||value<'1948-01-01'||value>today)throw Error('為替の日付が無効です。');}
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&params.list==='geosearch'){
   provider='knowledge';allowed=['action','format','origin','list','gscoord','gsradius','gslimit','gsnamespace','gsprimary'];expected={action:'query',format:'json',origin:'*',list:'geosearch',gslimit:'20',gsnamespace:'0',gsprimary:'primary'};
   const coordinates=(params.gscoord||'').split('|');if(coordinates.length!==2||coordinates.some(n=>! /^-?\d{1,3}(\.\d{1,4})?$/.test(n))||Math.abs(Number(coordinates[0]))>90||Math.abs(Number(coordinates[1]))>180||! /^(?:[1-9]\d{2,3}|10000)$/.test(params.gsradius||''))throw Error('周辺記事の座標・半径が無効です。');
