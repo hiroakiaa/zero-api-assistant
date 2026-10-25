@@ -231,7 +231,7 @@ function createBooksHandler({getJSON,el,p,link,source,state,follows}){
   if(!data.books.length)p(body,page===1?'この条件の本は見つかりませんでした。別の表記や英語でも試してください。':'このページに表示できる候補はありません。検索結果は更新される場合があります。');
   for(const [i,book]of data.books.entries()){const number=(page-1)*5+i+1,row=el('div',undefined,'wiki-result');row.append(link(number+'. '+book.title,'https://openlibrary.org/works/'+book.id));p(row,book.authors.length?book.authors.slice(0,3).join('、')+(book.authors.length>3?' ほか'+(book.authors.length-3)+'名':''):'著者：未収録');p(row,book.year===null?'初刊年：未収録・形式未確認':'初刊年（提供元）：'+book.year+'年');if(book.edition){p(row,'検索に対応する版：'+book.edition.title);if(book.edition.isbn){p(row,'この版のISBN：'+book.edition.isbn);const button=el('button',number+'冊目の版を詳しく','history-item');button.type='button';button.dataset.ask='本の候補:'+book.id;button.dataset.askLabel=number+'冊目の版を詳しく';row.append(button);}else p(row,'この版のISBNは未収録・無効、または複数の番号があります。作品リンクで確認してください。');}else p(row,'検索に対応する版の情報は未収録です。');body.append(row);}
   p(body,'Open Libraryの作品単位の書誌です。版・翻訳・電子書籍の提供状況を示す一覧ではありません。検索は提供元の関連度順で、書名・著者名の完全一致や、本文を無料で読めることを保証しません。');source(body,'Open Library',url,result);
-  p(body,'版の詳細は検索に対応する1版だけを照会します。すべての版・翻訳の一覧ではありません。例：「2冊目の詳細」。番号は表示中のページから選んでください。');
+  p(body,'版の詳細は検索に対応する1版だけを照会します。すべての版・翻訳の一覧ではありません。表示中の番号で「○冊目の詳細」と入力できます。');
   const exhausted=!data.hasMore;state.context={...state.context,intent:'books',query:task.query,page,bookField:field,booksExhausted:exhausted,bookSelection:null,bookCandidates:data.books.map((book,i)=>({number:(page-1)*5+i+1,workId:book.id,editionId:book.edition?.id||null,isbn:book.edition?.isbn||null}))};if(page===5&&data.hasMore)p(body,'表示は5ページ・25候補までです。別の検索語で絞り込めます。');if(!exhausted&&page<5)follows(body,['本の続き']);
  };
 }
