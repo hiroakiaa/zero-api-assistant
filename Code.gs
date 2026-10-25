@@ -13,7 +13,7 @@ function api(request){
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
   switch(request.action){
-   case 'bootstrap':data={version:'3.0.0',settings:settings_(),conversations:listConversations_(owner)};break;
+   case 'bootstrap':data={version:'5.0.0',settings:settings_(),conversations:listConversations_(owner)};break;
    case 'fetch':data=fetchAPI_(payload.url);break;
    case 'saveTurn':data=saveTurn_(owner,payload);break;
    case 'listConversations':data=listConversations_(owner);break;
@@ -78,6 +78,8 @@ function validateAPI_(url){
  }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/SP.POP.TOTL)?$/.test(path)){
   provider='country';allowed=path.includes('/indicator/')?['format','mrv','per_page']:['format'];expected=path.includes('/indicator/')?{format:'json',mrv:'1',per_page:'1'}:{format:'json'};
  }else if(host==='hacker-news.firebaseio.com'&&/^\/v0\/(topstories|item\/[0-9]{1,12})\.json$/.test(path)){provider='news';allowed=[];
+ }else if(host==='freedictionaryapi.com'&&/^\/api\/v1\/entries\/en\/[a-z][a-z'%\-]{0,119}$/.test(path)){
+  provider='dictionary';allowed=[];const word=decodeURIComponent(path.slice('/api/v1/entries/en/'.length));if(!/^[a-z][a-z'-]{0,39}$/.test(word)||encodeURIComponent(word)!==path.slice('/api/v1/entries/en/'.length))throw Error('辞書の検索条件が無効です。');
  }else throw Error('許可されていない接続先です。');
  if(Object.keys(params).some(k=>!allowed.includes(k))||Object.keys(expected).some(k=>params[k]!==expected[k]))throw Error('許可されていない検索条件です。');
  return provider;
