@@ -13,7 +13,7 @@ function api(request){
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
   switch(request.action){
-   case 'bootstrap':data={version:'2.0.0',settings:settings_(),conversations:listConversations_(owner)};break;
+   case 'bootstrap':data={version:'3.0.0',settings:settings_(),conversations:listConversations_(owner)};break;
    case 'fetch':data=fetchAPI_(payload.url);break;
    case 'saveTurn':data=saveTurn_(owner,payload);break;
    case 'listConversations':data=listConversations_(owner);break;
@@ -28,7 +28,7 @@ function database_(){if(typeof DATABASE_ID==='undefined'||!DATABASE_ID)throw Err
 function sheet_(name){const s=database_().getSheetByName(name);if(!s)throw Error('データベースの初期設定が必要です。');const headers=s.getRange(1,1,1,SCHEMA[name].length).getValues()[0];if(headers.join('|')!==SCHEMA[name].join('|'))throw Error('データベースの列構成が一致しません。');return s;}
 function rows_(name){const s=sheet_(name),last=s.getLastRow();if(last>20000)throw Error('データベースの行数上限に達しました。管理者による整理が必要です。');return last>1?s.getRange(2,1,last-1,SCHEMA[name].length).getValues():[];}
 function textCell_(value){const s=String(value??'');return /^[\s\u0000-\u001f]*[=+@-]/.test(s)?"'"+s:s;}
-function append_(sheet,values){if(sheet.getLastRow()+values.length>20000)throw Error('保存上限に達しました。');sheet.getRange(sheet.getLastRow()+1,1,values.length,values[0].length).setNumberFormat('@').setValues(values.map(row=>row.map(textCell_)));}
+function append_(sheet,values){const end=sheet.getLastRow()+values.length;if(end>20000)throw Error('保存上限に達しました。');if(end>sheet.getMaxRows())sheet.insertRowsAfter(sheet.getMaxRows(),end-sheet.getMaxRows());sheet.getRange(sheet.getLastRow()+1,1,values.length,values[0].length).setNumberFormat('@').setValues(values.map(row=>row.map(textCell_)));}
 function settings_(){const values={};rows_('Settings').forEach(r=>{if(['app_name','greeting','history_enabled'].includes(String(r[0])))values[r[0]]=String(r[1]);});return values;}
 function rateLimit_(owner){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。少し待ってお試しください。');try{const cache=CacheService.getScriptCache(),key='rate:'+owner+':'+Math.floor(Date.now()/3600000),count=Number(cache.get(key)||0);if(count>=120)throw Error('1時間の利用上限です。時間を置いてお試しください。');cache.put(key,String(count+1),3600);}finally{lock.releaseLock();}}
 function listConversations_(owner){return rows_('Conversations').filter(r=>r[1]===owner).sort((a,b)=>String(b[4]).localeCompare(String(a[4]))).slice(0,30).map(r=>({id:r[0],title:r[2],createdAt:r[3],updatedAt:r[4]}));}
@@ -57,17 +57,27 @@ function saveTurn_(owner,payload){
 function validateAPI_(url){
  if(typeof url!=='string'||url.length>4000)throw Error('接続先が無効です。');
  const m=url.match(/^https:\/\/([a-z0-9.-]+)(\/[^?#]*)(?:\?([^#]*))?$/i);if(!m)throw Error('許可されていない接続先です。');
- const host=m[1].toLowerCase(),path=m[2],params={};String(m[3]||'').split('&').filter(Boolean).forEach(pair=>{const n=pair.indexOf('='),k=decodeURIComponent(n<0?pair:pair.slice(0,n)),v=decodeURIComponent((n<0?'':pair.slice(n+1)).replace(/\+/g,' '));if(Object.prototype.hasOwnProperty.call(params,k))throw Error('重複した検索条件です。');params[k]=v;});
+ const host=m[1].toLowerCase(),path=m[2],params=Object.create(null);String(m[3]||'').split('&').filter(Boolean).forEach(pair=>{const n=pair.indexOf('='),k=decodeURIComponent(n<0?pair:pair.slice(0,n)),v=decodeURIComponent((n<0?'':pair.slice(n+1)).replace(/\+/g,' '));if(Object.prototype.hasOwnProperty.call(params,k))throw Error('重複した検索条件です。');params[k]=v;});
  let provider,allowed,expected={};
- if(host==='api.open-meteo.com'&&path==='/v1/forecast'){
-  provider='weather';allowed=['latitude','longitude','daily','timezone','forecast_days'];expected={daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',forecast_days:'7'};
-  if(!Number.isFinite(Number(params.latitude))||Math.abs(Number(params.latitude))>90||!Number.isFinite(Number(params.longitude))||Math.abs(Number(params.longitude))>180||!/^[A-Za-z_+\-/]+$/.test(params.timezone||''))throw Error('天気の検索条件が無効です。');
- }else if(host==='geocoding-api.open-meteo.com'&&path==='/v1/search'){
-  provider='weather';allowed=['name','count','language','format'];expected={count:'3',language:'ja',format:'json'};if(!params.name||params.name.length>60)throw Error('地名が無効です。');
+ if(host==='api.met.no'&&['/weatherapi/locationforecast/2.0/compact','/weatherapi/sunrise/3.0/sun'].includes(path)){
+  provider='weather';allowed=path.includes('/sunrise/')?['lat','lon','date','offset']:['lat','lon'];
+  if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
+  if(path.includes('/sunrise/')&&(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!/^[-+]\d{2}:\d{2}$/.test(params.offset||'')))throw Error('天文の検索条件が無効です。');
  }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=[];
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'){
-  provider='knowledge';allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','explaintext','exintro','exchars','inprop','redirects'];expected={action:'query',format:'json',origin:'*',generator:'search',gsrlimit:'3',prop:'extracts|info',explaintext:'1',exintro:'1',inprop:'url',redirects:'1'};if(!params.gsrsearch||params.gsrsearch.length>100||!['550','1800'].includes(params.exchars))throw Error('知識検索の条件が無効です。');
+  provider='knowledge';expected={action:'query',format:'json',origin:'*',generator:'search',gsrlimit:'3'};
+  if(params.prop==='coordinates'){allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','colimit'];expected.prop='coordinates';expected.colimit='1';}
+  else {allowed=['action','format','origin','generator','gsrsearch','gsrlimit','prop','explaintext','exintro','exchars','inprop','redirects'];Object.assign(expected,{prop:'extracts|info',explaintext:'1',exintro:'1',inprop:'url',redirects:'1'});if(!['550','1800'].includes(params.exchars))throw Error('抜粋の長さが無効です。');}
+  if(!params.gsrsearch||params.gsrsearch.length>100)throw Error('知識検索の条件が無効です。');
  }else if(host==='holidays-jp.github.io'&&path==='/api/v1/date.json'){provider='holiday';allowed=[];
+ }else if(host==='openlibrary.org'&&path==='/search.json'){
+  provider='books';allowed=['q','limit','page','fields'];expected={limit:'5',fields:'key,title,author_name,first_publish_year'};if(!params.q||params.q.length>80||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
+ }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
+  provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
+ }else if(host==='earthquake.usgs.gov'&&path==='/earthquakes/feed/v1.0/summary/significant_week.geojson'){provider='quakes';allowed=[];
+ }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/SP.POP.TOTL)?$/.test(path)){
+  provider='country';allowed=path.includes('/indicator/')?['format','mrv','per_page']:['format'];expected=path.includes('/indicator/')?{format:'json',mrv:'1',per_page:'1'}:{format:'json'};
+ }else if(host==='hacker-news.firebaseio.com'&&/^\/v0\/(topstories|item\/[0-9]{1,12})\.json$/.test(path)){provider='news';allowed=[];
  }else throw Error('許可されていない接続先です。');
  if(Object.keys(params).some(k=>!allowed.includes(k))||Object.keys(expected).some(k=>params[k]!==expected[k]))throw Error('許可されていない検索条件です。');
  return provider;
@@ -76,7 +86,9 @@ function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
  const cache=CacheService.getScriptCache(),key='api:'+hash_(url),hit=cache.get(key);if(hit)return Object.assign(JSON.parse(hit),{cache:true});
  const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
- const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:false,headers:{'User-Agent':'ZERO-API-Assistant/2.0 (small noncommercial prototype)'}}),status=response.getResponseCode();if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
+ if(provider==='books'){const serial=LockService.getScriptLock();if(!serial.tryLock(5000))throw Error('書籍検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),delay=1100-(Date.now()-Number(props.getProperty('LAST_BOOK_FETCH')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));props.setProperties({LAST_BOOK_FETCH:String(Date.now())});}finally{serial.releaseLock();}}
+ const response=UrlFetchApp.fetch(url,{muteHttpExceptions:true,followRedirects:provider==='weather',headers:{'User-Agent':'ZERO-API-Assistant/3.0 github.com/hiroakiaa/zero-api-assistant'}}),status=response.getResponseCode();if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
- const result={data:data,at:new Date().toISOString(),cache:false},serialized=JSON.stringify(result);if(serialized.length<75000)cache.put(key,serialized,provider==='weather'?900:3600);return result;
+ const responseHeaders=response.getHeaders?response.getHeaders():{},expires=responseHeaders.Expires||responseHeaders.expires;
+ const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
 }
