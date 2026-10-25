@@ -11,6 +11,8 @@
 
 .ai-routing-option{display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.7;margin:12px 0}.ai-routing-option input{width:16px;height:16px;flex-shrink:0;accent-color:#ddd}
 
+
+.trend-plot{display:block;width:100%;height:110px;margin:12px 0 4px}.trend-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin:10px 0 14px}.trend-table th,.trend-table td{padding:6px 8px;border-bottom:1px solid #363640}.trend-table th{text-align:left;font-weight:500}.trend-table td{text-align:right;overflow-wrap:anywhere}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -31,6 +33,7 @@ function parsePlan(raw, context={}){
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
+ const trend=parseCountryTrend(text,context);if(trend.length)return trend;
  const stats=parseCountryStats(text,context);if(stats.length)return stats;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
  const postalTask=parsePostalTasks(text);if(postalTask.length)return postalTask;
@@ -793,6 +796,61 @@ function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()
  };
 }
 
+const trendError=error=>[{kind:'countryTrend',error}];
+function parseCountryTrend(raw,context={},now=new Date()){
+ let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text))return [];
+ const explicit=/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/人口|GDP|国内総生産|平均寿命|出生時平均余命/i.test(text);
+ if(!explicit&&!active||explicit&&!hasMetric&&!['countryTrend','countryStat'].includes(context.intent))return [];
+ if(active&&/^最新(?:では|なら|は)?$/.test(text))return [{kind:'countryStat',countries:context.statCountries||[],metric:context.countryMetric,year:null}];
+ if(!hasMetric&&/天気|気温|日の出|地震|祝日|為替|ドル|円|計算|時刻|翻訳|文章|ニュース/.test(text))return [];
+ if(!explicit&&hasMetric&&!/^(?:人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命)(?:は|なら|では)?$/i.test(text))return [];
+ const ranges=[...text.matchAll(/(\d{4})年?\s*(?:から|[~〜～–-])\s*(\d{4})年/g)],recent=[...text.matchAll(/(?:過去|直近)(\d{1,3})年(?:間)?/g)];if(ranges.length+recent.length>1)return trendError('推移の期間は1つだけ指定してください。');
+ const currentYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));let from=active&&!explicit?context.trendFrom:currentYear-9,to=active&&!explicit?context.trendTo:currentYear;
+ if(ranges.length){from=Number(ranges[0][1]);to=Number(ranges[0][2]);text=text.replace(ranges[0][0],'');}
+ if(recent.length){const years=Number(recent[0][1]);to=currentYear;from=to-years+1;text=text.replace(recent[0][0],'');}
+ if(/\d+年|以降|以前|来年|去年|昨年|今年/.test(text))return trendError('開始年と終了年を指定してください。例：「2020年から2025年の日本の人口推移」。');
+ text=text.replace(/(?:の)?(?:推移|トレンド|時系列|年ごと)(?:を)?(?:教えて|調べて|確認して|見せて|比較して|比較)?/g,'').replace(/(?:を)?グラフ(?:にして|で見せて|で|を表示して)?/g,'').trim();
+ const normalizedContext={...context,intent:['countryTrend','countryStat'].includes(context.intent)?'countryStat':context.intent,statYear:null};
+ let stat;if(!text||/^(?:は|なら|では|の)$/.test(text)){if(!context.countryMetric)return trendError('国と指標を指定してください。例：「日本の人口推移」。');stat={kind:'countryStat',countries:context.statCountries||[],metric:context.countryMetric,year:null};}else stat=parseCountryStats(text,normalizedContext)[0];
+ if(!stat)return [];
+ if(stat.error)return trendError(stat.error);
+ if(stat.year!==null)return trendError('推移は開始年と終了年の範囲で指定してください。');
+ return [{kind:'countryTrend',countries:stat.countries,metric:stat.metric,from,to}];
+}
+function validateTrendTask(task,now=new Date()){
+ if(task.error)throw Error(task.error);const indicator=validateStatTask({...task,year:null},now),year=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));
+ if(!Number.isInteger(task.from)||!Number.isInteger(task.to)||task.from<1960||task.to>year||task.from>task.to||task.to-task.from>=20)throw Error('期間は1960年以降、今年までの連続した1〜20年で指定してください。');return indicator;
+}
+function countryTrendRows(data,code,id,from,to,now=new Date()){
+ let rows;if(Array.isArray(data)&&data.length===2&&data[0]?.total===0&&data[0]?.pages===0&&data[1]===null)rows=[];
+ else {if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Number.isInteger(data[0]?.total)||data[0].total>20||!Array.isArray(data[1])||data[0].total!==data[1].length)throw Error('年別データの一部しか取得できないか、応答形式が不正です。');rows=data[1];}
+ const byYear=new Map();for(const row of rows){const year=Number(row?.date);if(year<from||year>to||byYear.has(year))throw Error('指定範囲外または重複した統計年が返ったため、表示を停止しました。');countryStatRow([{},[row]],code,id,year,now);byYear.set(year,row.value);}
+ return Array.from({length:to-from+1},(_,i)=>({year:from+i,value:byYear.get(from+i)??null}));
+}
+function trendSegments(rows,maximum){
+ if(!Number.isFinite(maximum)||maximum<=0||!rows.length)throw Error('グラフの目盛を確認してください。');
+ const groups=[];let points=[];const flush=()=>{if(points.length)groups.push(points);points=[];};
+ for(let index=0;index<rows.length;index++){const value=rows[index].value;if(value===null){flush();continue;}if(!Number.isFinite(value)||value<0||value>maximum)throw Error('グラフの数値を確認してください。');points.push({x:rows.length===1?300:4+index*592/(rows.length-1),y:106-(value/maximum)*102});}flush();return groups;
+}
+function renderTrendPlot(rows,maximum,label){
+ const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 600 110');svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('class','trend-plot');svg.setAttribute('role','img');svg.setAttribute('aria-label',label+'。年別の値は続く表に表示しています。');
+ const baseline=document.createElementNS(svg.namespaceURI,'line');for(const [key,value]of Object.entries({x1:'4',x2:'596',y1:'106',y2:'106',stroke:'#666'}))baseline.setAttribute(key,value);svg.append(baseline);
+ for(const group of trendSegments(rows,maximum)){const line=document.createElementNS(svg.namespaceURI,'polyline');for(const [key,value]of Object.entries({points:group.map(p=>`${p.x},${p.y}`).join(' '),fill:'none',stroke:'#d7d7eb','stroke-width':'2','vector-effect':'non-scaling-stroke'}))line.setAttribute(key,value);svg.append(line);for(const point of group){const circle=document.createElementNS(svg.namespaceURI,'circle');for(const [key,value]of Object.entries({cx:String(point.x),cy:String(point.y),r:'2',fill:'#e2e2ef'}))circle.setAttribute(key,value);svg.append(circle);}}
+ return svg;
+}
+function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date(),plot=renderTrendPlot}){
+ const directory=createCountryResolver(getJSON,statCountries);
+ return async function countryTrend(task,body){
+  const indicator=validateTrendTask(task,now());if(!task.countries.length){state.context={...state.context,intent:'countryTrend',lastDate:null,pending:'countryStat',countryMetric:task.metric,statCountries:[],trendFrom:task.from,trendTo:task.to};p(body,`${task.from}〜${task.to}年の${indicator.label}を調べる国・地域を指定してください。`);follows(body,['日本なら？','スイスなら？']);return;}
+  const calls=new Map(),results=await Promise.allSettled(task.countries.map(async requested=>{const country=await directory.resolve(requested),query=new URLSearchParams({format:'json',source:'2',date:`${task.from}:${task.to}`,per_page:'20'}),url=`https://api.worldbank.org/v2/country/${country.code}/indicator/${indicator.id}?${query}`;if(!calls.has(url))calls.set(url,getJSON(url,86400000));const result=await calls.get(url);return{country,url,result,rows:countryTrendRows(result.data,country.code,indicator.id,task.from,task.to,now())};}));
+  const valid=results.filter(r=>r.status==='fulfilled').map(r=>r.value),values=valid.flatMap(v=>v.rows.filter(r=>r.value!==null).map(r=>r.value)),maximum=Math.max(1,...values),format=value=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2}).format(value);
+  body.append(el('h3',`${indicator.label}の推移 · ${task.from}〜${task.to}年`));if(values.length)p(body,`グラフの共通目盛：0〜${format(maximum)} ${indicator.unit}。未収録の年では線を切ります。`,'sub');
+  const shown=new Set();for(let i=0;i<results.length;i++){const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}const value=result.value;if(shown.has(value.country.code))continue;shown.add(value.country.code);body.append(el('h3',value.country.name));if(value.rows.some(row=>row.value!==null)){body.append(plot(value.rows,maximum,`${value.country.name} ${indicator.label} ${task.from}〜${task.to}年`));p(body,`${task.from}年 — ${task.to}年`,'sub');}else p(body,'この期間の数値は未収録です。');const table=el('table',undefined,'trend-table'),head=el('thead'),heading=el('tr');heading.append(el('th','年'),el('th',indicator.unit+'（丸め表示）'));head.append(heading);table.append(head);const tbody=el('tbody');for(const row of value.rows){const tr=el('tr');tr.append(el('th',String(row.year)),el('td',row.value===null?'未収録':format(row.value)));tbody.append(tr);}table.append(tbody);body.append(table);source(body,`World Bank · ${indicator.id}`,value.url,value.result);}
+  if(!valid.length)return;if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'未収録を0や他年の値で補わず、将来の予測や変化の原因は生成していません。出典：World Bank, World Development Indicators。表示桁を丸め、指標名を日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
+  const next=results.map((r,i)=>r.status==='fulfilled'?r.value.country:task.countries[i]).filter((country,index,all)=>all.findIndex(c=>(c.code||c.query||c.name)===(country.code||country.query||country.name))===index);state.context={...state.context,intent:'countryTrend',lastDate:null,pending:null,countryMetric:task.metric,statCountries:next,trendFrom:task.from,trendTo:task.to};follows(body,['過去5年なら？',task.metric==='life'?'人口は？':'平均寿命は？','スイスなら？']);
+ };
+}
+
 // Fixed unit relationships; no remote service or generated answers.
 const unitDefinitions=[
  ['mm','length',0.001,['mm','ミリメートル']],['cm','length',0.01,['cm','センチメートル','センチ']],['m','length',1,['m','メートル']],['km','length',1000,['km','キロメートル']],
@@ -1138,6 +1196,7 @@ const FEATURE_CATALOG=[
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
  {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
+ {id:'countryTrend',category:'research',title:'国統計の年ごとの推移',description:'人口・GDP・平均寿命を最大20年のグラフと表で確認。未収録は埋めません。',query:'2020年から2025年の日本の人口推移',tags:'推移 経年 時系列 グラフ 統計 年ごと 人口 GDP 平均寿命 比較'},
  {id:'news',category:'research',title:'技術ニュース',description:'Hacker Newsの注目記事の原文タイトル。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN'},
  {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
  {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
@@ -1320,7 +1379,7 @@ const cloud=new CloudDB();
 const providerCooldowns=new ProviderCooldowns();
 let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
-const names={countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+const names={countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
@@ -1375,7 +1434,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate].filter(Boolean).join(' / '):c.intent==='countryStat'?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
@@ -1394,7 +1453,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
