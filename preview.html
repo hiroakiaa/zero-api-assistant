@@ -133,7 +133,7 @@ function createCurrencyHandler({getJSON,el,p,source,state,follows}){
   card.append(el('div',`${format(task.amount)} ${task.base} →`,'sub'),el('div',`${format(value)} ${task.quote}`,'big'),el('div',`1 ${task.base} = ${format(rate)} ${task.quote}${r?` · レート日 ${r.data.date}`:''}`,'details'));body.append(card);
   p(body,'参考レートでの概算です。表示は最大12桁。実際の両替・決済レートや手数料は含みません。');
   if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');
-  state.context={...state.context,intent:'currency',base:task.base,quote:task.quote,amount:task.amount};
+  state.context={...state.context,intent:'currency',pending:null,base:task.base,quote:task.quote,amount:task.amount};
   follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？']);
  };
 }
