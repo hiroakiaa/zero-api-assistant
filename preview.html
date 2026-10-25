@@ -151,9 +151,10 @@ function parseUKHolidays(raw,context={}){
  if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|学術|辞書)[：:\s]|とは|って何|について/.test(text))return [];
  const regions=UK_REGIONS.filter(region=>region.aliases.some(alias=>text.toLowerCase().includes(alias.toLowerCase()))).map(r=>r.id);
  const uk=regions.length||/イギリス|英国|\bUK\b|\bBritain\b/i.test(text);
- if(holiday&&/日本/.test(text)&&!uk)return [];
+ const unspecified=text.replace(/日本国内|日本|今年|再来年|来年|\d{1,6}年|これから|今後|次|祝日|バンクホリデー|一覧|教えて|調べて|確認して|知りたい|いつ|何日|の|は|を|[：:\s]/g,'');
+ if(holiday&&/日本/.test(text)&&!uk&&!unspecified)return [];
  if(holiday&&/日本/.test(text)&&uk)return ukError('日本と英国の祝日は、依頼を改行で分けて指定してください。');
- if(holiday&&!uk&&/(?:アメリカ|米国|フランス|ドイツ|中国|韓国|オーストラリア|カナダ|ブラジル|インド|イタリア|スペイン|ニュージーランド|メキシコ|シンガポール|アイルランド|海外|世界|外国)/.test(text))return ukError('祝日の照会は現在、日本と英国3地域に対応しています。例：「日本の祝日」「スコットランドの祝日」。');
+ if(holiday&&!uk&&unspecified)return ukError('祝日の照会は現在、日本と英国3地域に対応しています。例：「日本の祝日」「スコットランドの祝日」。');
  if(uk&&/営業日|平日/.test(text))return ukError('英国は祝日一覧・次の祝日に対応しています。営業日計算は日本の祝日または土日のみで指定してください。');
  const short=active&&(/^(?:今年|来年|再来年|\d{4}年)(?:は|なら)?$/.test(text)||regions.length&&/なら|では|は$/.test(text));
  const follow=active&&/^(?:(?:(?:今年|来年|再来年|\d{4}年)(?:の)?)?(?:次の祝日|今後の祝日|これからの祝日|祝日一覧|祝日|バンクホリデー)(?:は)?)$/.test(text);
