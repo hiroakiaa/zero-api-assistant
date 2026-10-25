@@ -30,6 +30,7 @@ function parsePlan(raw, context={}){
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
+ const stats=parseCountryStats(text,context);if(stats.length)return stats;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
  const postalTask=parsePostalTasks(text);if(postalTask.length)return postalTask;
  const moneyTasks=parseCurrencyTasks(text,context);
@@ -534,7 +535,7 @@ const extraRegistry=[
  ['Open Library','書籍の書誌検索','https://openlibrary.org/developers/api','公開API。取得結果をキャッシュします。大量取得・高トラフィック商用基盤への転用は対象外です。'],
  ['Europe PMC','生命科学・医学文献の書誌検索','https://europepmc.org/RestfulWebService','公開サービス。書誌情報のみ表示し、論文の本文や診療上の結論は生成しません。'],
  ['USGS','重要地震の公開フィード','https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php','公開データ。過去7日の重要地震に限定。すべての地震や緊急地震速報を網羅しません。'],
- ['World Bank','国の首都・人口統計','https://datahelpdesk.worldbank.org/knowledgebase/articles/889392','公開API・キー不要。公開年と出典を表示。利用データはWorld Bankのデータ利用条件に従います。'],
+ ['World Bank','国の首都・人口・GDP・平均寿命','https://datahelpdesk.worldbank.org/knowledgebase/articles/889392','公開API・キー不要。公開年と出典を表示。利用データはWorld Bankのデータ利用条件に従います。'],
  ['Hacker News','技術系の注目記事','https://github.com/HackerNews/API','公式の公開API。原文タイトル・投稿時刻・スコアとリンクを表示します。']
 ];
 function parseExtensions(text,context={},found=[]){
@@ -612,6 +613,75 @@ function createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state
   async country(task,body){const url=`https://api.worldbank.org/v2/country/${task.code}?format=json`,r=await getJSON(url,86400000),d=r.data?.[1]?.[0];if(!d)throw Error('国のデータがありません。');body.append(el('h3',`${task.name}の国情報`));const card=el('div',undefined,'result-card');card.append(el('div',d.name,'city'),el('div',`首都：${d.capitalCity||'未収録'}`,'big'),el('div',`地域：${d.region?.value||'未収録'}`,'details'));body.append(card);source(body,'World Bank · 国情報',url,r);if(task.population){const popUrl=`https://api.worldbank.org/v2/country/${task.code}/indicator/SP.POP.TOTL?format=json&mrv=1&per_page=1`,pop=await getJSON(popUrl,86400000),row=pop.data?.[1]?.find(v=>Number.isFinite(v.value));p(body,row?`公表人口：${new Intl.NumberFormat('ja-JP').format(row.value)}人（${row.date}年）。現在のリアルタイム人口ではありません。`:'人口データが未収録です。');source(body,'World Bank · SP.POP.TOTL',popUrl,pop);}p(body,'名称は提供元の表記を表示しています。');state.context={...state.context,intent:'country',countryCode:task.code};},
   async news(task,body){const topUrl='https://hacker-news.firebaseio.com/v0/topstories.json',top=await getJSON(topUrl,600000),ids=Array.isArray(top.data)?top.data.filter(Number.isInteger).slice(0,5):[];body.append(el('h3','Hacker News の注目記事'));const rows=await Promise.allSettled(ids.map(id=>getJSON(`https://hacker-news.firebaseio.com/v0/item/${id}.json`,600000)));let shown=0;for(const r of rows){if(r.status!=='fulfilled')continue;const d=r.value.data;if(!d||d.deleted||d.dead)continue;shown++;resultRow(body,d.title||'表題不明',`https://news.ycombinator.com/item?id=${d.id}`,`${d.score??'不明'}ポイント · ${new Date(d.time*1000).toLocaleString('ja-JP')}投稿`);}if(!shown)p(body,'記事を取得できませんでした。時間を置いてお試しください。');p(body,'技術系コミュニティの注目順です。原文タイトルと議論へのリンクを表示し、記事本文は転載しません。');source(body,'Hacker News 公式API',topUrl,top);state.context={...state.context,intent:'news'};},
   async sun(task,body){if(!task.places.length){p(body,'都市名を指定してください。例：東京の明日の日の出は？');return;}for(const city of task.places.slice(0,3)){const place=await resolveCity(city),timezone=place.timezone||'UTC',now=localDate(timezone),date=new Date(now+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+task.offset);const target=date.toISOString().slice(0,10),zone=new Intl.DateTimeFormat('en-US',{timeZone:timezone,timeZoneName:'longOffset'}).formatToParts(date).find(v=>v.type==='timeZoneName')?.value||'GMT';const offset=zone==='GMT'?'+00:00':zone.replace('GMT','');const q=new URLSearchParams({lat:place.latitude.toFixed(4),lon:place.longitude.toFixed(4),date:target,offset}),url=`https://api.met.no/weatherapi/sunrise/3.0/sun?${q}`,r=await getJSON(url,86400000),data=r.data.properties;if(!data)throw Error('日の出・日の入りのデータがありません。');const time=value=>value?new Date(value).toLocaleTimeString('ja-JP',{timeZone:timezone,hour:'2-digit',minute:'2-digit'}):'現象なし／未収録';body.append(el('h3',`${place.name} · ${target}`));if(!place.timezone)p(body,'現地の時間帯は未特定です。日付と日の出・日の入りはUTC（協定世界時）で表示します。');const card=el('div',undefined,'result-card');card.append(el('div',`日の出 ${time(data.sunrise?.time)}`,'big'),el('div',`日の入り ${time(data.sunset?.time)}`,'big'),el('div',placeTimezoneLabel(place),'sub'));body.append(card);p(body,'天文学的な時刻です。地形や実際の見え方とは異なる場合があります。');source(body,'MET Norway · CC BY 4.0','https://api.met.no/',r);}state.context={...state.context,intent:'sun',places:task.places,offset:task.offset};follows(body,['明日は？']);}
+ };
+}
+
+const countryIndicators={population:{id:'SP.POP.TOTL',label:'人口',unit:'人',note:'年次の人口統計です。リアルタイムの人口ではありません。'},gdp:{id:'NY.GDP.MKTP.CD',label:'GDP（名目米ドル）',unit:'米ドル',note:'当年価格・米ドル換算のGDPです。実質GDP・購買力平価・成長率ではありません。'},gdpPerCapita:{id:'NY.GDP.PCAP.CD',label:'1人当たりGDP（名目米ドル）',unit:'米ドル/人',note:'当年価格・米ドル換算の1人当たりGDPです。個人の所得や給与ではありません。'},life:{id:'SP.DYN.LE00.IN',label:'平均寿命（出生時）',unit:'年',note:'出生時の平均余命の年次統計です。個人の余命を予測する値ではありません。'}};
+const statCountries=new Map(countryAliases.flatMap(([name,code])=>[[name,{name,code}],[code,{name:countryAliases.find(c=>c[1]===code)[0],code}]]));
+const statError=error=>[{kind:'countryStat',error}];
+const statCountryText=text=>text.replace(/(?:の|を|は|なら|では|いくら|何人|何歳|教えて|調べて|確認して|比較して|比べて|比較|比べる)/g,'').trim();
+function parseCountryStats(raw,context={}){
+ let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text))return [];
+ const active=context.intent==='countryStat',explicit=/^(?:国統計|統計)[：:\s]/.test(text);text=text.replace(/^(?:国統計|統計)[：:\s]+/,'');
+ const found=[];
+ const patterns=[['gdpPerCapita',/(?:1人|一人)(?:当たり|あたり)(?:の)?GDP/i],['gdp',/GDP|国内総生産/i],['population',/人口/],['life',/平均寿命|出生時平均余命/]];
+ for(const [key,pattern] of patterns)if(pattern.test(text)){found.push(key);text=text.replace(pattern,'');}
+ if(!found.length&&!active&&!explicit)return [];
+ if(found.length===1&&found[0]==='population'&&/首都|国情報/.test(text))return [];
+ if(found.length>1)return statError('指標は1件ずつ指定してください。例：「日本のGDP」。別の指標は改行して質問できます。');
+ const metric=found[0]||(active?context.countryMetric:null);
+ if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命のいずれかを指定してください。');
+ if(!found.length&&!explicit){const probe=statCountryText(text.replace(/\d{4}年|最新(?:の)?/g,''));if(probe&&probe.split(/(?:と|、|,|\/|\s)+/).filter(Boolean).some(token=>!statCountries.has(token)&&!statCountries.has(token.toUpperCase())))return [];}
+ const years=[...text.matchAll(/(\d{4})年/g)];
+ if(years.length>1)return statError('統計の年は1年ずつ指定してください。');
+ const latest=/最新/.test(text);text=text.replace(/最新(?:の)?/g,'');
+ let year=years.length?Number(years[0][1]):null;if(years.length)text=text.replace(years[0][0],'');
+ const follow=/なら|では/.test(text);
+ text=statCountryText(text);
+ const tokens=text?text.split(/(?:と|、|,|\/|\s)+/).filter(Boolean):[];
+ const countries=[];for(const token of tokens){const country=statCountries.get(token)||statCountries.get(token.toUpperCase());if(!country){if(!found.length&&!explicit)return [];return statError('対応する国名または国コードを指定してください。例：「日本のGDP」「JPNの平均寿命」。実質値・成長率・期間集計には対応していません。');}if(!countries.some(c=>c.code===country.code))countries.push({...country});}
+ if(!found.length&&!countries.length&&!years.length&&!latest)return [];
+ if(countries.length>3)return statError('比較する国は3か国までで指定してください。');
+ if(!countries.length&&active)countries.push(...(context.statCountries||[]));
+ if(!countries.length&&context.intent==='country'&&statCountries.has(context.countryCode))countries.push({...statCountries.get(context.countryCode)});
+ if(!latest&&year===null&&active&&(!found.length||!tokens.length||follow))year=context.statYear??null;
+ return [{kind:'countryStat',countries,metric,year}];
+}
+function validateStatTask(task,now=new Date()){
+ if(task.error)throw Error(task.error);
+ if(!Object.hasOwn(countryIndicators,task.metric))throw Error('対応する統計指標を指定してください。');
+ if(!Array.isArray(task.countries)||task.countries.length>3||task.countries.some(c=>!c||!statCountries.has(c.code)||typeof c.name!=='string'||c.name.length>40))throw Error('対応する国を3か国まで指定してください。');
+ if(task.year!==null&&(!Number.isInteger(task.year)||task.year<1960||task.year>Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4))))throw Error('統計の年は1960年以降、今年（日本時間）までで指定してください。');
+ return countryIndicators[task.metric];
+}
+function countryStatRow(data,code,indicator,year,now=new Date()){
+ if(!Array.isArray(data)||data.length!==2||!data[0]||!Array.isArray(data[1])||data[1].length>1)throw Error('統計の応答形式を確認できませんでした。');
+ if(!data[1].length)return null;
+ const row=data[1][0],maxYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));
+ if(row?.countryiso3code!==code||row?.indicator?.id!==indicator||!/^\d{4}$/.test(row.date)||Number(row.date)<1960||Number(row.date)>maxYear||year!==null&&row.date!==String(year))throw Error('指定した国・指標・統計年と異なる応答のため、表示を停止しました。');
+ if(row.value===null)return null;
+ if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value))throw Error('統計の数値を確認できませんでした。');
+ return row;
+}
+function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date()}){
+ return async function countryStat(task,body){
+  const indicator=validateStatTask(task,now());
+  if(!task.countries.length){state.context={...state.context,intent:'countryStat',lastDate:null,pending:'countryStat',countryMetric:task.metric,statYear:task.year,statCountries:[]};p(body,`${indicator.label}を調べる国を指定してください。`);follows(body,['日本なら？','アメリカなら？','フランスなら？']);return;}
+  const results=await Promise.allSettled(task.countries.map(async country=>{const url=`https://api.worldbank.org/v2/country/${country.code}/indicator/${indicator.id}?format=json&source=2&${task.year===null?'mrnev=1':'date='+task.year}&per_page=1`,result=await getJSON(url,86400000);return {country,url,result,row:countryStatRow(result.data,country.code,indicator.id,task.year,now())};}));
+  body.append(el('h3',indicator.label+(task.year===null?' · 最新の収録値':` · ${task.year}年`)));const grid=el('div',undefined,'result-grid');body.append(grid);const ok=[];
+  for(let i=0;i<results.length;i++){
+   const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}
+   const v=result.value;ok.push(v.country);const card=el('div',undefined,'result-card');card.append(el('div',v.country.name,'city'));
+   if(v.row){const formatted=new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2,...(task.metric==='gdp'?{notation:'compact'}:{})}).format(v.row.value);card.append(el('div',formatted,'big'),el('div',`${indicator.unit} · ${v.row.date}年`,'details'));if(task.metric==='gdp')card.append(el('div',`元データ：${new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(v.row.value)} 米ドル`,'sub'));}
+   else card.append(el('div','未収録','big'),el('div',task.year===null?'この条件で数値を取得できませんでした。':`${task.year}年の数値は未収録です。`,'details'));
+   grid.append(card);source(body,`World Bank · ${indicator.id}`,v.url,v.result);
+  }
+  if(!ok.length)return;
+  p(body,indicator.note);if(task.countries.length>1&&task.year===null)p(body,'最新の収録年は国ごとに異なる場合があります。同じ年で比べるには「2020年なら？」のように指定してください。');
+  p(body,'出典：World Bank, World Development Indicators。表示桁を丸め、指標名を日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
+  if(ok.length<task.countries.length)p(body,'一部の国を取得できませんでした。次の年・指標の質問でも、指定した比較対象の国は維持します。');
+  state.context={...state.context,intent:'countryStat',lastDate:null,pending:null,countryMetric:task.metric,statYear:task.year,statCountries:task.countries.map(country=>({...country}))};follows(body,['2020年なら？','最新では？',task.metric==='life'?'人口は？':'平均寿命は？']);
  };
 }
 
@@ -934,7 +1004,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -959,7 +1029,7 @@ const FEATURE_CATALOG=[
  {id:'papers',category:'research',title:'生命科学の文献',description:'生命科学・医学分野の論文の書誌情報。',query:'論文: 睡眠',tags:'ろんぶん 研究 論文 文献 EuropePMC'},
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
- {id:'country',category:'research',title:'国の首都・人口',description:'World Bankの国情報と公表年付き人口。',query:'フランスの人口',tags:'くに 首都 人口 統計 国情報'},
+ {id:'country',category:'research',title:'国の統計・首都',description:'人口・名目GDP・1人当たりGDP・平均寿命。統計年を指定し3か国まで比較。',query:'日本とアメリカのGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済'},
  {id:'news',category:'research',title:'技術ニュース',description:'Hacker Newsの注目記事の原文タイトル。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN'},
  {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
  {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
@@ -1142,7 +1212,7 @@ const cloud=new CloudDB();
 const providerCooldowns=new ProviderCooldowns();
 let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
-const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+const names={countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
@@ -1197,7 +1267,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+[...(c.places||[]).map(v=>v.name),c.weatherDate].filter(Boolean).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+[...(c.places||[]).map(v=>v.name),c.weatherDate].filter(Boolean).join(' / '):c.intent==='countryStat'?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
@@ -1216,7 +1286,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={weather,countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
