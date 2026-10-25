@@ -8,5 +8,6 @@
  {"id":"quakes","name":"USGS","enabled":true,"license":"米国政府公開データ・出典表示","source_url":"https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php"},
  {"id":"country","name":"World Bank","enabled":true,"license":"CC BY 4.0等・データ利用条件に従う","source_url":"https://datacatalog.worldbank.org/public-licenses"},
  {"id":"news","name":"Hacker News","enabled":true,"license":"公式公開API・原文タイトルと議論へのリンクのみ","source_url":"https://github.com/HackerNews/API"},
- {"id":"dictionary","name":"FreeDictionaryAPI.com","enabled":true,"license":"無償公開・キー不要・Wiktionary CC BY-SA 4.0・出典と提供元を表示","source_url":"https://freedictionaryapi.com/"}
+ {"id":"dictionary","name":"FreeDictionaryAPI.com","enabled":true,"license":"無償公開・キー不要・Wiktionary CC BY-SA 4.0・出典と提供元を表示","source_url":"https://freedictionaryapi.com/"},
+ {"id":"isbn","name":"openBD","enabled":true,"license":"本の紹介目的に無償・データ改変不可・更新と削除要請に対応","source_url":"https://openbd.jp/terms/"}
 ]
