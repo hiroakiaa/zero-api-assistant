@@ -1053,10 +1053,17 @@ const unitDefinitions=[
  ['mg','mass',0.000001,['mg','ミリグラム']],['g','mass',0.001,['g','グラム']],['kg','mass',1,['kg','キログラム']],['lb','mass',0.45359237,['lb','lbs','ポンド']],['oz','mass',0.028349523125,['oz','オンス']],
  ['mL','volume',0.000001,['ml','ミリリットル']],['L','volume',0.001,['l','リットル']],['m³','volume',1,['m3','立方メートル']],
  ['cm²','area',0.0001,['cm2','平方センチメートル']],['m²','area',1,['m2','平方メートル']],['km²','area',1000000,['km2','平方キロメートル']],['ha','area',10000,['ha','ヘクタール']],
- ['℃','temperature',null,['°c','℃','摂氏']],['℉','temperature',null,['°f','℉','華氏']],['K','temperature',null,['k','ケルビン']]
+ ['℃','temperature',null,['°c','℃','摂氏']],['℉','temperature',null,['°f','℉','華氏']],['K','temperature',null,['k','ケルビン']],
+ ['m/s','speed',1,['m/s','秒速メートル']],['km/h','speed',1/3.6,['km/h','km/時','時速キロメートル']],['mph','speed',0.44704,['mph','マイル/時']],['kn','speed',1852/3600,['kn','knot','ノット']],
+ ['ms','duration',0.001,['ms','ミリ秒']],['s','duration',1,['s','秒']],['min','duration',60,['min','分']],['h','duration',3600,['h','時間']],['d','duration',86400,['d','日']],
+ ['B','data',1,['B','バイト']],['kB','data',1000,['kB','KB','キロバイト']],['MB','data',1e6,['MB','メガバイト']],['GB','data',1e9,['GB','ギガバイト']],['TB','data',1e12,['TB','テラバイト']],
+ ['KiB','data',1024,['KiB','キビバイト']],['MiB','data',1024**2,['MiB','メビバイト']],['GiB','data',1024**3,['GiB','ギビバイト']],['TiB','data',1024**4,['TiB','テビバイト']],
+ ['bit','data',1/8,['bit','b','ビット']],['kbit','data',1000/8,['kbit','kb','キロビット']],['Mbit','data',1e6/8,['Mbit','Mb','メガビット']],['Gbit','data',1e9/8,['Gbit','Gb','ギガビット']],['Tbit','data',1e12/8,['Tbit','Tb','テラビット']]
 ];
-const aliases=new Map(unitDefinitions.flatMap(unit=>unit[3].map(alias=>[alias.normalize('NFKC').toLowerCase(),unit])));
-const unitPattern=[...aliases.keys()].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+const aliases=new Map(unitDefinitions.filter(u=>u[1]!=='data').flatMap(unit=>unit[3].map(alias=>[alias.normalize('NFKC').toLowerCase(),unit])));
+const dataAliases=new Map(unitDefinitions.filter(u=>u[1]==='data').flatMap(unit=>unit[3].map(alias=>[alias,unit])));
+const resolveUnit=token=>dataAliases.get(token)||aliases.get(token.toLowerCase());
+const unitPattern=[...aliases.keys(),...dataAliases.keys()].sort((a,b)=>b.length-a.length).map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
 const numberPattern='[+-]?(?:(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?|\\.\\d+)';
 const convertPattern=new RegExp(`^(?:(?:単位|換算|単位換算)[：:]\\s*)?(${numberPattern})\\s*(${unitPattern})\\s*(?:は何|は|を|→|->)\\s*(${unitPattern})(?:に(?:換算|変換)?(?:して)?|ですか|になる)?[。？?]?$`,'i');
 const datePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
@@ -1066,10 +1073,18 @@ const dateAddition=new RegExp(`${datePrefix}(?:(${datePattern}|今日)(?:から|
 const dateWeekday=new RegExp(`${datePrefix}(${datePattern}|今日)(?:は|の)(?:何曜日|曜日)[。？?]?$`);
 function parseLocalTasks(text,context={}){
  const input=text.normalize('NFKC').trim(),unit= input.match(convertPattern);
- if(unit)return [{kind:'units',amount:Number(unit[1].replaceAll(',','')),from:aliases.get(unit[2].toLowerCase())[0],to:aliases.get(unit[3].toLowerCase())[0]}];
+ const unitTask=(amount,from,to)=>from&&to?[{kind:'units',amount,from:from[0],to:to[0]}]:[{kind:'unitsGuide',message:'データ量の記号は大文字・小文字を区別します。Bはバイト、b/bitはビットです。例：1 MBは何Mbit？、1 GiBは何MB？'}];
+ if(unit)return unitTask(Number(unit[1].replaceAll(',','')),resolveUnit(unit[2]),resolveUnit(unit[3]));
  if(context.intent==='units'){
-  const to=input.match(new RegExp(`^(${unitPattern})(?:なら|では|は)[？?]?$`,'i'));
-  if(to)return [{kind:'units',amount:context.unitAmount,from:context.unitFrom,to:aliases.get(to[1].toLowerCase())[0]}];
+  const to=input.match(new RegExp(`^(?:それを|では|じゃあ)?\\s*(${unitPattern})(?:なら|では|は|に(?:して|すると|換算(?:して)?|変換(?:して)?))?[。？?]?$`,'i'));
+  const amount=input.match(new RegExp(`^(${numberPattern})(?:なら|では|は)[。？?]?$`));
+  const reverse=/^(?:逆に(?:すると|して)?|逆方向(?:に)?|反対に)[。？?]?$/.test(input);
+  if(to||amount||reverse){
+   const a=unitDefinitions.find(u=>u[0]===context.unitFrom),b=unitDefinitions.find(u=>u[0]===context.unitTo)||(context.unitTo===undefined&&to?resolveUnit(to[1]):undefined);
+   if(!a||!b||a[1]!==b[1]||!Number.isFinite(context.unitAmount))return [{kind:'unitsGuide',message:'先に「5kmは何m？」のように数量と単位を指定してください。'}];
+   if(reverse)return unitTask(context.unitAmount,b,a);
+   return unitTask(amount?Number(amount[1].replaceAll(',','')):context.unitAmount,a,to?resolveUnit(to[1]):b);
+  }
  }
  const diff=input.match(dateDifference);
  if(diff)return [{kind:'dateMath',operation:'difference',from:diff[1],to:diff[2]}];
@@ -1083,7 +1098,8 @@ function parseLocalTasks(text,context={}){
 function convertUnits(amount,from,to){
  const a=unitDefinitions.find(unit=>unit[0]===from),b=unitDefinitions.find(unit=>unit[0]===to);
  if(!a||!b||!Number.isFinite(amount)||Math.abs(amount)>1e15)throw Error('数値と対応する単位を確認してください。');
- if(a[1]!==b[1])throw Error('種類が異なる単位は換算できません。長さ・質量・体積・面積・温度ごとに指定してください。');
+ if(a[1]!==b[1])throw Error('種類が異なる単位は換算できません。長さ・質量・体積・面積・温度・速度・時間・データ量ごとに指定してください。');
+ if(['duration','data'].includes(a[1])&&amount<0)throw Error('時間の長さ・データ量は0以上で指定してください。');
  let value;
  if(a[1]==='temperature'){
   const minimum=from==='K'?0:from==='℃'?-273.15:-459.67;
@@ -1118,15 +1134,19 @@ function dateMath(task,today){
 function createLocalHandlers({el,p,state,localDate,source,follows}){
  const format=value=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:13}).format(value);
  return {
+  unitsGuide(task,body){p(body,task.message);},
   units(task,body){
    const result=convertUnits(task.amount,task.from,task.to);body.append(el('h3','単位を換算'));
    const card=el('div',undefined,'result-card');card.append(el('div',`${format(task.amount)} ${task.from} →`,'sub'),el('div',`${format(result.value)} ${task.to}`,'big'));body.append(card);
    p(body,'端末内で計算しました。表示は最大13桁に丸めています。');
    if(['in','ft','yd','mi'].includes(task.from)||['in','ft','yd','mi'].includes(task.to))p(body,'インチ・フィート・ヤード・マイルは国際定義を使用します。');
    if(['lb','oz'].includes(task.from)||['lb','oz'].includes(task.to))p(body,'ポンド・オンスは常衡の質量です。');
-   source(body,'換算係数：NIST Guide to the SI','https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors');
-   state.context={...state.context,intent:'units',unitAmount:task.amount,unitFrom:task.from,unitTo:task.to};
-   if(result.dimension==='length')follows(body,['cmなら？','マイルなら？']);
+   if(result.dimension==='data'){p(body,'Bはバイト、bitはビット（1 B = 8 bit）。kB・MB・GB・TBは1000倍ごと、KiB・MiB・GiB・TiBは1024倍ごとです。通信速度の換算や所要時間の推定は含みません。');source(body,'定義：NIST · 2進接頭語','https://physics.nist.gov/cuu/Units/binary.html');}
+   else {if(result.dimension==='duration')p(body,'時間の長さを換算します。1日は24時間として計算します。暦の日付や夏時間による1日の長さとは区別します。');if(result.dimension==='speed')p(body,'ノットは1時間あたり1852メートル、mphは国際マイル/時です。');source(body,'換算係数：NIST Guide to the SI','https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors');}
+   p(body,'「10なら？」で元の単位の数量を変更、「逆にすると？」で同じ数量のまま換算方向を入れ替えます。');
+   state.context={...state.context,intent:'units',pending:null,unitAmount:task.amount,unitFrom:task.from,unitTo:task.to};
+   const suggestions={length:['cmなら？','マイルなら？'],mass:['kgなら？','ポンドなら？'],volume:['Lなら？','mLなら？'],area:['m²なら？','haなら？'],temperature:['℃なら？','℉なら？'],speed:['km/hなら？','m/sなら？'],duration:['分なら？','秒なら？'],data:['MBなら？','MiBなら？']};
+   follows(body,[...(suggestions[result.dimension]||[]),'逆にすると？']);
   },
   dateMath(task,body){
    const today=localDate('Asia/Tokyo'),result=dateMath(task,today);body.append(el('h3',task.operation==='difference'?'日付の差':'日付を計算'));
@@ -1365,7 +1385,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:本の続き|書籍検索の続き|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:本の続き|書籍検索の続き|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -1396,7 +1416,10 @@ const FEATURE_CATALOG=[
  {id:'countryTrend',category:'research',title:'国統計の年ごとの推移',description:'人口・GDP・平均寿命を最大20年のグラフと表で確認。未収録は埋めません。',query:'2020年から2025年の日本の人口推移',tags:'推移 経年 時系列 グラフ 統計 年ごと 人口 GDP 平均寿命 比較'},
  {id:'news',category:'research',title:'技術ニュース',description:'注目・新着・高評価を切替。続きとコメント数を確認。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN 新着 高評価 続き コメント'},
  {id:'calc',category:'tools',title:'計算',description:'四則演算・括弧・累乗・パーセント。',query:'計算: (1280 + 980) × 1.1',tags:'けいさん 数式 算数 足し算 割り算',local:true},
- {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
+ {id:'units',category:'tools',title:'単位換算',description:'長さ・質量・面積・体積・温度を換算。数量変更や逆方向にも対応。',query:'5kmは何マイル？',tags:'たんい かんさん センチ cm kg ポンド インチ 華氏 摂氏 温度 重さ',local:true,popular:true},
+ {id:'speedUnits',category:'tools',title:'速度を換算',description:'m/s・km/h・mph・ノットを端末内で換算。',query:'60mphは何km/h？',tags:'速度 そくど 風速 時速 秒速 マイル ノット',local:true},
+ {id:'durationUnits',category:'tools',title:'時間の長さを換算',description:'ミリ秒・秒・分・時間・日を換算。1日は24時間。',query:'90分は何時間？',tags:'時間 じかん 秒 分 ミリ秒 日 換算',local:true},
+ {id:'dataUnits',category:'tools',title:'データ量を換算',description:'MBとMiB、バイトとビットを区別して換算。',query:'1GiBは何MB？',tags:'データ 容量 バイト ビット MB MiB GB GiB KB キロ メガ ギガ',local:true},
  {id:'date',category:'tools',title:'日付計算',description:'日数を足す・引く、曜日を確認。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
  {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
  {id:'compound',category:'tools',title:'まとめて質問する',description:'依頼を区切り、条件を引き継いで順に処理。',query:'5kmは何m？それとcmなら？そして今日から100日後は何日？',tags:'複数 いくつか まとめて 会話 続き',local:true},
@@ -1578,6 +1601,7 @@ let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
 const names={countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
+names.unitsGuide='単位換算';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
 names.ukHoliday='海外の祝日';
@@ -1625,7 +1649,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目':c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 async function localAnswer(text,body,head){
  if(!localAI.ready){p(body,'端末内AIを使うには、先にモデルを読み込んでください。');const open=el('button','端末内AIを開く','history-item');open.addEventListener('click',()=>aiPanel.show());body.append(open);return false;}
  const plan=aiPanel.plan(text,state.context);let switching,route;if(plan.switchModel){switching=el('p','用途に合わせてモデルを切り替えています…','status');body.append(switching);}try{route=await aiPanel.ensureFor(text,state.context);}finally{switching?.remove();}
