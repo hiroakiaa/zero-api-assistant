@@ -19,6 +19,7 @@ function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
+ const postalTask=parsePostalTasks(text);if(postalTask.length)return postalTask;
  const found=cities.filter(c=>text.includes(c.name)||text.toLowerCase().includes(c.query.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
  const isWeather=/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯/.test(text);
  const isTime=/何時|時刻|時差|世界時計/.test(text);
@@ -321,11 +322,44 @@ class ProviderCooldowns{
  assertReady(url,now=Date.now()){const until=this.deadlines.get(new URL(url).hostname)||0;if(until>now)throw Object.assign(Error(cooldownMessage(until)),{retryAt:until});}
 }
 
+function normalizePostalCode(raw){
+ const code=String(raw).normalize('NFKC').trim().replace(/[\u2010-\u2015]/g,'-');
+ if(!/^\d{3}[- ]?\d{4}$/.test(code))throw Error('郵便番号は7桁で入力してください。例：〒100-0014');
+ return code.replace(/[- ]/g,'');
+}
+function parsePostalTasks(text){
+ const input=text.normalize('NFKC').trim();
+ const match=input.match(/^(?:郵便番号|郵便番号検索)[：:]\s*(.+?)[。？?]?$/)||input.match(/^郵便番号\s*(\d[\d\s-]*)[？?]?$/)||input.match(/^〒\s*(.+?)[。？?]?$/)||input.match(/^(\d{3}-?\d{4})の(?:住所|地域|町域)(?:は|を教えて)?[。？?]?$/);
+ return match?[{kind:'postal',code:match[1]}]:[];
+}
+function postalAddresses(data,expected){
+ if(data?.postalCode!==expected||!Array.isArray(data.addresses))throw Error('郵便番号と住所情報の応答が一致しません。');
+ return data.addresses.map(row=>{
+  const fields=['prefecture','address1','address2','address3','address4'];
+  if(!row?.ja||fields.some(key=>typeof row.ja[key]!=='string')||!row.ja.prefecture.trim())throw Error('住所情報の形式を確認できませんでした。');
+  const address=fields.map(key=>row.ja[key]).join(''),kana=row.kana&&fields.every(key=>typeof row.kana[key]==='string')?fields.map(key=>row.kana[key]).filter(Boolean).join(' '):'';
+  return {address,kana,hasTown:!!row.ja.address2};
+ });
+}
+function createPostalHandler({getJSON,el,p,source,state}){
+ return async function postal(task,body){
+  const code=normalizePostalCode(task.code),url=`https://jp-postal-code-api.ttskch.com/api/v1/${code}.json`;let r;
+  body.append(el('h3',`〒${code.slice(0,3)}-${code.slice(3)} の住所候補`));
+  try{r=await getJSON(url,3600000);}catch(e){if(/HTTP 404/.test(e.message)){p(body,'この郵便番号のデータが提供元に見つかりません。入力番号をご確認ください。');source(body,'日本の郵便番号API','https://github.com/ttskch/jp-postal-code-api');return;}throw e;}
+  const addresses=postalAddresses(r.data,code);
+  if(!addresses.length)p(body,'提供元に住所候補が収録されていません。');
+  for(const row of addresses.slice(0,20)){const card=el('div',undefined,'result-card');card.append(el('div',row.address,'big'));if(row.kana)card.append(el('div',row.kana,'sub'));if(!row.hasTown)p(card,'町域の詳細はこの候補に収録されていません。');body.append(card);}
+  p(body,addresses.length>20?`提供元の${addresses.length}候補のうち先頭20件を表示しています。全件は出典リンクで確認できます。`:`${addresses.length}件の候補です。番地・建物などは別途ご確認ください。`);
+  source(body,'日本の郵便番号API · 日本郵便の公開データを再配信',url,r);source(body,'配信元・更新方法・MITライセンス','https://github.com/ttskch/jp-postal-code-api');
+  state.context={...state.context,intent:'postal',postalCode:code};
+ };
+}
+
 const $=s=>document.querySelector(s);
 const cloud=new CloudDB();
 const providerCooldowns=new ProviderCooldowns();
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
-const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',...extraLabels};
+const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 const registry=[
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
@@ -333,7 +367,8 @@ const registry=[
  ['Holidays JP','日本の祝日','https://github.com/holidays-jp/api','キー不要・MIT。取得できた年のみ回答します。'],
  ['ブラウザ内処理','計算・単位換算・日付計算・世界時計',null,'外部APIへの通信なし。日付計算の「今日」は日本時間です。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
  ...extraRegistry,
- ['openBD','ISBNから本を紹介','https://openbd.jp/','本の紹介目的で無償利用。書誌を改変せず表示し、更新を反映します。利用条件：https://openbd.jp/terms/']
+ ['openBD','ISBNから本を紹介','https://openbd.jp/','本の紹介目的で無償利用。書誌を改変せず表示し、更新を反映します。利用条件：https://openbd.jp/terms/'],
+ ['日本の郵便番号API','郵便番号から住所候補を表示','https://github.com/ttskch/jp-postal-code-api','無料・商用可と明記された公開API。日本郵便の公開データを再配信。公開実装はMITライセンス。']
 ];
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function link(title,url){try{if(!/^https?:$/.test(new URL(url).protocol))return el('span',title);}catch{return el('span',title);}const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
@@ -407,7 +442,7 @@ async function ask(raw){
  try{
   const tasks=parsePlan(text,state.context);loading.remove();
   if(!tasks.length)help(body);
-  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
   for(const task of tasks.slice(0,4)){const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}}
   updateContext();
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
@@ -431,6 +466,7 @@ $('#export').addEventListener('click',()=>{if(!state.transcript.length){$('#info
 $('#focus-chat').addEventListener('click',()=>$('#prompt').focus());
 const questionExamples=[['天気','東京と大阪の明日の天気を比較して'],['日の出・日の入り','東京の明日の日の出は？'],['通貨換算','100ユーロは何円？'],['百科事典','人工知能とは？'],['英英辞書・発音記号','辞書: hello'],['本を探す','本: space'],['生命科学の文献','論文: 睡眠'],['地震の公開記録','日本周辺の最近の地震'],['国の首都・人口','フランスの人口'],['技術ニュース','技術ニュース'],['日本の祝日','次の祝日は？'],['計算','計算: (1280 + 980) × 1.1'],['単位換算','5kmは何マイル？'],['日付計算','今日から100日後は何日？'],['日付の差','2026-10-25から2027-01-01まで何日？'],['世界時計','ロンドンと東京は今何時？']];
 questionExamples.splice(questionExamples.findIndex(([title])=>title==='本を探す')+1,0,['ISBNで本を紹介','ISBN: 9784780802047']);
+questionExamples.push(['郵便番号から住所','〒100-0014']);
 for(const [title,query]of questionExamples){const button=el('button',undefined,'skill-option');button.dataset.ask=query;button.append(el('strong',title),el('small',query));$('#skill-examples')?.append(button);}
 $('#discover-open')?.addEventListener('click',()=>$('#skills-dialog').showModal());$('#skills-close')?.addEventListener('click',()=>$('#skills-dialog').close());$('#skills-filter')?.addEventListener('input',e=>{for(const b of $('#skill-examples').children)b.hidden=!b.textContent.toLowerCase().includes(e.target.value.toLowerCase());});
 async function saveTurn(payload,body){
