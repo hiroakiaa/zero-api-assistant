@@ -58,3 +58,4 @@ GASに `Code.gs`, `Config.gs`, `App.html`, `appsscript.json` を反映し、既�
 - [USGS](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php)
 - [World Bank](https://datacatalog.worldbank.org/public-licenses)
 - [Hacker News](https://github.com/HackerNews/API)
+- [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
