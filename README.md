@@ -191,3 +191,5 @@ ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`IS
 - [日本の郵便番号API](https://github.com/ttskch/jp-postal-code-api)：無料・商用可の公開API。日本郵便の公開データから住所情報を配信。実装はMITライセンスです。
 - [openBD](https://openbd.jp/terms/)：本の紹介・販促目的に無償利用。個人・団体・企業で利用可能。書誌の基本情報を改変せず表示します。書影・内容紹介文・書評は取得結果から表示しません。
 - [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
+
+CSVの内容は専用ダイアログでも確認でき、保存が制限された環境では選択してコピーできます。内容確認は追加照会せず、ダウンロードと同じCSV文字列を使います。会話の入力欄は1つのままです。
