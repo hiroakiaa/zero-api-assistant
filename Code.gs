@@ -84,8 +84,11 @@ function validateAPI_(url){
   provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
  }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&path==='/earthquakes/feed/v1.0/summary/significant_week.geojson'){provider='quakes';allowed=[];
- }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/SP.POP.TOTL)?$/.test(path)){
-  provider='country';allowed=path.includes('/indicator/')?['format','mrv','per_page']:['format'];expected=path.includes('/indicator/')?{format:'json',mrv:'1',per_page:'1'}:{format:'json'};
+ }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN))?$/.test(path)){
+  provider='country';
+  if(!path.includes('/indicator/')){allowed=['format'];expected={format:'json'};}
+  else if(path.endsWith('/SP.POP.TOTL')&&params.mrv==='1'&&!params.source){allowed=['format','mrv','per_page'];expected={format:'json',mrv:'1',per_page:'1'};}
+  else {allowed=['format','source','mrnev','date','per_page'];expected={format:'json',source:'2',per_page:'1'};if(Object.prototype.hasOwnProperty.call(params,'date')){const maxYear=new Date(Date.now()+9*3600000).getUTCFullYear();if(params.mrnev!==undefined||!/^\d{4}$/.test(params.date)||Number(params.date)<1960||Number(params.date)>maxYear)throw Error('国統計の年が無効です。');}else expected.mrnev='1';}
  }else if(host==='hacker-news.firebaseio.com'&&/^\/v0\/(topstories|item\/[0-9]{1,12})\.json$/.test(path)){provider='news';allowed=[];
  }else if(host==='jp-postal-code-api.ttskch.com'&&/^\/api\/v1\/\d{7}\.json$/.test(path)){provider='postal';allowed=[];
  }else if(host==='api.openbd.jp'&&path==='/v1/get'){
