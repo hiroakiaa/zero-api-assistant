@@ -230,7 +230,7 @@ ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`IS
 - [Hacker News](https://github.com/HackerNews/API)
 - [日本の郵便番号API](https://github.com/ttskch/jp-postal-code-api)：無料・商用可の公開API。日本郵便の公開データから住所情報を配信。実装はMITライセンスです。
 - [openBD](https://openbd.jp/terms/)：本の紹介・販促目的に無償利用。個人・団体・企業で利用可能。書誌の基本情報を改変せず表示します。書影・内容紹介文・書評は取得結果から表示しません。
-- [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
+- [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから1ページ3件・最大15語義を原文抜粋し、回答ごとに元記事・提供元・ライセンスを表示します。日本語への翻訳は生成しません。
 
 CSVの内容は専用ダイアログでも確認でき、保存が制限された環境では選択してコピーできます。内容確認は追加照会せず、ダウンロードと同じCSV文字列を使います。会話の入力欄は1つのままです。
 
@@ -261,3 +261,13 @@ CSVの内容は専用ダイアログでも確認でき、保存が制限され�
 年はAPIのPUB_YEAR（出版年）で、FIRST_PDATE（初回公開日）とは異なる場合があります。OAはAPIのisOpenAccessフラグで、再利用ライセンス・査読済み・研究の品質の判定ではありません。元記事の条件を確認してください。返された年・OAが指定条件と異なる場合、識別子・件数・検索語やカーソルの応答が要求と異なる場合は表示を停止します。掲載媒体や著者等の未収録を補いません。抄録・本文・診療上の結論は取得・生成しません。長い書誌文字列は省略記号を付け、元記事にリンクします。
 
 [Europe PMC公式API仕様](https://dev.europepmc.org/RestfulWebService)、[公開検索項目の公式リファレンス](https://dev.europepmc.org/docs/EBI_Europe_PMC_Web_Service_Reference.pdf)、[EMBL-EBI利用条件](https://www.ebi.ac.uk/about/terms-of-use/)を確認しています。
+
+## 品詞と語義ページで英英辞書を読む
+
+`辞書: light | 品詞:動詞`、`lightの名詞の意味は？`で品詞を指定できます。`名詞なら？`、`動詞なら？`などで同じ語の品詞を変え、`品詞を解除`ですべてに戻ります。`辞書の続き`は同じ語・品詞の次の3語義へ進み、最大5ページ・15語義を表示します。細かく枝分かれした下位の定義は一覧に含めず、元記事へ案内します。品詞を変えると先頭の語義に戻ります。
+
+`発音は？`はIPA発音記号を最大6件、地域等のタグを保って表示します。音声APIや読み上げは追加しません。`意味に戻る`で直前の語義ページへ戻ります。通常の意味表示はIPA最大2件です。各語義の同義語・反意語を収録されている場合だけ最大6件ずつ表示し、見出し全体の関連語や別の意味の語を混ぜません。日本語訳・例文・引用文は追加しません。長い定義は1500文字で省略を明記します。
+
+同じ単語の取得データを最大24時間再利用し、品詞変更・ページ移動・発音への切り替えで取得済みデータを使います。履歴には語・品詞・語義ページ・表示の種類を保存します。未収録語では新しい語を未収録として記録し、続く質問で前の語の説明へ戻しません。HTTP404や空entriesと、存在する語の品詞未収録を区別します。見出しや元記事が要求語と異なる、ライセンスが変わるなどの場合は本文を停止します。
+
+[FreeDictionaryAPI.com公式仕様・利用条件](https://freedictionaryapi.com/)、[OpenAPI](https://freedictionaryapi.com/api/v1/openapi.json)、[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)を確認し、元Wiktionary記事・執筆者履歴への案内・ライセンス・提供元を表示します。語義の原文から品詞とページで一部を抽出したことを明記し、保存・書き出しにも参照リンクを残します。APIの1000回/時/IPは有料枠ではなく負荷制限として扱い、既存の429待機と共有キャッシュを維持します。
