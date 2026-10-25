@@ -63,6 +63,8 @@ GASに `Code.gs`, `Config.gs`, `App.html`, `appsscript.json` を反映し、既�
 
 ## API出典
 
+郵便番号からの住所検索は`〒100-0014`、`郵便番号: 0790177`、`1000014の住所は？`のように指定します。7桁と先頭の0を検証し、複数の住所候補を最大20件表示します。町域が未収録の場合はその旨を表示します。番地・建物などは別途確認してください。数字だけの入力を郵便番号として外部照会することはありません。再利用は最大1時間です。
+
 ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`ISBN-10: 4780802040`のように入力します。検査数字を確認してから照会し、書名・著者等・出版社などを提供元の表記で表示します。詳細は版元ドットコムの本紹介ページへ進めます。ISBNが正しくても、openBDに収録されていない本があります。結果の再利用は最大1時間です。情報の更新や削除要請がある場合は接続を停止し、保存済みの紹介データも管理者が確認して対応します。
 
 - [MET Norway](https://api.met.no/doc/TermsOfService)
@@ -74,5 +76,6 @@ ISBNによる本の紹介に対応しました。`ISBN: 978-4-7808-0204-7`、`IS
 - [USGS](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php)
 - [World Bank](https://datacatalog.worldbank.org/public-licenses)
 - [Hacker News](https://github.com/HackerNews/API)
+- [日本の郵便番号API](https://github.com/ttskch/jp-postal-code-api)：無料・商用可の公開API。日本郵便の公開データから住所情報を配信。実装はMITライセンスです。
 - [openBD](https://openbd.jp/terms/)：本の紹介・販促目的に無償利用。個人・団体・企業で利用可能。書誌の基本情報を改変せず表示します。書影・内容紹介文・書評は取得結果から表示しません。
 - [FreeDictionaryAPI.com](https://freedictionaryapi.com/)：Wiktionaryの英英辞書。`辞書: hello`、`appleの意味は？`で定義とIPA発音記号を取得。本文は[Wiktionary執筆者](https://en.wiktionary.org/)による[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)のデータから最大3件を原文抜粋し、回答ごとに元記事とライセンスを表示します。日本語への翻訳は生成しません。
