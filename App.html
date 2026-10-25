@@ -1,0 +1,199 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111111"><title>ZERO</title><style>:root{color-scheme:dark;font-family:"Zen Maru Gothic","Yu Gothic UI",Meiryo,sans-serif;color:#ededf0;background:#111;--line:#29292d}*{box-sizing:border-box}body{margin:0;height:100dvh;display:flex;flex-direction:column;font-size:14px}button,textarea{font:inherit}button{color:inherit;cursor:pointer}button:disabled{cursor:wait;opacity:.5}a{color:#dddde6}button:focus-visible,a:focus-visible{outline:2px solid #e2e2eb;outline-offset:3px}button:hover{filter:brightness(1.2)}.app-header{height:90px;padding:0 28px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}.brand{font-size:23px;font-weight:700;text-decoration:none;letter-spacing:1.5px;display:flex;align-items:center;gap:17px}.brand span{font-size:11px;font-weight:400;letter-spacing:.05em;color:#888891}.header-tools{display:flex;align-items:center;gap:12px}#cloud-status{font-size:11px;color:#a2a2ac;max-width:200px}.icon-button{height:42px;min-width:42px;border:1px solid #27272c;background:#1b1b1e;border-radius:14px;display:grid;place-items:center;font-size:24px}.workspace{display:flex;flex:1;min-height:0}.sidebar{width:320px;flex-shrink:0;border-right:1px solid #252529;margin:5px 0 16px;padding:14px 24px;display:flex;flex-direction:column;overflow:auto}.side-heading small{color:#a2a2ad;font-size:11px}.side-heading h1{font-size:20px;font-weight:600;margin:10px 0 24px}.new-chat{background:#ebebf0;color:#171719;border:0;min-height:49px;padding:12px 16px;border-radius:14px;font-size:13px;font-weight:650}.side-label{font-size:11px;color:#84848d;margin:27px 0 9px}.side-examples{display:grid;gap:5px}.side-examples button{border:1px solid transparent;background:transparent;text-align:left;font-size:12px;color:#aaaab4;min-height:39px;border-radius:10px;padding:8px 10px}.side-examples button:hover{background:#202024;color:#ebebf2;border-color:#2c2c32}.sidebar-bottom{margin-top:auto;padding-top:20px}.sidebar-bottom p{font-size:10px;color:#94949e;display:flex;align-items:baseline;gap:13px}.sidebar-bottom strong{font-size:23px;font-weight:500;color:#d2d2dc}.sidebar-bottom small{font-size:10px;color:#858591;line-height:1.8}.text-button{display:block;border:0;background:transparent;padding:0;font-size:10px;color:#9b9ba5;margin-top:12px}main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}#conversation{flex:1;overflow-y:auto;padding:0 32px;scroll-behavior:smooth;min-height:0}.welcome{height:100%;min-height:270px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px 10px 50px}.welcome-icon{width:32px;height:32px;color:#b9b9c2;margin-bottom:24px;fill:currentColor}.welcome small{color:#92929c;font-size:11px}.welcome h2{font-size:22px;margin:11px 0;font-weight:600;color:#bdbdc8}.welcome p{font-size:12px;color:#8b8b97;margin:0}.suggestions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:32px}.suggestions button{font-size:11px;border:1px solid #363640;border-radius:12px;padding:11px 13px;background:#19191e;color:#b5b5c1}.composer-area{padding:14px 32px 15px;flex-shrink:0}form{max-width:850px;margin:auto;display:flex;align-items:flex-end;gap:10px;border:1px solid #383840;border-radius:17px;padding:10px 11px 10px 18px;background:#1b1b20}form:focus-within{border-color:#7d7d8b}textarea{font-size:14px;line-height:1.8;resize:none;max-height:140px;background:transparent;border:0;outline:0;flex:1;min-width:0;padding:6px 0;color:#eeeef4}textarea::placeholder{color:#90909c}#send{height:37px;width:39px;border:0;border-radius:12px;background:#e7e7ee;color:#19191d;font-size:24px}.composer-foot{max-width:850px;margin:9px auto 0;display:flex;justify-content:space-between;gap:15px;font-size:9px;color:#92929e;line-height:1.7}#stats{white-space:nowrap}.context{max-width:850px;margin:0 auto 8px;font-size:10px;line-height:1.6;color:#a2a2ae}#messages{max-width:850px;margin:auto;padding:15px 0 25px}.message{margin:12px 0 25px}.user{display:flex;justify-content:flex-end}.bubble{padding:12px 17px;background:#2b2b32;border:1px solid #41414b;border-radius:18px 5px 18px 18px;max-width:85%;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.8}.answer-head{display:flex;align-items:center;gap:9px;color:#a2a2af;font-size:10px;margin-bottom:9px;letter-spacing:1px}.brand-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:8px;background:#29292f;color:#dddde8;font-size:17px;font-weight:600}.tag{font-size:8px;border:1px solid #35353c;border-radius:5px;padding:2px 5px;color:#9696a4}.answer-body{background:#19191d;border:1px solid #303037;border-radius:5px 18px 18px 18px;padding:16px 19px;line-height:1.9;overflow-wrap:anywhere}.answer-body p{margin:8px 0 12px;white-space:pre-line;font-size:12px;color:#b5b5c0}.answer-body h3{font-size:17px;margin:0 0 13px;font-weight:600}.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.result-card{border:1px solid #36363f;border-radius:13px;background:#222228;padding:16px}.city{font-size:13px;font-weight:600}.big{font-size:30px;line-height:1.6;font-variant-numeric:tabular-nums;letter-spacing:-.5px}.sub{font-size:10px;color:#a1a1b0}.details{font-size:11px;color:#aaaab9;margin-top:7px}.source{font-size:9px;color:#9797a8;display:flex;flex-wrap:wrap;gap:5px 13px;margin:12px 0}.source a{color:#b7b7c9;text-underline-offset:3px}.followups{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}.followups button{border:1px solid #41414c;border-radius:12px;background:#24242b;color:#bebed0;padding:7px 12px;font-size:11px}.error{border-left:2px solid #b3a081;padding-left:12px;color:#d5b996!important}.status{color:#aaaaba;font-size:12px}.pulse::after{content:'…'}.holiday-row{display:flex;gap:22px;padding:9px 0;border-bottom:1px solid #303037;font-size:12px}.holiday-row time{color:#a7a7b9;min-width:90px}.wiki-result{border-left:2px solid #41414e;padding-left:14px;margin:15px 0}.wiki-result a{font-size:13px}.bottom-nav{height:85px;min-height:85px;background:#141416;border-top:1px solid #212125;display:flex;justify-content:center;gap:9px;padding:5px 24px max(5px,env(safe-area-inset-bottom));z-index:2}.bottom-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:145px;border:0;border-radius:16px;background:transparent;color:#9696a1}.bottom-nav button.active{background:#303035;color:#efeff5}.bottom-nav b{font-size:23px;line-height:1.1;font-weight:400}.bottom-nav small{font-size:10px}.bottom-nav span{font-size:11px;font-weight:600}dialog{width:min(660px,calc(100% - 32px));max-height:85dvh;padding:26px;border:1px solid #41414a;border-radius:22px;background:#1c1c21;color:#e4e4ed;box-shadow:0 15px 70px #0008}dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}.dialog-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.dialog-head h2{font-size:20px;margin:0}.flow{padding:14px;background:#292930;border-radius:12px;text-align:center;font-size:12px;margin:18px 0}dialog p{font-size:12px;line-height:1.9}.info-note{font-size:10px;color:#aaaab9;line-height:1.9}.api-row{padding:13px 0;border-bottom:1px solid #33333c;font-size:12px}.api-row small{display:block;color:#a5a5b5;font-size:10px;line-height:1.8;margin-top:5px}#history-list{display:grid;gap:8px}.history-item{background:#28282f;border:1px solid #3e3e47;border-radius:12px;text-align:left;padding:13px 15px;font-size:13px}.history-item small{display:block;font-size:10px;color:#9e9eaf;margin-top:5px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}[hidden]{display:none!important}#mobile-reset{display:none}
+@media(max-width:950px){.sidebar{width:270px;padding:14px 20px}.brand span{display:none}.app-header{height:78px}.side-heading h1{font-size:18px}.composer-area{padding:12px 22px}#conversation{padding:0 22px}.sidebar-bottom{padding-top:12px}}@media(max-width:700px){.app-header{height:71px;padding:0 16px}.brand{font-size:21px}.header-tools{gap:8px}#cloud-status{font-size:9px;max-width:115px}.icon-button{height:36px;min-width:36px;border-radius:12px}.sidebar{display:none}.welcome{padding:25px 5px;min-height:250px}.welcome h2{font-size:21px}.suggestions{gap:6px;margin-top:27px}.suggestions button{font-size:10px;padding:9px 10px}#conversation{padding:0 15px}.composer-area{padding:10px 14px 13px}.composer-foot{font-size:8px}.composer-foot>span:first-child{max-width:75%}.bottom-nav{height:77px;min-height:77px;padding-inline:8px;gap:2px}.bottom-nav button{min-width:0;flex:1;border-radius:13px;gap:2px}.bottom-nav b{font-size:21px}.bottom-nav small{font-size:9px}.bottom-nav span{font-size:10px}.answer-body{padding:14px}.big{font-size:27px}.bubble{font-size:13px}#mobile-reset{display:grid;height:36px;min-width:36px;border:1px solid #303039;background:#232329;border-radius:12px;font-size:19px}dialog{padding:21px}}@media(max-height:650px) and (min-width:701px){.sidebar-bottom small,.side-label{display:none}.app-header{height:65px}.side-heading h1{margin-bottom:13px}.side-examples{gap:0;margin-top:13px}.side-examples button{min-height:30px;padding:4px 6px;font-size:11px}.bottom-nav{height:72px;min-height:72px}.sidebar-bottom{padding-top:5px}.sidebar-bottom p{margin:4px 0}.welcome{min-height:210px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+#messages:empty{display:none}@media(max-height:800px) and (min-width:701px){.sidebar{padding-top:6px}.side-heading h1{margin:8px 0 17px}.side-label{margin-top:18px}.side-examples{gap:0}.side-examples button{min-height:34px}.sidebar-bottom{padding-top:8px}.sidebar-bottom small{display:none}}
+</style></head><body>
+<header class="app-header"><a class="brand" href="./">ZERO<span>無料APIアシスタント</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="history-open" class="icon-button" aria-label="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
+<div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>生成AIのAPI利用料 <strong>¥0</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
+<main><section id="conversation" aria-label="会話"><div id="welcome" class="welcome"><svg viewBox="0 0 24 24" class="welcome-icon" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 1.6-5.5A8 8 0 1 1 20 11Z"/></svg><small>Your questions start here.</small><h2>知りたいことを、ここに。</h2><p>調べる。比べる。計算する。</p><div class="suggestions"><button data-ask="東京の明日の天気は？">明日の天気は？</button><button data-ask="100ドルは何円？">100ドルは何円？</button><button data-ask="人工知能とは？">人工知能とは？</button></div></div><div id="messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><div class="composer-area"><div id="context" class="context" hidden></div><form id="chat-form"><label for="prompt" class="sr-only">質問を入力</label><textarea id="prompt" rows="1" maxlength="500" placeholder="質問を入力…"></textarea><button id="send" aria-label="質問を送信" type="submit">↑</button></form><div class="composer-foot"><span id="storage-note">接続状態を確認しています。</span><span id="stats">API照会 0回</span></div></div></main></div>
+<nav class="bottom-nav" aria-label="機能"><button class="active" id="focus-chat"><b>☏</b><small>Talk</small><span>そうだん</span></button><button data-ask="東京の明日の天気は？"><b>☀</b><small>Weather</small><span>てんき</span></button><button data-ask="100ドルは何円？"><b>⇄</b><small>Exchange</small><span>かんさん</span></button><button data-ask="検索: 宇宙"><b>▤</b><small>Discover</small><span>しらべる</span></button><button id="history-bottom"><b>◷</b><small>History</small><span>りれき</span></button></nav>
+<dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。生成言語モデルは使わない、用途を限定した会話型アシスタントです。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><div id="api-list"></div><p class="info-note">生成AI API料金は0円です。天気の無料APIは非商用向けです。各提供元やGASには利用上限があります。商用展開・大規模運用の完全無料は保証できません。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。</p></dialog>
+<dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><script type="module">const cities = [
+ ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
+].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
+const currencyWords={米ドル:'USD',ドル:'USD',ユーロ:'EUR',日本円:'JPY',円:'JPY',英ポンド:'GBP',ポンド:'GBP',人民元:'CNY',元:'CNY',韓国ウォン:'KRW',ウォン:'KRW',豪ドル:'AUD',カナダドル:'CAD',スイスフラン:'CHF'};
+const moneyPattern = new RegExp(Object.keys(currencyWords).sort((a,b)=>b.length-a.length).join('|')+'|\\b(?:USD|EUR|JPY|GBP|CNY|KRW|AUD|CAD|CHF)\\b','gi');
+function normalize(s){return s.normalize('NFKC').trim();}
+function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
+function parsePlan(raw, context={}){
+ const text=normalize(raw),tasks=[];
+ const found=cities.filter(c=>text.includes(c.name)||text.toLowerCase().includes(c.query.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
+ const isWeather=/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯/.test(text);
+ const isTime=/何時|時刻|時差|世界時計/.test(text);
+ const isFollow=/^(?:じゃあ|では|それなら|それと|あと)?\s*(?:明日|明後日|あさって|今日|\d+日後|.{1,25}(?:なら|では|は)[？?]?$)/.test(text)||found.length>0&&text.length<25;
+ if(isWeather || (context.intent==='weather'&&isFollow&&!isTime&&!/とは|って何|について|検索|調べ|為替|換算|何円|祝日|計算/.test(text))){
+  let places=found.length?found:context.places||[];
+  if(!places.length){const m=text.match(/^(.{2,40}?)(?:の|は)(?:今日の|明日の|明後日の)?(?:天気|気温|雨|服装)/);if(m)places=[{name:m[1],query:m[1]}];}
+  if(context.pending==='weather'&&!places.length&&!isWeather)places=[{name:text.replace(/[？?]/g,''),query:text.replace(/[？?]/g,'')}];
+  tasks.push({kind:'weather',places,offset:getOffset(text,isWeather?0:context.offset||0)});
+ }
+ if(context.pending==='weather'&&!tasks.length&&!isTime&&!/祝日|計算|為替|とは|調べ/.test(text))tasks.push({kind:'weather',places:found.length?found:[{name:text,query:text}],offset:context.offset||0});
+ const monies=[...text.matchAll(moneyPattern)].map(m=>({code:currencyWords[m[0]]||m[0].toUpperCase(),index:m.index,word:m[0]}));
+ if(/為替|換算|何円|何ドル|何ユーロ/.test(text)||monies.length&&/\d|いくら/.test(text)){
+  const first=monies[0];const before=first?text.slice(0,first.index):text;
+  const amountMatch=before.match(/([\d,]+(?:\.\d+)?)\s*$/);
+  const amount=amountMatch?Number(amountMatch[1].replaceAll(',','')):context.intent==='currency'?context.amount||1:1;
+  tasks.push({kind:'currency',base:first?.code||context.base||'USD',quote:monies[1]?.code||(context.intent==='currency'?context.quote:'JPY')||'JPY',amount});
+ }
+ if(/祝日|連休/.test(text))tasks.push({kind:'holiday',year:Number(text.match(/(20\d{2})年/)?.[1])||null,next:/次|今後|これから/.test(text)});
+ if(isTime)tasks.push({kind:'time',places:found.length?found:context.places||[]});
+ const calc=text.match(/^(?:計算(?:して)?[：:\s]*)?([\d\s.()+\-*/×÷^%]+)(?:を計算(?:して)?|は[？?]?|=[？?]?)?$/);
+ if(calc&&/[+\-*/×÷^%]/.test(calc[1]))tasks.push({kind:'calc',expression:calc[1]});
+ const knowledge=text.match(/^(.{1,100}?)(?:って何|とは(?:何)?|について(?:教えて|調べて|知りたい)?|を(?:調べて|検索して|教えて))[。？?]?$/);
+ const prefix=text.match(/^(?:検索|調べる|知識)[：:\s]+(.{1,100})$/);
+ if(knowledge||prefix)tasks.push({kind:'knowledge',query:(knowledge?.[1]||prefix[1]).trim()});
+ if(/^(もっと詳しく|詳しく|続き)[。？?]?$/.test(text)&&context.query)tasks.push({kind:'knowledge',query:context.query,more:true});
+ return tasks;
+}
+function calculate(raw){
+ if(/(?:\d|\.)\s+(?:\d|\.)/.test(normalize(raw)))throw Error('数字の間の空白を確認してください。');
+ const expression=normalize(raw).replaceAll('×','*').replaceAll('÷','/').replace(/\s/g,'');
+ const tokens=expression.match(/(?:\d+(?:\.\d*)?|\.\d+)|[()+\-*/^%]/g)||[];
+ if(tokens.join('')!==expression||tokens.length>120)throw Error('数字と + − × ÷ ^ %、括弧で入力してください。');
+ let i=0;
+ function primary(){let v;const t=tokens[i++];if(t==='('){v=sum();if(tokens[i++]!==')')throw Error('括弧を確認してください。');}else if(t!==undefined&&/^(?:\d|\.)/.test(t))v=Number(t);else throw Error('式を確認してください。');while(tokens[i]==='%'){i++;v/=100;}return v;}
+ function power(){let v=primary();if(tokens[i]==='^'){i++;v=v**unary();}return v;}
+ function unary(){if(tokens[i]==='+'){i++;return unary();}if(tokens[i]==='-'){i++;return -unary();}return power();}
+ function product(){let v=unary();while(tokens[i]==='*'||tokens[i]==='/'){const op=tokens[i++],r=unary();if(op==='/'&&r===0)throw Error('0では割れません。');v=op==='*'?v*r:v/r;}return v;}
+ function sum(){let v=product();while(tokens[i]==='+'||tokens[i]==='-'){const op=tokens[i++],r=product();v=op==='+'?v+r:v-r;}return v;}
+ const value=sum();if(i!==tokens.length||!Number.isFinite(value))throw Error('計算できる範囲の式を入力してください。');return value;
+}
+const weatherLabel=code=>code===0?'快晴':code<=3?'晴れ・くもり':code<=48?'霧':code<=67?'雨':code<=77?'雪':code<=82?'にわか雨':code<=86?'にわか雪':'雷雨';
+function weatherAdvice(rain,min,max){const tips=[];if(rain>=40)tips.push('降水確率が40%以上なので、傘を持つと安心です。');else tips.push('降水確率は40%未満ですが、出発前にも予報を確認してください。');if(max>=28)tips.push('暑さに合わせて、薄手の服と飲み物を。');else if(max<=12)tips.push('防寒できる上着を用意しましょう。');else if(max-min>=8)tips.push('気温差に備えて、脱ぎ着できる上着が便利です。');else tips.push('気温に合わせて服装を調整してください。');return tips.join(' ');}
+
+function deviceToken(){const key='zero.device.v1';let value;try{value=localStorage.getItem(key);}catch{}if(!/^[a-f0-9]{64}$/.test(value||'')){value=[...crypto.getRandomValues(new Uint8Array(32))].map(x=>x.toString(16).padStart(2,'0')).join('');try{localStorage.setItem(key,value);}catch{}}return value;}
+class CloudDB{
+ constructor(){this.available=!!globalThis.google?.script?.run;this.token=this.available?deviceToken():null;}
+ call(action,payload={}){if(!this.available)return Promise.reject(Error('GASに接続されていません。'));return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('GASの応答に時間がかかっています。保存済みか履歴で確認してください。')),45000);google.script.run.withSuccessHandler(result=>{clearTimeout(timer);result?.ok?resolve(result.data):reject(Error(result?.error||'GASの処理に失敗しました。'));}).withFailureHandler(()=>{clearTimeout(timer);reject(Error('GASと通信できません。ページを開き直してください。'));}).api({action,token:this.token,payload});});}
+}
+
+const $=s=>document.querySelector(s);
+const cloud=new CloudDB();
+const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
+const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計'};
+const registry=[
+ ['Open-Meteo','天気予報・都市検索','https://open-meteo.com/','キー不要。非商用は1日10,000回まで無料。天気はCC BY 4.0、地名データはGeoNames。'],
+ ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
+ ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
+ ['Holidays JP','日本の祝日','https://github.com/holidays-jp/api','キー不要・MIT。取得できた年のみ回答します。'],
+ ['ブラウザ内処理','計算・世界時計・会話の条件保持',null,'外部APIへの通信なし。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。']
+];
+function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
+function link(title,url){const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
+function stats(){ $('#stats').textContent=`API照会 ${state.calls}回${state.hits?` · 再利用 ${state.hits}回`:''}`; }
+async function getJSON(url,ttl=900000){
+ const existing=state.cache.get(url);if(existing&&existing.until>Date.now()){state.hits++;stats();return {...existing.payload,cache:true};}
+ if(cloud.available){state.calls++;stats();const payload=await cloud.call('fetch',{url});if(payload.cache){state.hits++;stats();}if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:Date.now()+ttl,payload});return payload;}
+ state.calls++;stats();const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),12000);
+ try{const r=await fetch(url,{signal:abort.signal,credentials:'omit'});if(!r.ok)throw Error(`提供元がHTTP ${r.status}を返しました。時間を置いて試してください。`);const data=await r.json();if(data.error)throw Error('提供元からデータを取得できませんでした。');const payload={data,at:new Date().toISOString(),cache:false};if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:Date.now()+ttl,payload});return payload;}
+ catch(e){if(e.name==='AbortError')throw Error('応答に時間がかかったため、通信を中止しました。もう一度試してください。');if(e instanceof TypeError)throw Error('APIに接続できませんでした。ネットワークや提供元の制限をご確認ください。');throw e;}finally{clearTimeout(timer);}
+}
+function source(parent,title,url,meta){const row=el('div',undefined,'source');row.append(link(title,url));if(meta)row.append(el('span',`${meta.cache?'キャッシュ · ':''}取得 ${new Date(meta.at).toLocaleString('ja-JP')}`));parent.append(row);}
+function p(parent,text,cls){parent.append(el('p',text,cls));}
+function follows(parent,items){const n=el('div',undefined,'followups');for(const text of items){const b=el('button',text);b.type='button';b.dataset.ask=text;n.append(b);}parent.append(n);}
+function localDate(timezone){return new Intl.DateTimeFormat('sv-SE',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+async function resolveCity(city){if(Number.isFinite(city.latitude))return city;const query=new URLSearchParams({name:city.query,count:'3',language:'ja',format:'json'});const {data}=await getJSON(`https://geocoding-api.open-meteo.com/v1/search?${query}`,86400000);const found=data.results?.[0];if(!found)throw Error(`「${city.name}」の都市を特定できませんでした。「京都」「Paris」のような都市名を試してください。`);return {...found,name:[found.name,found.admin1,found.country].filter((v,i,a)=>v&&a.indexOf(v)===i).join('・')};}
+async function weather(task,body){
+ if(task.offset<0||task.offset>6)throw Error('天気予報は今日から6日後まで指定できます。');
+ if(!task.places.length){state.context.pending='weather';state.context.offset=task.offset;p(body,'どこの天気を調べますか？ 都市名を入力してください。');follows(body,['東京','大阪','パリ']);return;}
+ const grid=el('div',undefined,'result-grid');body.append(el('h3',`${task.offset===0?'今日':task.offset===1?'明日':task.offset===2?'明後日':task.offset+'日後'}の天気`),grid);
+ const results=await Promise.allSettled(task.places.slice(0,3).map(async city=>{
+  const place=await resolveCity(city);
+  const query=new URLSearchParams({latitude:place.latitude,longitude:place.longitude,daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',timezone:place.timezone||'auto',forecast_days:'7'});
+  const result=await getJSON(`https://api.open-meteo.com/v1/forecast?${query}`);
+  const d=result.data.daily,i=task.offset;if(!d?.time?.[i]||![d.temperature_2m_max[i],d.temperature_2m_min[i],d.precipitation_probability_max[i],d.weather_code[i]].every(Number.isFinite))throw Error(`${place.name}の指定日の予報がありません。`);
+  return {place,result,min:d.temperature_2m_min[i],max:d.temperature_2m_max[i],rain:d.precipitation_probability_max[i],code:d.weather_code[i],date:d.time[i]};
+ }));
+ const ok=[];
+ for(const r of results){if(r.status==='rejected'){p(body,r.reason.message,'error');continue;}const v=r.value;ok.push(v);const card=el('div',undefined,'result-card');card.append(el('div',v.place.name,'city'),el('div',`${v.date} · 現地の日付`,'sub'),el('div',`${v.max}° / ${v.min}°`,'big'),el('div',`${weatherLabel(v.code)} · 降水確率 ${v.rain}%`,'details'));grid.append(card);p(body,`${v.place.name}：${weatherAdvice(v.rain,v.min,v.max)}`);source(body,'Open-Meteo / GeoNames','https://open-meteo.com/',v.result);}
+ if(ok.length){state.context={...state.context,intent:'weather',pending:null,places:ok.map(v=>v.place),offset:task.offset};if(ok.length>1){const best=[...ok].sort((a,b)=>a.rain-b.rain)[0];p(body,ok.every(v=>v.rain===best.rain)?'比較：降水確率は同じです。気温と服装の目安を比べてください。':`比較：降水確率が最も低いのは${best.place.name}（${best.rain}%）です。現地の予報日ごとの比較です。`);}p(body,'服装・傘の案内は予報値に基づくルール判定です。予報は変わる場合があります。','sub');follows(body,task.offset===0?['明日は？','大阪なら？']:['今日は？','京都なら？']);}
+}
+async function currency(task,body){
+ if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12)throw Error('金額は0〜1兆の数値で指定してください。');
+ const url=`https://api.frankfurter.dev/v2/rate/${task.base.toLowerCase()}/${task.quote.toLowerCase()}`;
+ const r=task.base===task.quote?null:await getJSON(url,3600000);const rate=r?.data.rate??1;
+ if(!Number.isFinite(rate)||rate<=0)throw Error('参考レートを取得できませんでした。');
+ body.append(el('h3','通貨を換算'));const card=el('div',undefined,'result-card');const fmt=n=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(n);
+ card.append(el('div',`${fmt(task.amount)} ${task.base} →`,'sub'),el('div',`${fmt(task.amount*rate)} ${task.quote}`,'big'),el('div',`1 ${task.base} = ${fmt(rate)} ${task.quote}${r?.data.date?` · レート日 ${r.data.date}`:''}`,'details'));body.append(card);p(body,'参考レートでの概算です。実際の両替・決済レートや手数料は含みません。');if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');state.context={...state.context,intent:'currency',base:task.base,quote:task.quote,amount:task.amount};follows(body,['200ドルは何円？','100ユーロは何円？']);
+}
+async function knowledge(task,body){
+ const q=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:task.query,gsrlimit:'3',prop:'extracts|info',explaintext:'1',exintro:'1',exchars:task.more?'1800':'550',inprop:'url',redirects:'1'});
+ const r=await getJSON(`https://ja.wikipedia.org/w/api.php?${q}`,86400000);if(r.data.error)throw Error('百科事典の検索に失敗しました。');const pages=Object.values(r.data.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0));
+ body.append(el('h3',`「${task.query}」の検索結果`));if(!pages.length){p(body,'一致する記事がありませんでした。短い単語や別の表記で検索してください。');return;}
+ for(const page of pages){const row=el('div',undefined,'wiki-result');row.append(link(page.title,`https://ja.wikipedia.org/?curid=${page.pageid}`));p(row,page.extract||'本文の抜粋はありません。記事リンクをご確認ください。');body.append(row);}
+ p(body,'Wikipediaの本文抜粋です。質問に対する自動推論や、複数の記事を統合した要約は行っていません。');source(body,'Wikipedia · 各記事の著者 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',r);state.context={...state.context,intent:'knowledge',query:task.query};follows(body,task.more?['検索: 再生可能エネルギー']:['もっと詳しく']);
+}
+async function holiday(task,body){
+ const r=await getJSON('https://holidays-jp.github.io/api/v1/date.json',86400000);const today=localDate('Asia/Tokyo'),year=task.year||Number(today.slice(0,4));
+ const all=Object.entries(r.data).filter(([date,name])=>/^\d{4}-\d{2}-\d{2}$/.test(date)&&typeof name==='string').sort(([a],[b])=>a.localeCompare(b));if(!all.length)throw Error('祝日データがありません。');
+ const rows=all.filter(([date])=>task.next?date>=today&&(!task.year||date.startsWith(String(year))):date.startsWith(String(year)));
+ body.append(el('h3',task.next?'これからの日本の祝日':`${year}年の日本の祝日`));if(!rows.length)p(body,'指定した期間の祝日が、取得したデータにありません。将来の祝日を推測して補完することはできません。');
+ for(const [date,name] of rows.slice(0,task.next?5:30)){const n=el('div',undefined,'holiday-row');n.append(el('time',date),el('span',name));body.append(n);}
+ p(body,`判定基準：日本時間 ${today}。収録期間 ${all[0][0]}〜${all.at(-1)[0]}。`);source(body,'Holidays JP · MIT','https://github.com/holidays-jp/api',r);state.context={...state.context,intent:'holiday'};
+}
+async function time(task,body){
+ if(!task.places.length){p(body,'都市名と「何時？」を入力してください。例：パリは今何時？');return;}
+ body.append(el('h3','世界のいま'));const grid=el('div',undefined,'result-grid');body.append(grid);
+ for(const city of task.places.slice(0,3)){const place=await resolveCity(city);const timezone=place.timezone||'UTC',now=new Date(),card=el('div',undefined,'result-card');card.append(el('div',place.name,'city'),el('div',new Intl.DateTimeFormat('ja-JP',{timeZone:timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(now),'big'),el('div',`${localDate(timezone)} · ${timezone}`,'sub'));grid.append(card);}
+ p(body,`表示時点の時刻です（端末の時計を使用）。端末時刻が正しいことを前提とします。`);state.context={...state.context,intent:'time',places:task.places};
+}
+function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
+function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'いま対応しているのは、天気・通貨換算・Wikipedia検索・日本の祝日・計算・都市の時刻です。自由な雑談や創作にはまだ対応していません。');follows(body,['東京の明日の天気は？','100ドルは何円？','人工知能とは？','次の祝日は？','計算: 1280 × 1.1','パリは今何時？']);}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${c.intent==='weather'?' · '+(c.places||[]).map(v=>v.name).join(' / '):c.intent==='currency'?` · ${c.base} → ${c.quote}`:''}　／「新しい会話」でリセット`:'';}
+async function ask(raw){
+ const text=raw.trim();if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
+ const user=el('div',undefined,'message user');user.append(el('div',text,'bubble'));$('#messages').append(user);state.transcript.push({role:'あなた',text});
+ const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
+ try{
+  const tasks=parsePlan(text,state.context);loading.remove();
+  if(!tasks.length)help(body);
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation};
+  for(const task of tasks.slice(0,4)){const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}}
+  updateContext();
+ }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
+ finally{
+  const copy=body.cloneNode(true);copy.querySelectorAll('.followups').forEach(n=>n.remove());
+  const answerText=copy.innerText||copy.textContent;state.transcript.push({role:'ZERO',text:answerText});
+  if(cloud.available&&state.historyEnabled){const payload={conversationId:state.conversationId,requestId:crypto.randomUUID(),userText:text,assistantText:answerText,sources:[...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})),context:state.context};await saveTurn(payload,body);}
+  state.busy=false;$('#send').disabled=false;$('#prompt').disabled=false;$('#prompt').focus();
+ }
+}
+$('#chat-form').addEventListener('submit',e=>{e.preventDefault();ask($('#prompt').value);});
+$('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();ask(e.target.value);}});
+$('#prompt').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px';});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ask]');if(b)ask(b.dataset.ask);});
+function reset(){if(state.busy)return;state.context={};state.transcript=[];state.conversationId=crypto.randomUUID();$('#messages').replaceChildren();$('#welcome').hidden=false;$('#context').hidden=true;$('#prompt').value='';$('#prompt').focus();}
+$('#reset').addEventListener('click',reset);
+const mobileReset=el('button','＋','icon-button');mobileReset.id='mobile-reset';mobileReset.setAttribute('aria-label','新しい会話');mobileReset.addEventListener('click',reset);$('.header-tools').prepend(mobileReset);
+for(const [title,scope,url,terms] of registry){const row=el('div',undefined,'api-row');row.append(url?link(title,url):el('strong',title),el('span',` — ${scope}`),el('small',terms));$('#api-list').append(row);}
+for(const id of ['about','about-top'])$('#'+id).addEventListener('click',()=>$('#info').showModal());$('#close-info').addEventListener('click',()=>$('#info').close());$('#info').addEventListener('click',e=>{if(e.target===$('#info')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
+$('#export').addEventListener('click',()=>{if(!state.transcript.length){$('#info').showModal();return;}const content=state.transcript.map(v=>`${v.role}\n${v.text}`).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='zero-conversation.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+$('#focus-chat').addEventListener('click',()=>$('#prompt').focus());
+async function saveTurn(payload,body){
+ $('#storage-note').textContent='会話を保存しています…';
+ try{const result=await cloud.call('saveTurn',payload);$('#storage-note').textContent=result.saved?'スプレッドシートに保存済み':'保存停止中：'+result.reason;}
+ catch(e){$('#storage-note').textContent='保存できませんでした。回答は画面に残っています。';const note=el('p','履歴保存：'+e.message,'error'),retry=el('button','保存を再試行');retry.className='history-item';retry.addEventListener('click',async()=>{retry.disabled=true;note.remove();retry.remove();await saveTurn(payload,body);});body.append(note,retry);}
+}
+async function showHistory(){
+ if(state.busy)return;$('#history-dialog').showModal();const list=$('#history-list');list.replaceChildren();
+ if(!cloud.available){p(list,'この画面は端末内のプレビューです。GAS接続後にスプレッドシートの履歴を表示できます。');return;}
+ p(list,'読み込んでいます…');
+ try{const conversations=await cloud.call('listConversations');list.replaceChildren();if(!conversations.length)p(list,'保存した会話はまだありません。');for(const item of conversations){const b=el('button',item.title,'history-item');b.append(el('small',new Date(item.updatedAt).toLocaleString('ja-JP')));b.addEventListener('click',()=>loadConversation(item.id));list.append(b);}}
+ catch(e){list.replaceChildren();p(list,e.message,'error');}
+}
+async function loadConversation(id){
+ if(state.busy)return;state.busy=true;
+ try{const saved=await cloud.call('getConversation',{id});$('#messages').replaceChildren();$('#welcome').hidden=true;state.context=saved.context;state.conversationId=saved.id;state.transcript=[];
+ for(const m of saved.messages){const message=el('article',undefined,`message ${m.role==='user'?'user':'assistant'}`);if(m.role==='user')message.append(el('div',m.text,'bubble'));else{const body=el('div',undefined,'answer-body');p(body,m.text);for(const s of m.sources||[])if(/^https:\/\//.test(s.url))source(body,s.title,s.url);message.append(body);}$('#messages').append(message);state.transcript.push({role:m.role==='user'?'あなた':'ZERO',text:m.text});}
+ updateContext();$('#history-dialog').close();$('#storage-note').textContent='保存した会話を読み込みました。';$('#conversation').scrollTop=$('#conversation').scrollHeight;
+ }catch(e){p($('#history-list'),e.message,'error');}finally{state.busy=false;}
+}
+for(const id of ['history-open','history-bottom'])$('#'+id).addEventListener('click',showHistory);$('#history-close').addEventListener('click',()=>$('#history-dialog').close());
+async function boot(){
+ if(!cloud.available){$('#cloud-status').textContent='GAS未接続 · プレビュー';$('#storage-note').textContent='プレビュー：履歴は保存されません。外部APIに検索条件を送信します。';$('#database-detail').textContent='GAS内で起動するとスプレッドシートへの保存と履歴の読み込みが有効になります。';return;}
+ state.busy=true;$('#send').disabled=true;
+ try{const data=await cloud.call('bootstrap');state.historyEnabled=data.settings.history_enabled!=='false';if(data.settings.greeting)$('#welcome h2').textContent=data.settings.greeting;if(data.settings.app_name){document.title=data.settings.app_name;$('.brand').firstChild.textContent=data.settings.app_name;}$('#cloud-status').textContent='GAS · Sheets 接続済み';$('#storage-note').textContent=state.historyEnabled?'会話をスプレッドシートに保存します。':'管理者が新しい履歴保存を停止しています。';$('#database-detail').textContent='接続済み：GitHubでソースを管理し、GAS経由で非公開スプレッドシートに保存します。';}
+ catch(e){$('#cloud-status').textContent='GAS接続エラー';$('#storage-note').textContent=e.message;$('#database-detail').textContent=e.message;}
+ finally{state.busy=false;$('#send').disabled=false;}
+}
+boot();
+</script></body></html>
