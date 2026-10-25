@@ -15,7 +15,7 @@ export function sentenceConstraint(input){
  if(matches.length!==1||/[0-9一二三四五六七八九十]\s*$/.test(prompt.slice(0,matches[0].index)))return null;
  const value=matches[0][1];return Number(value)||'一二三四五六七八'.indexOf(value)+1;
 }
-export function japaneseSentenceCount(text){return [...new Intl.Segmenter('ja',{granularity:'sentence'}).segment(text)].filter(part=>/[\p{L}\p{N}]/u.test(part.segment)).length;}
+export function japaneseSentenceCount(text){return [...new Intl.Segmenter('ja',{granularity:'sentence'}).segment(text)].filter(part=>/[\p{L}\p{N}]/u.test(part.segment)&&/[。!?！？][「」『』"'）)\]]*$/u.test(part.segment.trim())).length;}
 export function cloudMessages(input){
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>!['prompt','kind','history'].includes(k))||typeof input.prompt!=='string'||!input.prompt.trim()||input.prompt.length>2000||!Object.hasOwn(guidance,input.kind)||!Array.isArray(input.history)||input.history.length>4)throw Error('invalid_input');
  if(input.history.reduce((n,m)=>n+(typeof m?.text==='string'?m.text.length:0),0)>700||input.history.some(m=>!m||!['user','assistant'].includes(m.role)||typeof m.text!=='string'||m.text.length>800||Object.keys(m).some(k=>!['role','text'].includes(k))))throw Error('invalid_history');
