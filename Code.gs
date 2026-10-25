@@ -78,6 +78,7 @@ function validateAPI_(url){
   provider='books';allowed=['q','limit','page','fields'];expected={limit:'5',fields:'key,title,author_name,first_publish_year'};if(!params.q||params.q.length>80||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
  }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
   provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
+ }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&path==='/earthquakes/feed/v1.0/summary/significant_week.geojson'){provider='quakes';allowed=[];
  }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/SP.POP.TOTL)?$/.test(path)){
   provider='country';allowed=path.includes('/indicator/')?['format','mrv','per_page']:['format'];expected=path.includes('/indicator/')?{format:'json',mrv:'1',per_page:'1'}:{format:'json'};
@@ -103,7 +104,7 @@ function fetchAPI_(url){
  if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
  const expires=responseHeaders.Expires||responseHeaders.expires;
- const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=['isbn','postal'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
+ const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(crossrefLease)releaseCrossref_(crossrefLease);}
 }
 function reserveCrossref_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('学術検索が混み合っています。');try{const props=PropertiesService.getScriptProperties();if(Number(props.getProperty('CROSSREF_BUSY_UNTIL')||0)>Date.now())throw Error('学術検索は別の照会中です。少し待って試してください。');const delay=1100-(Date.now()-Number(props.getProperty('CROSSREF_LAST_END')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));const lease=Utilities.getUuid();props.setProperties({CROSSREF_LEASE:lease,CROSSREF_BUSY_UNTIL:String(Date.now()+360000)});return lease;}finally{lock.releaseLock();}}
