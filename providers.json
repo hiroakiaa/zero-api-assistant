@@ -10,5 +10,6 @@
  {"id":"news","name":"Hacker News","enabled":true,"license":"公式公開API・原文タイトルと議論へのリンクのみ","source_url":"https://github.com/HackerNews/API"},
  {"id":"dictionary","name":"FreeDictionaryAPI.com","enabled":true,"license":"無償公開・キー不要・Wiktionary CC BY-SA 4.0・出典と提供元を表示","source_url":"https://freedictionaryapi.com/"},
  {"id":"isbn","name":"openBD","enabled":true,"license":"本の紹介目的に無償・データ改変不可・更新と削除要請に対応","source_url":"https://openbd.jp/terms/"},
- {"id":"postal","name":"日本の郵便番号API","enabled":true,"license":"無料・商用可・公開実装MIT・日本郵便の公開データを再配信","source_url":"https://github.com/ttskch/jp-postal-code-api"}
+ {"id":"postal","name":"日本の郵便番号API","enabled":true,"license":"無料・商用可・公開実装MIT・日本郵便の公開データを再配信","source_url":"https://github.com/ttskch/jp-postal-code-api"},
+ {"id":"crossref","name":"Crossref","enabled":true,"license":"登録不要の無償公開API・基本書誌のみ・抄録と本文は表示しない・負荷制限と出典表示","source_url":"https://www.crossref.org/documentation/retrieve-metadata/rest-api/"}
 ]
