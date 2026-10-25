@@ -178,16 +178,26 @@ function showTranscriptExport(messages,{busy=false,doc=document,download=downloa
 }
 
 const bookFields={q:'キーワード',title:'書名',author:'著者名'};
+const bookSearchFields='key,title,author_name,first_publish_year,editions,editions.key,editions.title,editions.isbn';
+function selectedBookCandidates(context){
+ const list=context.bookCandidates,page=context.page;
+ if(!Number.isInteger(page)||page<1||page>5||!Array.isArray(list)||list.length>5||!list.length||list.some((v,i)=>!v||v.number!==(page-1)*5+i+1||!/^OL[1-9]\d{0,11}W$/.test(v.workId)||v.editionId!==null&&!/^OL[1-9]\d{0,12}M$/.test(v.editionId)||v.isbn!==null&&(typeof v.isbn!=='string'||isbn13(v.isbn)!==v.isbn))||new Set(list.map(v=>v.workId)).size!==list.length)throw Error('保存した本の候補を確認できません。もう一度検索してください。');
+ return list;
+}
 const bookError=error=>[{kind:'books',error}];
 function parseBookTasks(raw,context={}){
  const text=raw.normalize('NFKC').trim(),clean=text.replace(/[。？?]+$/,'');let match=clean.match(/^(書名検索|著者検索)[：:]\s*(.*)$/);
  if(match){const query=match[2].trim();if(!query||query.length>80)return bookError('検索語は1〜80文字で指定してください。');return [{kind:'books',query,field:match[1]==='書名検索'?'title':'author'}];}
  match=text.match(/^(?:本|書籍|ブック)[：:]\s*(.*)$/);if(match){const query=match[1].replace(/[。？?]$/,'').trim();if(!query||query.length>80)return bookError('検索語は1〜80文字で指定してください。');return [{kind:'books',query}];}
  if(/^(?:論文|文献|検索|知識|調べる|辞書|学術検索|学術|Crossref|周辺記事|文章|翻訳|要約|コード)[：:\s]/.test(text))return [];
+ const choice=clean.match(/^(?:本の)?(\d+)(?:冊目|番(?:目)?)(?:の(?:本|版))?(?:を|の)?(?:詳しく|詳細|版を詳しく)$/),stable=clean.match(/^本の候補[：:]\s*(.*)$/),session=context.intent==='books'||context.intent==='isbn'&&context.bookSelection;
+ if(choice||stable){if(!session)return bookError('先に本を検索して、表示中の候補から選んでください。');try{const candidates=selectedBookCandidates(context),candidate=stable?candidates.find(v=>v.workId===stable[1]):candidates.find(v=>v.number===Number(choice[1]));if(!candidate)return bookError('現在のページにある番号から選んでください。以前のページのボタンは使えません。');if(!candidate.editionId||!candidate.isbn)return bookError('この候補の版には、照合できるISBNが1件に定まりません。作品リンクで版を確認し、ISBNを指定してください。');return [{kind:'isbn',isbn:candidate.isbn,bookSelection:{...candidate}}];}catch(error){return bookError(error.message);}}
+ if(session&&/^(?:本の候補に戻る|候補に戻る)$/.test(clean)){try{selectedBookCandidates(context);return [{kind:'books',query:context.query,page:context.page,...(context.bookField&&context.bookField!=='q'?{field:context.bookField}:{})}];}catch(error){return bookError(error.message);}}
  match=text.match(/^(.{1,80}?)(?:に関する|についての|の)(?:おすすめの)?(?:本|書籍)(?:を(?:探して|検索して|教えて))?[。？?]?$/);
  if(match)return [{kind:'books',query:match[1].replace(/[。？?]$/,'').trim()}];
- if(context.intent!=='books'&&/^(?:本の続き|書籍検索の続き)$/.test(clean))return bookError('先に「本: キーワード」「書名検索: 書名」「著者検索: 名前」で検索してください。');
- if(context.intent==='books'&&/^(?:ほかには|他には|別の候補|次の候補|本の続き|書籍検索の続き|続き)$/.test(clean)){
+ if(!session&&/^(?:本の続き|書籍検索の続き)$/.test(clean))return bookError('先に「本: キーワード」「書名検索: 書名」「著者検索: 名前」で検索してください。');
+ if(session&&/^(?:ほかには|他には|別の候補|次の候補|本の続き|書籍検索の続き|続き)$/.test(clean)){
+  if(context.intent==='isbn'){try{selectedBookCandidates(context);}catch(error){return bookError(error.message);}}
   if(context.booksExhausted)return bookError('この検索の続きはありません。別の検索語で探してください。');
   const page=context.page??1;if(!Number.isInteger(page)||page<1||page>=5)return bookError('書籍検索は5ページまでです。別の検索語で探してください。');
   return [{kind:'books',query:context.query,page:page+1,...(context.bookField&&context.bookField!=='q'?{field:context.bookField}:{})}];
@@ -197,12 +207,20 @@ function parseBookTasks(raw,context={}){
 }
 function bookSearchURL(task){
  if(task.error)throw Error(task.error);const field=task.field||'q',page=task.page??1;if(!Object.hasOwn(bookFields,field)||typeof task.query!=='string'||!task.query.trim()||task.query.length>80||/[\u0000-\u001f]/.test(task.query)||!Number.isInteger(page)||page<1||page>5)throw Error('書籍検索は1〜80文字、5ページまでで指定してください。');
- return 'https://openlibrary.org/search.json?'+new URLSearchParams({[field]:task.query,limit:'5',page:String(page),fields:'key,title,author_name,first_publish_year'});
+ return 'https://openlibrary.org/search.json?'+new URLSearchParams({[field]:task.query,limit:'5',page:String(page),fields:bookSearchFields});
+}
+function bookSearchEdition(editions){
+ if(editions===undefined)return null;
+ if(!editions||typeof editions!=='object'||Array.isArray(editions)||!Array.isArray(editions.docs)||editions.docs.length>1||editions.start!==undefined&&editions.start!==0)throw Error('検索に対応する版の形式を確認できませんでした。');
+ if(!editions.docs.length)return null;const doc=editions.docs[0],id=typeof doc?.key==='string'?doc.key.match(/^(?:\/books\/)?(OL[1-9]\d{0,12}M)$/)?.[1]:null;
+ if(!id||typeof doc.title!=='string'||!doc.title.trim()||doc.title.length>500||doc.isbn!==undefined&&(!Array.isArray(doc.isbn)||doc.isbn.length>300))throw Error('版の識別子・書名・ISBNの形式を確認できませんでした。');
+ const numbers=new Set();for(const raw of doc.isbn||[])if(typeof raw==='string'){try{numbers.add(isbn13(raw));}catch{}}
+ return {id,title:doc.title,isbn:numbers.size===1?[...numbers][0]:null};
 }
 function bookSearchPage(data,page=1){
  if(!data||typeof data!=='object'||!Array.isArray(data.docs)||data.docs.length>5)throw Error('書籍検索の応答形式を確認できませんでした。');
  const count=data.numFound??data.num_found;if(!Number.isSafeInteger(count)||count<0||data.numFound!==undefined&&data.num_found!==undefined&&data.numFound!==data.num_found||data.numFoundExact!==undefined&&typeof data.numFoundExact!=='boolean')throw Error('検索件数を確認できませんでした。');const exact=data.numFoundExact===true,start=(page-1)*5;if(data.start!==undefined&&data.start!==start||exact&&data.docs.length&&count<start+data.docs.length)throw Error('検索ページと返った件数が一致しません。');
- const seen=new Set(),books=data.docs.map(doc=>{const id=typeof doc?.key==='string'?doc.key.match(/^(?:\/works\/)?(OL[1-9]\d{0,11}W)$/)?.[1]:null;if(!id||seen.has(id)||typeof doc.title!=='string'||!doc.title.trim()||doc.title.length>500||doc.author_name!==undefined&&(!Array.isArray(doc.author_name)||doc.author_name.some(a=>typeof a!=='string'||!a.trim()||a.length>300)))throw Error('書名・著者・作品IDの形式を確認できませんでした。');seen.add(id);return {id,title:doc.title,authors:doc.author_name||[],year:Number.isInteger(doc.first_publish_year)&&doc.first_publish_year>0&&doc.first_publish_year<=9999?doc.first_publish_year:null};});
+ const seen=new Set(),books=data.docs.map(doc=>{const id=typeof doc?.key==='string'?doc.key.match(/^(?:\/works\/)?(OL[1-9]\d{0,11}W)$/)?.[1]:null;if(!id||seen.has(id)||typeof doc.title!=='string'||!doc.title.trim()||doc.title.length>500||doc.author_name!==undefined&&(!Array.isArray(doc.author_name)||doc.author_name.some(a=>typeof a!=='string'||!a.trim()||a.length>300)))throw Error('書名・著者・作品IDの形式を確認できませんでした。');seen.add(id);return {id,title:doc.title,authors:doc.author_name||[],year:Number.isInteger(doc.first_publish_year)&&doc.first_publish_year>0&&doc.first_publish_year<=9999?doc.first_publish_year:null,edition:bookSearchEdition(doc.editions)};});
  return {books,count,exact,hasMore:data.docs.length===5&&(!exact||start+data.docs.length<count)};
 }
 function createBooksHandler({getJSON,el,p,link,source,state,follows}){
@@ -210,9 +228,10 @@ function createBooksHandler({getJSON,el,p,link,source,state,follows}){
   const url=bookSearchURL(task),page=task.page??1,field=task.field||'q',result=await getJSON(url,86400000),data=bookSearchPage(result.data,page);
   body.append(el('h3','「'+task.query+'」の本 · '+bookFields[field]+'検索 · '+page+'ページ目'));p(body,(data.exact?'一致件数':'参考一致件数')+'：'+new Intl.NumberFormat('ja-JP').format(data.count)+'件（提供元）');
   if(!data.books.length)p(body,page===1?'この条件の本は見つかりませんでした。別の表記や英語でも試してください。':'このページに表示できる候補はありません。検索結果は更新される場合があります。');
-  for(const [i,book]of data.books.entries()){const row=el('div',undefined,'wiki-result');row.append(link(((page-1)*5+i+1)+'. '+book.title,'https://openlibrary.org/works/'+book.id));p(row,book.authors.length?book.authors.slice(0,3).join('、')+(book.authors.length>3?' ほか'+(book.authors.length-3)+'名':''):'著者：未収録');p(row,book.year===null?'初刊年：未収録・形式未確認':'初刊年（提供元）：'+book.year+'年');body.append(row);}
+  for(const [i,book]of data.books.entries()){const number=(page-1)*5+i+1,row=el('div',undefined,'wiki-result');row.append(link(number+'. '+book.title,'https://openlibrary.org/works/'+book.id));p(row,book.authors.length?book.authors.slice(0,3).join('、')+(book.authors.length>3?' ほか'+(book.authors.length-3)+'名':''):'著者：未収録');p(row,book.year===null?'初刊年：未収録・形式未確認':'初刊年（提供元）：'+book.year+'年');if(book.edition){p(row,'検索に対応する版：'+book.edition.title);if(book.edition.isbn){p(row,'この版のISBN：'+book.edition.isbn);const button=el('button',number+'冊目の版を詳しく','history-item');button.type='button';button.dataset.ask='本の候補:'+book.id;button.dataset.askLabel=number+'冊目の版を詳しく';row.append(button);}else p(row,'この版のISBNは未収録・無効、または複数の番号があります。作品リンクで確認してください。');}else p(row,'検索に対応する版の情報は未収録です。');body.append(row);}
   p(body,'Open Libraryの作品単位の書誌です。版・翻訳・電子書籍の提供状況を示す一覧ではありません。検索は提供元の関連度順で、書名・著者名の完全一致や、本文を無料で読めることを保証しません。');source(body,'Open Library',url,result);
-  const exhausted=!data.hasMore;state.context={...state.context,intent:'books',query:task.query,page,bookField:field,booksExhausted:exhausted};if(page===5&&data.hasMore)p(body,'表示は5ページ・25候補までです。別の検索語で絞り込めます。');if(!exhausted&&page<5)follows(body,['本の続き']);
+  p(body,'版の詳細は検索に対応する1版だけを照会します。すべての版・翻訳の一覧ではありません。例：「2冊目の詳細」。番号は表示中のページから選んでください。');
+  const exhausted=!data.hasMore;state.context={...state.context,intent:'books',query:task.query,page,bookField:field,booksExhausted:exhausted,bookSelection:null,bookCandidates:data.books.map((book,i)=>({number:(page-1)*5+i+1,workId:book.id,editionId:book.edition?.id||null,isbn:book.edition?.isbn||null}))};if(page===5&&data.hasMore)p(body,'表示は5ページ・25候補までです。別の検索語で絞り込めます。');if(!exhausted&&page<5)follows(body,['本の続き']);
  };
 }
 
@@ -1457,20 +1476,28 @@ function openLibraryISBNBook(data,expectedISBN){
  const names=field=>{if(book[field]===undefined)return [];if(!Array.isArray(book[field])||book[field].length>100||book[field].some(x=>!x||typeof x.name!=='string'||!x.name.trim()))throw Error('Open Libraryの著者・出版社の形式を確認できませんでした。');return book[field].map(x=>x.name);};
  return {isbn:normalized,title:book.title,subtitle:typeof book.subtitle==='string'?book.subtitle:'',authors:names('authors'),publishers:names('publishers'),pubdate:typeof book.publish_date==='string'?book.publish_date:'',pages:Number.isInteger(book.number_of_pages)&&book.number_of_pages>0?book.number_of_pages:null,editionURL:'https://openlibrary.org/books/'+edition};
 }
-function createISBNHandler({getJSON,el,p,link,source,state}){
+function checkedISBNSelection(task,context,normalized){
+ if(!task.bookSelection)return null;const value=task.bookSelection;
+ if(!['books','isbn'].includes(context.intent)||context.intent==='isbn'&&!context.bookSelection||!Number.isInteger(value.number)||value.number<1||value.number>25||!/^OL[1-9]\d{0,11}W$/.test(value.workId)||!/^OL[1-9]\d{0,12}M$/.test(value.editionId)||value.isbn!==normalized||!Array.isArray(context.bookCandidates)||!context.bookCandidates.some(v=>v&&v.number===value.number&&v.workId===value.workId&&v.editionId===value.editionId&&v.isbn===normalized))throw Error('選んだ本と現在の候補が一致しません。候補を表示し直してください。');
+ return {number:value.number,workId:value.workId,editionId:value.editionId,isbn:normalized};
+}
+function createISBNHandler({getJSON,el,p,link,source,state,follows=()=>{}}){
  return async function showISBN(task,body){
-  const normalized=isbn13(task.isbn),url=`https://api.openbd.jp/v1/get?isbn=${normalized}`,r=await getJSON(url,3600000),book=bookIntroduction(r.data,normalized);
+  const normalized=isbn13(task.isbn),selection=checkedISBNSelection(task,state.context,normalized),url=`https://api.openbd.jp/v1/get?isbn=${normalized}`,r=await getJSON(url,3600000),book=bookIntroduction(r.data,normalized);
+  const finish=isbnSource=>{state.context={...state.context,intent:'isbn',isbn:normalized,isbnSource,bookSelection:selection};if(selection)follows(body,['本の候補に戻る',...(!state.context.booksExhausted&&state.context.page<5?['本の続き']:[])]);};
+  if(selection){p(body,'検索結果の'+selection.number+'冊目に対応する版のISBNを照会しています。');body.append(link('選んだ作品の版を確認','https://openlibrary.org/works/'+selection.workId));body.append(link('検索で選ばれた版','https://openlibrary.org/books/'+selection.editionId));}
   if(!book){
    p(body,`ISBN ${normalized} はopenBDに未収録のため、Open LibraryのISBN書誌を確認します。`);source(body,'openBD',url,r);
    const otherURL=openLibraryISBNURL(normalized),other=await getJSON(otherURL,86400000),edition=openLibraryISBNBook(other.data,normalized);
+   if(selection&&edition&&edition.editionURL!=='https://openlibrary.org/books/'+selection.editionId)throw Error('ISBN書誌の版IDが検索で選んだ版と異なるため、詳細表示を停止しました。作品リンクで版を確認してください。');
    body.append(el('h3','ISBNから本を紹介 · Open Library'));
-   if(!edition){p(body,'このISBNは、今回照会したopenBD・Open Libraryのどちらにも登録情報がありませんでした。');source(body,'Open Library · ISBN書誌',otherURL,other);state.context={...state.context,intent:'isbn',isbn:normalized,isbnSource:'none'};return;}
+   if(!edition){p(body,'このISBNは、今回照会したopenBD・Open Libraryのどちらにも登録情報がありませんでした。');source(body,'Open Library · ISBN書誌',otherURL,other);finish('none');return;}
    const card=el('div',undefined,'result-card');card.append(el('div',edition.title,'big'),el('div','ISBN '+edition.isbn,'sub'));
    if(edition.subtitle)p(card,'副題：'+edition.subtitle);
    const names=items=>items.slice(0,5).join(' / ')+(items.length>5?' ほか'+(items.length-5)+'件':'');
    p(card,'著者等：'+(names(edition.authors)||'未収録'));p(card,'出版社：'+(names(edition.publishers)||'未収録'));p(card,'刊行日（提供元表記）：'+(edition.pubdate||'未収録'));if(edition.pages!==null)p(card,'ページ数：'+edition.pages);body.append(card);
    p(body,'Open Libraryの版単位の登録書誌です。提供元のISBN欄が指定番号と一致することを確認しました。本文の公開条件・貸出状況は元ページで確認できます。');body.append(link('Open Libraryでこの版を見る',edition.editionURL));source(body,'Open Library · ISBN書誌',otherURL,other);
-   state.context={...state.context,intent:'isbn',isbn:normalized,isbnSource:'openlibrary'};return;
+   finish('openlibrary');return;
   }
   body.append(el('h3','ISBNから本を紹介 · openBD'));
   const card=el('div',undefined,'result-card');card.append(el('div',book.title,'big'),el('div',`ISBN ${book.isbn}`,'sub'));
@@ -1478,7 +1505,7 @@ function createISBNHandler({getJSON,el,p,link,source,state}){
   body.append(card);p(body,'本の基本情報です。詳細は版元ドットコムで確認できます。');
   body.append(link('版元ドットコムでこの本を見る',`https://www.hanmoto.com/bd/isbn/${normalized}`));
   source(body,'openBD · 本の紹介目的で利用',url,r);source(body,'openBD データ利用条件','https://openbd.jp/terms/');
-  state.context={...state.context,intent:'isbn',isbn:normalized,isbnSource:'openbd'};
+  finish('openbd');
  };
 }
 
@@ -1575,7 +1602,7 @@ const FEATURE_CATALOG=[
  {id:'dictionary',category:'research',title:'英英辞書・発音記号',description:'品詞で絞り、語義・同義語・反意語・IPAを確認。',query:'辞書: light | 品詞:動詞',tags:'英語 えいご 英単語 意味 じしょ dictionary 名詞 動詞 発音 同義語 反意語 定義'},
  {id:'books',category:'research',title:'本を探す',description:'キーワード・書名・著者名で検索し、同じ条件で続きを表示。',query:'本: space',tags:'書籍 読書 ほん 著者 図書館 書名検索 著者検索 続き'},
  {id:'isbn',category:'research',title:'ISBNで本を紹介',description:'ISBNを検証。openBD未収録時はOpen Libraryの版情報を確認。',query:'ISBN: 9784780802047',tags:'本 書籍 読書 出版社 書誌 ISBN10 ISBN13'},
- {id:'booksAuthor',category:'research',title:'著者名から本を探す',description:'著者名の検索。作品単位の書誌と初刊年を表示。',query:'著者検索: Tolkien',tags:'本 書籍 著者 作家 読書 トールキン'},
+ {id:'booksAuthor',category:'research',title:'著者名から本を探す',description:'作品と初刊年を検索。番号で対応する版のISBN詳細へ。',query:'著者検索: Tolkien',tags:'本 書籍 著者 作家 読書 トールキン 版 詳細 冊目'},
  {id:'papers',category:'research',title:'生命科学の文献',description:'出版年・OA条件で書誌を検索。本文は元記事へ。',query:'論文: sleep | 年:2024 | OAのみ',tags:'ろんぶん 研究 論文 文献 EuropePMC オープンアクセス OA 出版年'},
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
@@ -1839,7 +1866,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
