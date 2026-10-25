@@ -105,6 +105,7 @@ function parseCurrencyTasks(raw,context={}){
  const task=(amount,base,quote)=>[{kind:'currency',amount,base,quote,...(requestedDate?{date:requestedDate}:{})}];
  try{
   const dateMatches=[...input.matchAll(new RegExp(currencyDatePattern,'g'))];
+  if(dateMatches.length&&!explicit&&!new RegExp(currencyToken,'i').test(input)&&!(active&&new RegExp(`^${currencyDatePattern}(?:なら|では|は)$`).test(input)))return [];
   if(dateMatches.length>1)return currencyError('為替の日付は1回の換算につき1日で指定してください。');
   if(dateMatches.length){
    const match=dateMatches[0],before=input.slice(0,match.index).trim(),after=input.slice(match.index+match[0].length).trim();
@@ -117,7 +118,7 @@ function parseCurrencyTasks(raw,context={}){
   }
   if(/^(?:最新(?:のレート)?(?:で|なら)?|今のレート(?:で|なら)?)$/.test(input)&&active){requestedDate=undefined;return task(context.amount,context.base,context.quote);}
   if(/^最新(?:のレート)?で?\s*/.test(input)){requestedDate=undefined;input=input.replace(/^最新(?:のレート)?で?\s*/,'');}
-  if((active&&/^(?:日付|明日|昨日|今日|先週|来週|去年|来年)(?:なら|のレートで|の為替で)?$/.test(input))||/^(?:\d{4}[-/年])/.test(input))return currencyError('為替の日付は年月日で指定してください。例：「2025-01-15なら？」。最新へ戻すには「最新のレートで」。');
+  if(active&&(/^(?:日付|明日|昨日|今日|先週|来週|去年|来年)(?:なら|のレートで|の為替で)?$/.test(input)||/^\d{4}[-/年][\d年月日/\-]+(?:なら|では|は)?$/.test(input)))return currencyError('為替の日付は年月日で指定してください。例：「2025-01-15なら？」。最新へ戻すには「最新のレートで」。');
   if(active){
    if(/^(?:逆(?:にすると|に|方向|は)?|反対に)$/.test(input))return task(context.amount,context.quote,context.base);
    const amountOnly=input.match(new RegExp(`^(${moneyNumber})(?:なら|では|は)$`));
