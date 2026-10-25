@@ -84,6 +84,7 @@ function validateAPI_(url){
   provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>80||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
  }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&path==='/earthquakes/feed/v1.0/summary/significant_week.geojson'){provider='quakes';allowed=[];
+ }else if(host==='api.worldbank.org'&&path==='/v2/country'){provider='country';allowed=['format','per_page'];expected={format:'json',per_page:'400'};
  }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN))?$/.test(path)){
   provider='country';
   if(!path.includes('/indicator/')){allowed=['format'];expected={format:'json'};}
@@ -110,6 +111,7 @@ function fetchAPI_(url){
  if([429,503].includes(status)){const key=Object.keys(responseHeaders).find(k=>k.toLowerCase()==='retry-after');let until=retryDeadline_(provider,key?responseHeaders[key]:null,Date.now(),status);const waitLock=LockService.getScriptLock();if(!waitLock.tryLock(5000))throw Error('混み合っています。');try{until=Math.max(Number(providerProps.getProperty('COOLDOWN_'+provider)||0),until);providerProps.setProperties({['COOLDOWN_'+provider]:String(until)});}finally{waitLock.releaseLock();}throw Object.assign(Error(cooldownMessage_(until)),{retryAt:until});}
  if(status<200||status>=300)throw Error('提供元がHTTP '+status+'を返しました。時間を置いてお試しください。');
  const text=response.getContentText();if(text.length>150000)throw Error('APIの応答が大きすぎます。');let data;try{data=JSON.parse(text);}catch{throw Error('APIの応答形式が正しくありません。');}if(data.error)throw Error('APIが検索条件を受け付けませんでした。');
+ if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result={data:data,at:new Date().toISOString(),cache:false,expires:expires||null},serialized=JSON.stringify(result),ttl=['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(crossrefLease)releaseCrossref_(crossrefLease);}
