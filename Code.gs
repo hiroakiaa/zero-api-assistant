@@ -62,7 +62,7 @@ function validateAPI_(url){
  if(host==='api.met.no'&&['/weatherapi/locationforecast/2.0/compact','/weatherapi/sunrise/3.0/sun'].includes(path)){
   provider='weather';allowed=path.includes('/sunrise/')?['lat','lon','date','offset']:['lat','lon'];
   if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
-  if(path.includes('/sunrise/')&&(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!/^[-+]\d{2}:\d{2}$/.test(params.offset||'')))throw Error('天文の検索条件が無効です。');
+  if(path.includes('/sunrise/')){const day=new Date(params.date+'T00:00:00Z'),offset=params.offset||'',minutes=(Number(offset.slice(1,3))*60+Number(offset.slice(4,6)))*(offset[0]==='-'?-1:1);if(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==params.date||!/^[-+]\d{2}:[0-5]\d$/.test(offset)||!Number.isInteger(minutes)||minutes<-720||minutes>900||offset==='-00:00')throw Error('天文の検索条件が無効です。');}
  }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=['date'];
   if(Object.prototype.hasOwnProperty.call(params,'date')){const value=params.date,date=new Date(value+'T00:00:00Z'),today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value||value<'1948-01-01'||value>today)throw Error('為替の日付が無効です。');}
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&params.list==='geosearch'){
