@@ -27,7 +27,7 @@ GitHubでソースを管理し、GitHub PagesからGASのWebアプリを表示�
 
 ## 利用できる機能
 
-天気の取得と最大3都市の比較、服装の目安、通貨換算、Wikipedia本文抜粋、日本の祝日、計算、登録都市の時刻。続く質問に都市や日付を引き継ぎます。一般的な雑談・創作・自由な推論には対応していません。
+天気の取得と最大3都市の比較、服装の目安、日の出・日の入り、通貨換算、Wikipedia本文抜粋、書籍検索、生命科学文献、USGSの重要地震、World Bankの首都・人口、Hacker Newsの技術記事、日本の祝日、計算、世界時計。続く質問に都市や日付、書籍・文献の検索条件を引き継ぎます。一般的な雑談・創作・自由な推論には対応していません。
 
 ## 保存とアクセス
 
@@ -37,7 +37,9 @@ GAS接続時は質問・回答・会話条件を保存します。ブラウザ�
 
 ## 費用と制限
 
-生成AIの従量課金はありません。Open-Meteo無料APIは非商用向けです。無料APIやGASの無料枠を超える運用、商用化の完全無料は保証しません。1ブラウザ識別情報につき毎時120リクエスト、アプリ全体で1日1000件の外部API新規取得、1会話100発言、1利用者50会話、各データシート20000行を上限としています。API応答をキャッシュして負荷を抑えます。
+有料API、試用クレジット、カード登録が必要な接続先は使いません。料金を要求しない公開APIと端末内の処理を使い、負荷制限や利用条件に従います。上限時に課金へ切り替える処理はありません。詳細は `POLICY.md` と `providers.json` を確認してください。
+
+1ブラウザ識別情報につき毎時120リクエスト、アプリ全体で1日1000件の外部API新規取得、1会話100発言、1利用者50会話、各データシート20000行をアプリ側の負荷保護上限としています。購入クレジットではありません。GitHub・GAS等にも実行・容量の上限があり、無制限の稼働は保証しません。API応答をキャッシュして負荷を抑えます。
 
 ## 更新
 
@@ -47,7 +49,12 @@ GASに `Code.gs`, `Config.gs`, `App.html`, `appsscript.json` を反映し、既�
 
 ## API出典
 
-- [Open-Meteo / GeoNames](https://open-meteo.com/)
+- [MET Norway](https://api.met.no/doc/TermsOfService)
 - [Frankfurter](https://frankfurter.dev/)
 - [Wikipedia / MediaWiki](https://www.mediawiki.org/wiki/API:Main_page)
 - [Holidays JP](https://github.com/holidays-jp/api)
+- [Open Library](https://openlibrary.org/developers/api)
+- [Europe PMC](https://europepmc.org/RestfulWebService)
+- [USGS](https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php)
+- [World Bank](https://datacatalog.worldbank.org/public-licenses)
+- [Hacker News](https://github.com/HackerNews/API)
