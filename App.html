@@ -329,6 +329,44 @@ function createNewsHandler({getJSON,el,p,link,source,state,follows,now=()=>new D
  };
 }
 
+// Year-number correspondence only. Era-transition years can have two names;
+// this intentionally does not convert dates from Japan's historical calendar.
+const eraYearRanges=[['明治',1868,1912],['大正',1912,1926],['昭和',1926,1989],['平成',1989,2019],['令和',2019,9999]];
+function parseEraYear(raw,context={}){
+ const text=raw.normalize('NFKC').replace(/\s+/g,'').replace(/[。?？]$/,''),explicit=/^(?:和暦|西暦|元号)(?:変換|換算)?[:：]/.test(text),clean=text.replace(/^(?:和暦|西暦|元号)(?:変換|換算)?[:：]/,'');
+ if(context.intent==='eraYear'&&/^(?:和暦|西暦)(?:なら|では|にすると|にして)$/.test(clean))return[{kind:'eraYear',year:context.eraGregorianYear,direction:clean.startsWith('和暦')?'toEra':'toGregorian'}];
+ if(/年齢|歳|生まれ|年度|年後|年前|日数|何日/.test(clean))return[];
+ const hasTarget=/和暦|西暦/.test(clean)||explicit;
+ if((hasTarget||/^(?:明治|大正|昭和|平成|令和)/.test(clean))&&/^(?:(?:明治|大正|昭和|平成|令和)[+-]?\d{5,}|(?:西暦)?[+-]?\d{5,})年/.test(clean))return[{kind:'eraYear',error:'年は1868〜9999年の範囲で指定してください。'}];
+ if(/^(?:明治|大正|昭和|平成|令和)(?:[+-]\d+|\d+\.\d+)年(?:は|を|$)/.test(clean))return[{kind:'eraYear',error:'元号の年数は1以上の整数で指定してください。元年も使えます。'}];
+ if(hasTarget&&/(?:年\d{1,2}月|\d{4}[-/]\d{1,2}[-/])/.test(clean))return[{kind:'eraYear',error:'和暦・西暦の変換は年単位に対応しています。月日を除いて「平成31年は西暦何年？」のように指定してください。'}];
+ const match=clean.match(/^(明治|大正|昭和|平成|令和)(元|\d{1,4})年(.*)$/),western=clean.match(/^(?:西暦)?(\d{4}|今年)年?(.*)$/);
+ if(!match&&!western)return[];
+ const tail=match?match[3]:western[2],suffix=/^(?:(?:は|を|って)?(?:西暦|和暦)(?:だと|では|なら|に|で)?(?:何年|何|変換|換算)?(?:ですか|になりますか|になる|にして|に変換して|に換算して|して|教えて)?|)$/;
+ if(!suffix.test(tail)||western&&!hasTarget&&!clean.startsWith('西暦'))return[];
+ const direction=/和暦/.test(tail)||western?'toEra':'toGregorian';
+ return[{kind:'eraYear',direction,...(match?{era:match[1],eraYear:match[2]==='元'?1:Number(match[2])}:{year:western[1]==='今年'?'current':Number(western[1])})}];
+}
+function convertEraYear(task,today){
+ if(task.error)throw Error(task.error);
+ if(!['toEra','toGregorian'].includes(task.direction))throw Error('変換方向を確認できません。');
+ const current=Number(String(today).slice(0,4));if(!Number.isInteger(current)||current<2019||current>9999)throw Error('現在の年を確認できません。');
+ let year=task.year==='current'?current:task.year;
+ if(task.era){const range=eraYearRanges.find(e=>e[0]===task.era);if(!range||!Number.isInteger(task.eraYear)||task.eraYear<1)throw Error('元号の年数を確認してください。元年は1年です。');year=range[1]+task.eraYear-1;if(year>range[2])throw Error(`${task.era}${task.eraYear}年は、この変換で扱う元号の年の範囲外です。`);}
+ if(!Number.isInteger(year)||year<1868||year>9999)throw Error('年は1868〜9999年の整数で指定してください。');
+ const variants=eraYearRanges.filter(e=>year>=e[1]&&year<=e[2]).map(e=>({era:e[0],year:year-e[1]+1,label:e[0]+(year===e[1]?'元':year-e[1]+1)+'年'}));
+ return{year,direction:task.direction,variants,future:year>current,transition:variants.length>1};
+}
+function createEraYearHandler({el,p,state,localDate,follows}){
+ return(task,body)=>{const result=convertEraYear(task,localDate());body.append(el('h3','和暦・西暦の年変換'));
+  body.append(el('div',result.direction==='toGregorian'?result.year+'年':result.variants.map(v=>v.label).join(' ／ '),'big'));
+  if(result.transition)p(body,`${result.year}年は改元年のため、月日によって ${result.variants.map(v=>v.label).join('・')} が使われます。`);
+  if(result.future)p(body,'将来の年は、現在の元号「令和」が続く場合の年数として換算しています。');
+  if(result.year<1873)p(body,'明治5年以前は年番号の対応だけを示しています。旧暦の月日を西暦の日付へ換算する処理ではありません。');
+  p(body,'端末内で年番号を換算しました。');state.context={...state.context,intent:'eraYear',pending:null,eraGregorianYear:result.year};follows(body,[result.direction==='toGregorian'?'和暦なら？':'西暦なら？','今年は和暦何年？']);
+ };
+}
+
 const cities = [
  ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
@@ -346,6 +384,7 @@ function parsePlan(raw, context={}){
  const jpHolidays=parseJapaneseHolidays(text,context);if(jpHolidays.length)return jpHolidays;
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
  const business=parseBusinessTasks(text);if(business.length)return business;
+ const era=parseEraYear(text,context);if(era.length)return era;
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const trend=parseCountryTrend(text,context);if(trend.length)return trend;
  const stats=parseCountryStats(text,context);if(stats.length)return stats;
@@ -1626,6 +1665,7 @@ const FEATURE_CATALOG=[
  {id:'speedUnits',category:'tools',title:'速度を換算',description:'m/s・km/h・mph・ノットを端末内で換算。',query:'60mphは何km/h？',tags:'速度 そくど 風速 時速 秒速 マイル ノット',local:true},
  {id:'durationUnits',category:'tools',title:'時間の長さを換算',description:'ミリ秒・秒・分・時間・日を換算。1日は24時間。',query:'90分は何時間？',tags:'時間 じかん 秒 分 ミリ秒 日 換算',local:true},
  {id:'dataUnits',category:'tools',title:'データ量を換算',description:'MBとMiB、バイトとビットを区別して換算。',query:'1GiBは何MB？',tags:'データ 容量 バイト ビット MB MiB GB GiB KB キロ メガ ギガ',local:true},
+ {id:'eraYear',category:'tools',title:'和暦・西暦の年変換',description:'明治〜令和を年単位で換算。改元年は両方の元号を表示。',query:'1989年は和暦何年？',tags:'和暦 西暦 元号 われき せいれき 明治 大正 昭和 平成 令和 元年 年変換',local:true},
  {id:'date',category:'tools',title:'日付計算',description:'日・月・年を加減し、計算した日付で会話を続ける。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
  {id:'dateMonths',category:'tools',title:'月・年で日付を計算',description:'同じ日がない月は月末に合わせ、補正を表示。',query:'2026-01-31の1か月後は何日？',tags:'日付 ひづけ 月 年 誕生日 記念日 月末 翌月 翌年',local:true},
  {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
@@ -1870,6 +1910,7 @@ const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],
 const names={countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.cloudAI='クラウドAI';
+names.eraYear='和暦・西暦';
 names.unitsGuide='単位換算';names.quakesGuide='地震情報';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
@@ -1940,7 +1981,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
