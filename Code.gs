@@ -8,12 +8,13 @@ const SCHEMA = {
 function doGet(){return HtmlService.createHtmlOutputFromFile('App').setTitle('ZERO').addMetaTag('viewport','width=device-width,initial-scale=1,viewport-fit=cover').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function api(request){
  try{
-  if(!request||!['bootstrap','fetch','saveTurn','listConversations','getConversation'].includes(request.action))throw Error('対応していない操作です。');
+  if(!request||!['bootstrap','fetch','saveTurn','listConversations','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
   if(!/^[a-f0-9]{64}$/.test(request.token||''))throw Error('ブラウザの識別情報が無効です。');
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
   switch(request.action){
-   case 'bootstrap':data={version:'5.0.0',settings:settings_(),conversations:listConversations_(owner)};break;
+   case 'bootstrap':data={version:'5.0.0',settings:settings_(),conversations:listConversations_(owner),cloudAIEnabled:cloudAIEnabled_()};break;
+   case 'generate':data=generateCloudAI_(payload);break;
    case 'fetch':data=fetchAPI_(payload.url);break;
    case 'saveTurn':data=saveTurn_(owner,payload);break;
    case 'listConversations':data=listConversations_(owner);break;
