@@ -15,12 +15,57 @@
 .trend-plot{display:block;width:100%;height:110px;margin:12px 0 4px}.trend-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin:10px 0 14px}.trend-table th,.trend-table td{padding:6px 8px;border-bottom:1px solid #363640}.trend-table th{text-align:left;font-weight:500}.trend-table td{text-align:right;overflow-wrap:anywhere}
 
 .csv-preview-content{max-height:55dvh;overflow:auto;white-space:pre;user-select:text;font-size:11px;line-height:1.8;padding:12px;background:#141418;border:1px solid #363640;border-radius:10px}.trend-export{margin-right:8px;margin-top:6px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+.wiki-choices{display:grid;gap:8px;margin-top:10px}.wiki-choices .history-item{width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
 <main><section id="conversation" aria-label="会話"><div id="welcome" class="welcome"><svg viewBox="0 0 24 24" class="welcome-icon" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 1.6-5.5A8 8 0 1 1 20 11Z"/></svg><small>Your questions start here.</small><h2>知りたいことを、ここに。</h2><p>調べる。比べる。計算する。</p><div class="suggestions"><button data-ask="東京の明日の天気は？">明日の天気は？</button><button data-ask="100ドルは何円？">100ドルは何円？</button><button data-ask="人工知能とは？">人工知能とは？</button></div></div><div id="messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><div class="composer-area"><div id="context" class="context" hidden></div><form id="chat-form"><label for="prompt" class="sr-only">質問を入力</label><textarea id="prompt" rows="1" maxlength="500" placeholder="質問を入力…"></textarea><button id="send" aria-label="質問を送信" type="submit">↑</button></form><div class="composer-foot"><span id="storage-note">接続状態を確認しています。</span><span id="stats">API照会 0回</span></div></div></main></div>
 <dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。起動時に対応する全モデルを順番に準備し、端末内LLMによる会話・文章生成も使えます。初回のモデル取得は合計約2.7GB＋実行ファイルです。有料の推論APIには接続しません。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。</p></dialog>
-<dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">const newsFeeds={top:{path:'topstories',label:'注目順'},new:{path:'newstories',label:'新着順'},best:{path:'beststories',label:'高評価順'}};
+<dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">const wikiBase='https://ja.wikipedia.org/w/api.php';
+const wikiCommon={action:'query',format:'json',origin:'*',prop:'extracts|info|pageprops',explaintext:'1',exintro:'1',inprop:'url',ppprop:'disambiguation',redirects:'1'};
+const wikiId=id=>Number.isSafeInteger(id)&&id>0&&id<=999999999999;
+const wikiTitle=title=>typeof title==='string'&&!!title.trim()&&title.length<=300&&!/[\u0000-\u001f]/.test(title);
+const wikiError=error=>[{kind:'knowledge',error}];
+function wikiCandidates(context){const list=context.wikiCandidates;if(!Array.isArray(list)||!list.length||list.length>3||list.some(v=>!v||!wikiId(v.id)||!wikiTitle(v.title))||new Set(list.map(v=>v.id)).size!==list.length)throw Error('記事候補を確認できません。検索し直してください。');return list;}
+function parseKnowledgeFollow(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
+ const direct=text.match(/^百科事典の記事[：:]\s*(.*)$/);if(direct){const id=Number(direct[1]);if(!/^\d{1,12}$/.test(direct[1])||!wikiId(id))return wikiError('記事IDは正の整数1件で指定してください。');return [{kind:'knowledge',pageId:id,more:true}];}
+ const choice=text.match(/^(?:百科事典の|候補の)?(\d+)番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?$/);
+ if(context.intent!=='knowledge')return choice&&/^百科事典/.test(text)?wikiError('先に百科事典を検索して候補を表示してください。'):[];
+ try{
+  if(choice){const candidates=wikiCandidates(context),index=Number(choice[1])-1;if(index<0||index>=candidates.length)return wikiError('候補は1〜'+candidates.length+'番から選んでください。');return [{kind:'knowledge',query:context.query,pageId:candidates[index].id,more:true}];}
+  if(/^(?:候補に戻る|候補を表示)$/.test(text))return [{kind:'knowledge',query:context.query,choose:true}];
+  if(/^(?:もっと詳しく|詳しく|続き)$/.test(text)&&context.query){if(context.wikiCandidates){const candidates=wikiCandidates(context),id=context.wikiSelected||(candidates.length===1?candidates[0].id:null);if(id&&!candidates.some(v=>v.id===id))return wikiError('選択した記事を確認できません。候補から選び直してください。');return [{kind:'knowledge',query:context.query,...(id?{pageId:id,more:true}:{choose:true})}];}return [{kind:'knowledge',query:context.query,more:true}];}
+ }catch(error){return wikiError(error.message);}return [];
+}
+function knowledgeURL(task){
+ if(task.pageId!==undefined){if(!wikiId(task.pageId))throw Error('記事IDを確認できません。');return wikiBase+'?'+new URLSearchParams({...wikiCommon,pageids:String(task.pageId),exchars:'1200'});}
+ if(typeof task.query!=='string'||!task.query.trim()||task.query.length>100)throw Error('検索語は1〜100文字で指定してください。');
+ return wikiBase+'?'+new URLSearchParams({...wikiCommon,generator:'search',gsrsearch:task.query,gsrlimit:'3',exchars:task.more?'1200':'550'});
+}
+function knowledgePages(data,pageId){
+ if(!data||typeof data!=='object'||Array.isArray(data)||data.error)throw Error('百科事典の応答を確認できませんでした。');const pages=data.query?.pages;if(pages===undefined)return [];
+ if(!pages||typeof pages!=='object'||Array.isArray(pages)||Object.keys(pages).length>(pageId?1:3))throw Error('記事候補の件数を確認できませんでした。');
+ const results=[],indexes=new Set();for(const [key,page]of Object.entries(pages)){if(page&&Object.hasOwn(page,'missing'))continue;if(!page||!wikiId(page.pageid)||String(page.pageid)!==key||page.ns!==0||!wikiTitle(page.title)||page.extract!==undefined&&(typeof page.extract!=='string'||page.extract.length>10000))throw Error('記事の識別子・名前空間・表題・抜粋を確認できませんでした。');if(pageId&&page.pageid!==pageId)throw Error('選択した記事とは異なる応答です。検索し直して候補を選んでください。');if(!pageId){if(!Number.isInteger(page.index)||page.index<1||page.index>3||indexes.has(page.index))throw Error('記事候補の順序を確認できませんでした。');indexes.add(page.index);}if(page.pageprops!==undefined&&(!page.pageprops||typeof page.pageprops!=='object'||Array.isArray(page.pageprops)))throw Error('記事の分類を確認できませんでした。');results.push({id:page.pageid,title:page.title,extract:page.extract||'',index:page.index||1,disambiguation:Object.hasOwn(page.pageprops||{},'disambiguation')});}
+ return results.sort((a,b)=>a.index-b.index);
+}
+function createKnowledgeHandler({getJSON,el,p,link,source,state,follows}){
+ function choices(body,candidates){p(body,'番号で記事を選んでください。例：「1番を詳しく」。');const group=el('div',undefined,'wiki-choices');for(const [i,c]of candidates.entries()){const button=el('button',(i+1)+'. '+c.title+' の冒頭を詳しく','history-item');button.type='button';button.dataset.ask='百科事典の記事:'+c.id;button.dataset.askLabel=c.title+' の冒頭を詳しく';group.append(button);}body.append(group);}
+ function article(body,page,number){const row=el('div',undefined,'wiki-result');row.append(link((number?number+'. ':'')+page.title,'https://ja.wikipedia.org/?curid='+page.id));if(page.disambiguation)p(row,'曖昧さ回避ページです。複数の意味を案内しているため、元記事で候補を確認するか、検索語を具体化してください。');else p(row,page.extract||'冒頭の抜粋は未収録です。記事リンクをご確認ください。');row.append(link('この記事の著者・編集履歴','https://ja.wikipedia.org/w/index.php?curid='+page.id+'&action=history'));body.append(row);}
+ return async function knowledge(task,body){
+  if(task.error)throw Error(task.error);
+  if(task.choose){const candidates=wikiCandidates(state.context);body.append(el('h3','「'+(state.context.query||'')+'」の記事候補'));choices(body,candidates);state.context={...state.context,intent:'knowledge',wikiSelected:null};return;}
+  const url=knowledgeURL(task),result=await getJSON(url,86400000),pages=knowledgePages(result.data,task.pageId);body.append(el('h3',task.pageId?'選んだ記事の冒頭':'「'+task.query+'」の検索結果'));
+  if(!pages.length){p(body,task.pageId?'選んだ記事は未収録・削除等により取得できませんでした。検索し直してください。':'一致する記事がありませんでした。短い単語や別の表記で検索してください。');return;}
+  pages.forEach((page,i)=>article(body,page,task.pageId?null:i+1));
+  p(body,'Wikipediaの冒頭文の原文抜粋です。提供元による省略を含む場合があります。複数の記事を統合した回答は生成していません。取得済みデータは最大24時間再利用します。');source(body,'Wikipedia · 著者は各記事の編集履歴を参照 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',result);
+  if(task.pageId){let previous=[];try{previous=wikiCandidates(state.context);}catch{}const same=state.context.intent==='knowledge'&&previous.some(c=>c.id===task.pageId);state.context={...state.context,intent:'knowledge',query:same?state.context.query:pages[0].title,wikiCandidates:same?previous:pages.map(v=>({id:v.id,title:v.title})),wikiSelected:task.pageId};follows(body,['候補に戻る']);}
+  else {state.context={...state.context,intent:'knowledge',query:task.query,wikiCandidates:pages.map(v=>({id:v.id,title:v.title})),wikiSelected:null};choices(body,state.context.wikiCandidates);}
+ };
+}
+
+const newsFeeds={top:{path:'topstories',label:'注目順'},new:{path:'newstories',label:'新着順'},best:{path:'beststories',label:'高評価順'}};
 const newsError=error=>[{kind:'news',error}];
 function parseNewsTasks(raw,context={}){
  const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
@@ -67,6 +112,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const selectedKnowledge=parseKnowledgeFollow(text,context);if(selectedKnowledge.length)return selectedKnowledge;
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
  const nearby=parseNearby(text,context,cities);if(nearby.length)return nearby;
  const convertedTime=parseTimeConversion(text,context);if(convertedTime.length)return convertedTime;
@@ -99,7 +145,6 @@ function parsePlan(raw, context={}){
  const prefix=text.match(/^(?:検索|調べる|知識)[：:\s]+(.{1,100})$/);
  if(knowledge||prefix)tasks.push({kind:'knowledge',query:(knowledge?.[1]||prefix[1]).trim()});
  if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(['weather','holiday','time'].includes(tasks[i].kind))tasks.splice(i,1);
- if(/^(もっと詳しく|詳しく|続き)[。？?]?$/.test(text)&&context.intent==='knowledge'&&context.query)tasks.push({kind:'knowledge',query:context.query,more:true});
  const extensions=parseExtensions(text,context,found);
  if(extensions.length){for(let i=tasks.length-1;i>=0;i--)if(tasks[i].kind==='knowledge'||tasks[i].kind==='weather'&&(!isWeather||extensions.some(t=>t.kind==='sun')))tasks.splice(i,1);}
  return [...tasks,...extensions];
@@ -1256,7 +1301,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると)|.{1,20}(?:なら|にすると))[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||follow.test(part)&&(index>0||recognize(part,context).length)))return parts;
  return [text];
 }
@@ -1274,7 +1319,7 @@ const FEATURE_CATALOG=[
  {id:'timeConvert',category:'life',title:'都市間で日時を変換',description:'日付のずれと夏時間を反映。重複する現地時刻は確認します。',query:'時刻変換: 東京 2026-11-01 10:00 → ニューヨーク',tags:'時差 会議 予定 日時 時刻 夏時間 DST 海外 旅行 タイムゾーン',local:true},
  {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
  {id:'quakes',category:'life',title:'重要地震の公開記録',description:'USGSが重要と分類した過去7日の地震。',query:'日本周辺の最近の地震',tags:'じしん 防災 揺れ USGS'},
- {id:'knowledge',category:'research',title:'百科事典',description:'Wikipediaの本文抜粋と元記事を表示。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア',popular:true},
+ {id:'knowledge',category:'research',title:'百科事典',description:'候補から記事を選び、Wikipediaの冒頭原文を確認。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア 候補 選択 番号 詳しく',popular:true},
  {id:'nearby',category:'life',title:'地点の周辺の記事を探す',description:'座標付きの百科事典記事を距離順に表示。施設・営業情報の一覧ではありません。',query:'周辺記事: 京都駅',tags:'周辺 地理 散策 場所 地点 近く 京都 駅 半径 距離 Wikipedia'},
  {id:'dictionary',category:'research',title:'英英辞書・発音記号',description:'英単語の英語定義とIPA発音記号。',query:'辞書: hello',tags:'英語 えいご 英単語 意味 じしょ dictionary'},
  {id:'books',category:'research',title:'本を探す',description:'キーワードから書名・著者・初刊年を検索。',query:'本: space',tags:'書籍 読書 ほん 著者 図書館'},
@@ -1506,13 +1551,7 @@ function scrollConversationToEnd(smooth=true){if(conversationScrollFrame)cancelA
 async function resolveCity(city){if(Number.isFinite(city.latitude))return {...city,timezone:city.timezone==='UTC'?null:city.timezone};const query=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:city.query,gsrlimit:'3',prop:'coordinates',colimit:'1'});const {data}=await getJSON(`https://ja.wikipedia.org/w/api.php?${query}`,86400000);const found=Object.values(data.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0)).find(p=>p.coordinates?.[0]);if(!found)throw Error(`「${city.name}」の座標を特定できませんでした。都市名を具体的に指定してください。`);return {name:found.title,latitude:found.coordinates[0].lat,longitude:found.coordinates[0].lon,timezone:null};}
 const weather=createWeatherHandler({getJSON,el,p,source,state,follows,resolveCity,localDate});
 
-async function knowledge(task,body){
- const q=new URLSearchParams({action:'query',format:'json',origin:'*',generator:'search',gsrsearch:task.query,gsrlimit:'3',prop:'extracts|info',explaintext:'1',exintro:'1',exchars:task.more?'1800':'550',inprop:'url',redirects:'1'});
- const r=await getJSON(`https://ja.wikipedia.org/w/api.php?${q}`,86400000);if(r.data.error)throw Error('百科事典の検索に失敗しました。');const pages=Object.values(r.data.query?.pages||{}).sort((a,b)=>(a.index||0)-(b.index||0));
- body.append(el('h3',`「${task.query}」の検索結果`));if(!pages.length){p(body,'一致する記事がありませんでした。短い単語や別の表記で検索してください。');return;}
- for(const page of pages){const row=el('div',undefined,'wiki-result');row.append(link(page.title,`https://ja.wikipedia.org/?curid=${page.pageid}`));p(row,page.extract||'本文の抜粋はありません。記事リンクをご確認ください。');body.append(row);}
- p(body,'Wikipediaの本文抜粋です。質問に対する自動推論や、複数の記事を統合した要約は行っていません。');source(body,'Wikipedia · 各記事の著者 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',r);state.context={...state.context,intent:'knowledge',query:task.query};follows(body,task.more?['検索: 再生可能エネルギー']:['もっと詳しく']);
-}
+const knowledge=createKnowledgeHandler({getJSON,el,p,link,source,state,follows});
 async function time(task,body){
  if(!task.places.length){p(body,'都市名と「何時？」を入力してください。例：パリは今何時？');return;}
  body.append(el('h3','世界のいま'));const grid=el('div',undefined,'result-grid'),valid=[];body.append(grid);
@@ -1534,9 +1573,9 @@ async function localAnswer(text,body,head){
  if(!outcome.complete){p(body,outcome.notice,'error');return false;}
  state.context={...state.context,intent:'localAI',localTask:route.task,localHistory:[...history,{role:'user',text,source:'llm'},{role:'assistant',text:answer,source:'llm'}].slice(-4).map(m=>({...m,text:m.text.slice(0,800)}))};return true;
 }
-async function ask(raw){
- const text=raw.trim();if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
- const user=el('div',undefined,'message user');user.append(el('div',text,'bubble'));$('#messages').append(user);state.transcript.push({role:'あなた',text});
+async function ask(raw,displayText){
+ const text=raw.trim(),shownText=displayText||text;if(!text||state.busy)return;state.busy=true;$('#send').disabled=true;$('#prompt').disabled=true;$('#welcome').hidden=true;$('#prompt').value='';$('#prompt').style.height='auto';
+ const user=el('div',undefined,'message user');user.append(el('div',shownText,'bubble'));$('#messages').append(user);state.transcript.push({role:'あなた',text:shownText});
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
@@ -1558,14 +1597,14 @@ async function ask(raw){
  finally{
   const followupTexts=new Set([...body.querySelectorAll('.followups button')].map(b=>b.textContent));
   const answerText=body.innerText.split('\n').filter(line=>!followupTexts.has(line.trim())).join('\n');state.transcript.push({role:'ZERO',text:answerText});
-  if(cloud.available&&state.historyEnabled){const payload={conversationId:state.conversationId,requestId:crypto.randomUUID(),userText:text,assistantText:answerText,sources:[...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})),context:state.context};await saveTurn(payload,body);}
+  if(cloud.available&&state.historyEnabled){const payload={conversationId:state.conversationId,requestId:crypto.randomUUID(),userText:shownText,assistantText:answerText,sources:[...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})),context:state.context};await saveTurn(payload,body);}
   state.busy=false;$('#send').disabled=false;$('#prompt').disabled=false;$('#prompt').focus({preventScroll:true});scrollConversationToEnd();
  }
 }
 $('#chat-form').addEventListener('submit',e=>{e.preventDefault();ask($('#prompt').value);});
 $('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();ask(e.target.value);}});
 $('#prompt').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,160)+'px';});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-ask]');if(b&&!state.busy){$('#skills-dialog')?.close();ask(b.dataset.ask);}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ask]');if(b&&!state.busy){$('#skills-dialog')?.close();ask(b.dataset.ask,b.dataset.askLabel);}});
 function reset(){if(state.busy)return;state.context={};state.transcript=[];state.conversationId=crypto.randomUUID();$('#messages').replaceChildren();$('#welcome').hidden=false;$('#context').hidden=true;$('#prompt').value='';$('#prompt').focus();}
 $('#reset').addEventListener('click',reset);
 const mobileReset=el('button','＋','icon-button');mobileReset.id='mobile-reset';mobileReset.setAttribute('aria-label','新しい会話');mobileReset.addEventListener('click',reset);$('.header-tools').prepend(mobileReset);
