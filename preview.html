@@ -193,6 +193,7 @@ function parseBookTasks(raw,context={}){
  const choice=clean.match(/^(?:本の)?(\d+)(?:冊目|番(?:目)?)(?:の(?:本|版))?(?:を|の)?(?:詳しく|詳細|版を詳しく)$/),stable=clean.match(/^本の候補[：:]\s*(.*)$/),session=context.intent==='books'||context.intent==='isbn'&&context.bookSelection;
  if(choice||stable){if(!session)return bookError('先に本を検索して、表示中の候補から選んでください。');try{const candidates=selectedBookCandidates(context),candidate=stable?candidates.find(v=>v.workId===stable[1]):candidates.find(v=>v.number===Number(choice[1]));if(!candidate)return bookError('現在のページにある番号から選んでください。以前のページのボタンは使えません。');if(!candidate.editionId||!candidate.isbn)return bookError('この候補の版には、照合できるISBNが1件に定まりません。作品リンクで版を確認し、ISBNを指定してください。');return [{kind:'isbn',isbn:candidate.isbn,bookSelection:{...candidate}}];}catch(error){return bookError(error.message);}}
  if(session&&/^(?:本の候補に戻る|候補に戻る)$/.test(clean)){try{selectedBookCandidates(context);return [{kind:'books',query:context.query,page:context.page,...(context.bookField&&context.bookField!=='q'?{field:context.bookField}:{})}];}catch(error){return bookError(error.message);}}
+ if(!session&&clean==='本の候補に戻る')return bookError('先に本を検索して候補を表示してください。');
  match=text.match(/^(.{1,80}?)(?:に関する|についての|の)(?:おすすめの)?(?:本|書籍)(?:を(?:探して|検索して|教えて))?[。？?]?$/);
  if(match)return [{kind:'books',query:match[1].replace(/[。？?]$/,'').trim()}];
  if(!session&&/^(?:本の続き|書籍検索の続き)$/.test(clean))return bookError('先に「本: キーワード」「書名検索: 書名」「著者検索: 名前」で検索してください。');
