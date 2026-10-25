@@ -18,6 +18,7 @@ function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
  const local=parseLocalTasks(text,context);if(local.length)return local;
+ const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
  const found=cities.filter(c=>text.includes(c.name)||text.toLowerCase().includes(c.query.toLowerCase())).sort((a,b)=>text.indexOf(a.name)-text.indexOf(b.name));
  const isWeather=/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯/.test(text);
  const isTime=/何時|時刻|時差|世界時計/.test(text);
@@ -66,6 +67,9 @@ const weatherLabel=code=>code===0?'快晴':code<=3?'晴れ・くもり':code<=48
 function weatherAdvice(rain,min,max){const tips=[];if(rain>=40)tips.push('降水確率が40%以上なので、傘を持つと安心です。');else tips.push('降水確率は40%未満ですが、出発前にも予報を確認してください。');if(max>=28)tips.push('暑さに合わせて、薄手の服と飲み物を。');else if(max<=12)tips.push('防寒できる上着を用意しましょう。');else if(max-min>=8)tips.push('気温差に備えて、脱ぎ着できる上着が便利です。');else tips.push('気温に合わせて服装を調整してください。');return tips.join(' ');}
 
 function deviceToken(){const key='zero.device.v1';let value;try{value=localStorage.getItem(key);}catch{}if(!/^[a-f0-9]{64}$/.test(value||'')){value=[...crypto.getRandomValues(new Uint8Array(32))].map(x=>x.toString(16).padStart(2,'0')).join('');try{localStorage.setItem(key,value);}catch{}}return value;}
+function cacheDeadline(at,ttl,now=Date.now()){
+ const fetched=Date.parse(at);return Number.isFinite(fetched)?Math.min(now+ttl,fetched+ttl):now;
+}
 class CloudDB{
  constructor(){this.available=!!globalThis.google?.script?.run;this.token=this.available?deviceToken():null;}
  call(action,payload={}){if(!this.available)return Promise.reject(Error('GASに接続されていません。'));return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('GASの応答に時間がかかっています。保存済みか履歴で確認してください。')),45000);google.script.run.withSuccessHandler(result=>{clearTimeout(timer);result?.ok?resolve(result.data):reject(Error(result?.error||'GASの処理に失敗しました。'));}).withFailureHandler(()=>{clearTimeout(timer);reject(Error('GASと通信できません。ページを開き直してください。'));}).api({action,token:this.token,payload});});}
@@ -258,24 +262,67 @@ function createLocalHandlers({el,p,state,localDate,source,follows}){
  };
 }
 
+function isbn13(raw){
+ const value=String(raw).normalize('NFKC').toUpperCase().replace(/[\s\u2010-\u2015-]/g,'');
+ const error=()=>{throw Error('ISBNの桁数と末尾の検査数字を確認してください。ISBN-10または978/979で始まるISBN-13に対応します。');};
+ let digits=value;
+ if(/^\d{9}[\dX]$/.test(value)){
+  const sum=[...value].reduce((n,d,i)=>n+(d==='X'?10:Number(d))*(10-i),0);
+  if(sum%11!==0)error();
+  digits='978'+value.slice(0,9);
+  digits+=String((10-[...digits].reduce((n,d,i)=>n+Number(d)*(i%2?3:1),0)%10)%10);
+ }
+ if(!/^(978|979)\d{10}$/.test(digits)||[...digits].reduce((n,d,i)=>n+Number(d)*(i%2?3:1),0)%10!==0)error();
+ return digits;
+}
+function parseISBNTasks(text){
+ const prefix=text.match(/^ISBN(?:-(?:10|13))?\s*[：:]?\s*(.+?)[。？?]?$/i);
+ if(prefix)return [{kind:'isbn',isbn:prefix[1]}];
+ // Bare ISBN-13 only: do not send ordinary telephone numbers to a book API.
+ if(/^(?:978|979)[\d\s\u2010-\u2015-]{10,20}[？?]?$/.test(text))return [{kind:'isbn',isbn:text.replace(/[？?]$/,'')}];
+ return [];
+}
+function bookIntroduction(data,expectedISBN){
+ if(!Array.isArray(data)||data.length!==1)throw Error('書誌情報の応答形式を確認できませんでした。');
+ if(data[0]===null)return null;
+ const summary=data[0]?.summary;
+ if(!summary||summary.isbn!==expectedISBN||typeof summary.title!=='string'||!summary.title.trim())throw Error('指定したISBNと書誌情報が一致しないため、紹介の表示を停止しました。');
+ const field=name=>typeof summary[name]==='string'?summary[name]:'';
+ return {isbn:summary.isbn,title:summary.title,author:field('author'),publisher:field('publisher'),pubdate:field('pubdate'),series:field('series'),volume:field('volume')};
+}
+function createISBNHandler({getJSON,el,p,link,source,state}){
+ return async function showISBN(task,body){
+  const normalized=isbn13(task.isbn),url=`https://api.openbd.jp/v1/get?isbn=${normalized}`,r=await getJSON(url,3600000),book=bookIntroduction(r.data,normalized);
+  body.append(el('h3','ISBNから本を紹介'));
+  if(!book){p(body,`ISBN ${normalized} は、現在のopenBD収録データにありません。`);source(body,'openBD',url,r);return;}
+  const card=el('div',undefined,'result-card');card.append(el('div',book.title,'big'),el('div',`ISBN ${book.isbn}`,'sub'));
+  for(const [label,value]of [['著者等',book.author],['出版社',book.publisher],['シリーズ',book.series],['巻次',book.volume],['刊行日（提供元表記）',book.pubdate]])if(value)p(card,`${label}：${value}`);
+  body.append(card);p(body,'本の基本情報です。詳細は版元ドットコムで確認できます。');
+  body.append(link('版元ドットコムでこの本を見る',`https://www.hanmoto.com/bd/isbn/${normalized}`));
+  source(body,'openBD · 本の紹介目的で利用',url,r);source(body,'openBD データ利用条件','https://openbd.jp/terms/');
+  state.context={...state.context,intent:'isbn',isbn:normalized};
+ };
+}
+
 const $=s=>document.querySelector(s);
 const cloud=new CloudDB();
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
-const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',...extraLabels};
+const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',...extraLabels};
 const registry=[
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
  ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
  ['Holidays JP','日本の祝日','https://github.com/holidays-jp/api','キー不要・MIT。取得できた年のみ回答します。'],
  ['ブラウザ内処理','計算・単位換算・日付計算・世界時計',null,'外部APIへの通信なし。日付計算の「今日」は日本時間です。登録済み都市の時刻は端末の時計とタイムゾーン情報から計算します。'],
- ...extraRegistry
+ ...extraRegistry,
+ ['openBD','ISBNから本を紹介','https://openbd.jp/','本の紹介目的で無償利用。書誌を改変せず表示し、更新を反映します。利用条件：https://openbd.jp/terms/']
 ];
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 function link(title,url){try{if(!/^https?:$/.test(new URL(url).protocol))return el('span',title);}catch{return el('span',title);}const a=el('a',title);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
 function stats(){ $('#stats').textContent=`API照会 ${state.calls}回${state.hits?` · 再利用 ${state.hits}回`:''}`; }
 async function getJSON(url,ttl=900000){
  const existing=state.cache.get(url);if(existing&&existing.until>Date.now()){state.hits++;stats();return {...existing.payload,cache:true};}
- if(cloud.available){state.calls++;stats();const payload=await cloud.call('fetch',{url});if(payload.cache){state.hits++;stats();}if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:Date.now()+ttl,payload});return payload;}
+ if(cloud.available){state.calls++;stats();const payload=await cloud.call('fetch',{url});if(payload.cache){state.hits++;stats();}if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:cacheDeadline(payload.at,ttl),payload});return payload;}
  state.calls++;stats();const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),12000);
  try{const r=await fetch(url,{signal:abort.signal,credentials:'omit'});if(!r.ok)throw Error(`提供元がHTTP ${r.status}を返しました。時間を置いて試してください。`);const data=await r.json();if(data.error)throw Error('提供元からデータを取得できませんでした。');const payload={data,at:new Date().toISOString(),cache:false};if(state.cache.size>=100)state.cache.delete(state.cache.keys().next().value);state.cache.set(url,{until:Date.now()+ttl,payload});return payload;}
  catch(e){if(e.name==='AbortError')throw Error('応答に時間がかかったため、通信を中止しました。もう一度試してください。');if(e instanceof TypeError)throw Error('APIに接続できませんでした。ネットワークや提供元の制限をご確認ください。');throw e;}finally{clearTimeout(timer);}
@@ -339,7 +386,7 @@ async function ask(raw){
  try{
   const tasks=parsePlan(text,state.context);loading.remove();
   if(!tasks.length)help(body);
-  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
   for(const task of tasks.slice(0,4)){const section=el('section');body.append(section);const progress=el('div',`${names[task.kind]}を確認中`,'status pulse');section.append(progress);try{await handlers[task.kind](task,section);}catch(e){p(section,e.message,'error');}finally{progress.remove();}}
   updateContext();
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
@@ -362,6 +409,7 @@ for(const id of ['about','about-top'])$('#'+id).addEventListener('click',()=>$('
 $('#export').addEventListener('click',()=>{if(!state.transcript.length){$('#info').showModal();return;}const content=state.transcript.map(v=>`${v.role}\n${v.text}`).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='zero-conversation.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
 $('#focus-chat').addEventListener('click',()=>$('#prompt').focus());
 const questionExamples=[['天気','東京と大阪の明日の天気を比較して'],['日の出・日の入り','東京の明日の日の出は？'],['通貨換算','100ユーロは何円？'],['百科事典','人工知能とは？'],['英英辞書・発音記号','辞書: hello'],['本を探す','本: space'],['生命科学の文献','論文: 睡眠'],['地震の公開記録','日本周辺の最近の地震'],['国の首都・人口','フランスの人口'],['技術ニュース','技術ニュース'],['日本の祝日','次の祝日は？'],['計算','計算: (1280 + 980) × 1.1'],['単位換算','5kmは何マイル？'],['日付計算','今日から100日後は何日？'],['日付の差','2026-10-25から2027-01-01まで何日？'],['世界時計','ロンドンと東京は今何時？']];
+questionExamples.splice(questionExamples.findIndex(([title])=>title==='本を探す')+1,0,['ISBNで本を紹介','ISBN: 9784780802047']);
 for(const [title,query]of questionExamples){const button=el('button',undefined,'skill-option');button.dataset.ask=query;button.append(el('strong',title),el('small',query));$('#skill-examples')?.append(button);}
 $('#discover-open')?.addEventListener('click',()=>$('#skills-dialog').showModal());$('#skills-close')?.addEventListener('click',()=>$('#skills-dialog').close());$('#skills-filter')?.addEventListener('input',e=>{for(const b of $('#skill-examples').children)b.hidden=!b.textContent.toLowerCase().includes(e.target.value.toLowerCase());});
 async function saveTurn(payload,body){
