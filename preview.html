@@ -20,6 +20,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const business=parseBusinessTasks(text);if(business.length)return business;
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const isbnTask=parseISBNTasks(text);if(isbnTask.length)return isbnTask;
  const postalTask=parsePostalTasks(text);if(postalTask.length)return postalTask;
@@ -267,6 +268,64 @@ function createLocalHandlers({el,p,state,localDate,source,follows}){
  };
 }
 
+const businessDate='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日|今日)';
+function parseBusinessTasks(raw){
+ let text=raw.normalize('NFKC').trim().replace(/^営業日(?:計算)?[：:]\s*/,''),mode='jp';
+ const weekends=text.match(/^土日(?:のみ|だけ)(?:を)?(?:除く|除いて)[：:、\s]*/);if(weekends){mode='weekdays';text=text.slice(weekends[0].length);}
+ const unit=mode==='weekdays'?'日':'(?:営業日|平日)';
+ const add=text.match(new RegExp(`^(?:(${businessDate})(?:から|の))?(\\d{1,7})${unit}(後|前)(?:は(?:何日)?|は何曜日|の日付)?[。？?]?$`));
+ if(add)return[{kind:'businessDays',operation:'add',mode,from:add[1]||'今日',days:Number(add[2])*(add[3]==='前'?-1:1)}];
+ const count=text.match(new RegExp(`^(${businessDate})から(${businessDate})まで(?:の)?(?:は)?(?:何${unit}|${unit}(?:は)?何日|${unit}数|の日数)[。？?]?$`));
+ if(count)return[{kind:'businessDays',operation:'count',mode,from:count[1],to:count[2]}];
+ if(weekends||/^(?:\d|今日|[+-]\d)/.test(text)&&/(営業日|平日)/.test(text))return[{kind:'businessDays',operation:'invalid',mode}];
+ return[];
+}
+const businessISO=date=>date.toISOString().slice(0,10);
+function validateBusinessTask(task,today){
+ if(!['jp','weekdays'].includes(task.mode)||!['add','count'].includes(task.operation))throw Error('営業日計算の条件を確認してください。');
+ const from=parseCivilDate(task.from,today),to=task.operation==='count'?parseCivilDate(task.to,today):null;
+ if(task.operation==='add'&&(!Number.isInteger(task.days)||Math.abs(task.days)>1000))throw Error('営業日の前後は1000日以内で指定してください。');
+ if(to&&Math.abs(to-from)/86400000>3660)throw Error('営業日数を数える期間は3660日以内で指定してください。');
+ return{from,to};
+}
+function holidayCalendar(data){
+ if(!data||Array.isArray(data)||typeof data!=='object')throw Error('祝日データの形式を確認できませんでした。');
+ const holidays=new Map(),years=new Set();
+ for(const [date,name]of Object.entries(data)){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||typeof name!=='string'||!name.trim())throw Error('祝日データの内容を確認できませんでした。');parseCivilDate(date);holidays.set(date,name);years.add(date.slice(0,4));}
+ if(!years.size||[...years].some(year=>!holidays.has(year+'-01-01')))throw Error('収録年の祝日データを確認できませんでした。');
+ return{holidays,years};
+}
+function businessDays(task,today,data=null){
+ const {from,to}=validateBusinessTask(task,today),zero=task.operation==='add'&&task.days===0,calendar=task.mode==='jp'&&!zero?holidayCalendar(data):null;
+ const coverage=date=>{if(date.getUTCFullYear()<1||date.getUTCFullYear()>9999)throw Error('計算結果が日付の対応範囲を超えます。');if(calendar&&!calendar.years.has(businessISO(date).slice(0,4)))throw Error(`${date.getUTCFullYear()}年の祝日データが未収録のため計算できません。土日のみを除く計算なら指定できます。`);};
+ let weekends=0,holidayCount=0;const excluded=[];
+ const working=date=>{coverage(date);if([0,6].includes(date.getUTCDay())){weekends++;return false;}const name=calendar?.holidays.get(businessISO(date));if(name){holidayCount++;excluded.push({date:businessISO(date),name});return false;}return true;};
+ let target=new Date(from),count=0;coverage(from);
+ if(task.operation==='add'){
+  const direction=Math.sign(task.days);for(let left=Math.abs(task.days);left>0;){target.setUTCDate(target.getUTCDate()+direction);if(working(target))left--;}
+  count=task.days;
+ }else{
+  coverage(to);const direction=to<from?-1:1;for(;;){if(working(target))count+=direction;if(target.getTime()===to.getTime())break;target.setUTCDate(target.getUTCDate()+direction);}
+ }
+ return{from:businessISO(from),to:businessISO(target),count,weekends,holidayCount,excluded,mode:task.mode,years:calendar?[...calendar.years].sort():[]};
+}
+function createBusinessHandler({getJSON,el,p,source,state,localDate}){
+ return async(task,body)=>{
+  const today=localDate('Asia/Tokyo');validateBusinessTask(task,today);
+  const response=task.mode==='jp'&&!(task.operation==='add'&&task.days===0)?await getJSON('https://holidays-jp.github.io/api/v1/date.json',86400000):null;
+  const result=businessDays(task,today,response?.data);body.append(el('h3',task.mode==='weekdays'?(task.operation==='add'?'土日を除いて日付を計算':'土日を除いた日数'):(task.operation==='add'?'営業日で日付を計算':'期間内の営業日数')));
+  const card=el('div',undefined,'result-card');
+  card.append(el('div',task.operation==='add'?`${result.from} から ${Math.abs(task.days)}${task.mode==='jp'?'営業日':'日'}${task.days<0?'前':'後'}`:`${result.from} → ${result.to}`,'sub'),el('div',task.operation==='add'?result.to:`${result.count} 日`,'big'));body.append(card);
+  p(body,task.operation==='add'?'開始日を0日として数えます。0日後は開始日と同じ日付です。':'両端の日付を含めて数えます。逆順の期間は、同じ範囲で数えた日数を負数で表示します。');
+  p(body,task.mode==='jp'?'土日と日本の祝日を除く参考計算です。会社独自の休業日・年末年始休業などは含みません。':'土日のみを除き、祝日は数えます。');
+  p(body,`除いた日：土日 ${result.weekends}日、平日にあたる祝日 ${result.holidayCount}日。`);
+  if(result.excluded.length)p(body,'除いた祝日：'+result.excluded.slice(0,8).map(item=>`${item.date} ${item.name}`).join(' ／ ')+(result.excluded.length>8?' ほか':''));
+  if(response){p(body,`祝日データ収録年：${result.years.join('・')}年。未収録の年は計算しません。`);source(body,'Holidays JP · MIT','https://holidays-jp.github.io/',response);}else p(body,'外部APIを呼ばずに端末内で計算しました。');
+  if(task.from==='今日'||task.to==='今日')p(body,`「今日」は日本時間 ${today} です。`);
+  state.context={...state.context,intent:'businessDays'};
+ };
+}
+
 function isbn13(raw){
  const value=String(raw).normalize('NFKC').toUpperCase().replace(/[\s\u2010-\u2015-]/g,'');
  const error=()=>{throw Error('ISBNの桁数と末尾の検査数字を確認してください。ISBN-10または978/979で始まるISBN-13に対応します。');};
@@ -401,6 +460,9 @@ const FEATURE_CATALOG=[
  {id:'date',category:'tools',title:'日付計算',description:'日数を足す・引く、曜日を確認。',query:'今日から100日後は何日？',tags:'ひづけ 日後 日前 曜日 締め切り 期限 カレンダー',local:true,popular:true},
  {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
  {id:'compound',category:'tools',title:'まとめて質問する',description:'依頼を区切り、条件を引き継いで順に処理。',query:'5kmは何m？それとcmなら？そして今日から100日後は何日？',tags:'複数 いくつか まとめて 会話 続き',local:true},
+ {id:'businessDays',category:'tools',title:'営業日で日付を計算',description:'土日と日本の祝日を除いて前後の日付を計算。',query:'2026-10-30から3営業日後は何日？',tags:'仕事 締め切り 期限 平日 営業日 納期'},
+ {id:'businessCount',category:'tools',title:'期間内の営業日数',description:'両端の日付を含め、土日祝を除いた日数。',query:'2026-10-01から2026-10-31までの営業日は何日？',tags:'仕事 期間 平日 営業日 日数 稼働日'},
+ {id:'weekdays',category:'tools',title:'土日のみ除いて計算',description:'祝日は数えて土日のみ除く。API不要。',query:'土日のみ除く: 今日から5日後は何日？',tags:'土日 平日 期限 カレンダー',local:true},
  {id:'ai-writing',category:'tools',title:'端末内AIで文章を書く',description:'モデルを読み込んでから、短い文章を生成。',query:'文章: お礼のメールを3文で書いて',tags:'AI LLM 作文 メール 下書き 生成 相談',local:true},
  {id:'ai-translate',category:'research',title:'端末内AIで翻訳',description:'モデルを読み込んでから、短文を翻訳。',query:'翻訳: Good morning. を日本語にして',tags:'AI LLM 翻訳 ほんやく 英語 言い換え',local:true},
  {id:'ai-code',category:'tools',title:'端末内AIでコード相談',description:'コードの説明や下書き。実行はしません。',query:'コード: JavaScriptのmapを短い例で説明して',tags:'AI LLM プログラミング コード JavaScript Python GAS',local:true}
@@ -519,6 +581,7 @@ let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true};
 const names={weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
+names.businessDays='営業日計算';
 const registry=[
  ['端末内LLM','希望して読み込んだモデルで会話・文章生成','https://huggingface.co/Qwen','公開モデルはApache 2.0。WebLLMまたはTransformers.jsで端末内推論。モデルの初回取得が必要です。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
@@ -614,7 +677,7 @@ async function ask(raw){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
+  const handlers={weather,currency,knowledge,holiday,time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
