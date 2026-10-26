@@ -3,12 +3,13 @@ const SCHEMA = {
  Settings:['key','value','description'],
  Providers:['id','name','enabled','license','source_url'],
  Conversations:['id','owner_hash','title','created_at','updated_at','context_json'],
- Messages:['id','owner_hash','conversation_id','role','text','created_at','sources_json']
+ Messages:['id','owner_hash','conversation_id','role','text','created_at','sources_json'],
+ ConversationArchive:['conversation_id','owner_hash','archived','changed_at']
 };
 function doGet(){return HtmlService.createHtmlOutputFromFile('App').setTitle('ZERO').addMetaTag('viewport','width=device-width,initial-scale=1,viewport-fit=cover').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function api(request){
  try{
-  if(!request||!['bootstrap','fetch','saveTurn','listConversations','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
+  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
   if(!/^[a-f0-9]{64}$/.test(request.token||''))throw Error('ブラウザの識別情報が無効です。');
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
@@ -18,6 +19,8 @@ function api(request){
    case 'fetch':data=fetchAPI_(payload.url);break;
    case 'saveTurn':data=saveTurn_(owner,payload);break;
    case 'listConversations':data=listConversations_(owner);break;
+   case 'listConversationLibrary':data=listConversationLibrary_(owner);break;
+   case 'moveConversation':data=moveConversation_(owner,payload);break;
    case 'getConversation':data=getConversation_(owner,payload.id);break;
   }
   return {ok:true,data:data};
@@ -32,8 +35,17 @@ function textCell_(value){const s=String(value??'');return /^[\s\u0000-\u001f]*[
 function append_(sheet,values){const end=sheet.getLastRow()+values.length;if(end>20000)throw Error('保存上限に達しました。');if(end>sheet.getMaxRows())sheet.insertRowsAfter(sheet.getMaxRows(),end-sheet.getMaxRows());sheet.getRange(sheet.getLastRow()+1,1,values.length,values[0].length).setNumberFormat('@').setValues(values.map(row=>row.map(textCell_)));}
 function settings_(){const values={};rows_('Settings').forEach(r=>{if(['app_name','greeting','history_enabled'].includes(String(r[0])))values[r[0]]=String(r[1]);});return values;}
 function rateLimit_(owner){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。少し待ってお試しください。');try{const cache=CacheService.getScriptCache(),key='rate:'+owner+':'+Math.floor(Date.now()/3600000),count=Number(cache.get(key)||0);if(count>=120)throw Error('1時間の利用上限です。時間を置いてお試しください。');cache.put(key,String(count+1),3600);}finally{lock.releaseLock();}}
-function listConversations_(owner){return rows_('Conversations').filter(r=>r[1]===owner).sort((a,b)=>String(b[4]).localeCompare(String(a[4]))).slice(0,50).map(r=>({id:r[0],title:r[2],createdAt:r[3],updatedAt:r[4]}));}
-function getConversation_(owner,id){if(!/^[a-zA-Z0-9-]{20,60}$/.test(id||''))throw Error('会話IDが無効です。');const conversation=rows_('Conversations').find(r=>r[0]===id&&r[1]===owner);if(!conversation)throw Error('この会話は見つかりません。');const messages=rows_('Messages').filter(r=>r[1]===owner&&r[2]===id).slice(-100).map(r=>({role:r[3],text:r[4],sources:JSON.parse(r[6]||'[]')}));return {id:id,title:conversation[2],context:JSON.parse(conversation[5]||'{}'),messages:messages};}
+function conversationArchiveRows_(){const sheet=database_().getSheetByName('ConversationArchive');return sheet&&sheet.getLastRow()?rows_('ConversationArchive'):[];}
+function archivedConversationIds_(owner){const seen=new Set(),archived=new Set();for(const row of conversationArchiveRows_().filter(r=>r[1]===owner)){if(!/^[A-Za-z0-9-]{20,60}$/.test(row[0])||seen.has(row[0])||!['true','false'].includes(String(row[2]).toLowerCase()))throw Error('保管状態の形式を確認できませんでした。管理者にご確認ください。');seen.add(row[0]);if(String(row[2]).toLowerCase()==='true')archived.add(row[0]);}return archived;}
+function listConversationLibrary_(owner){const archived=archivedConversationIds_(owner),own=rows_('Conversations').filter(r=>r[1]===owner);if(own.length>250)throw Error('会話全体の保存保護上限を超えています。管理者にご確認ください。');const items=own.sort((a,b)=>String(b[4]).localeCompare(String(a[4]))).map(r=>({id:r[0],title:r[2],createdAt:r[3],updatedAt:r[4],archived:archived.has(r[0])})),active=items.filter(item=>!item.archived).length;return{items,capacity:{active,archived:items.length-active,total:items.length,activeLimit:50,totalLimit:250}};}
+function listConversations_(owner){return listConversationLibrary_(owner).items.filter(item=>!item.archived).slice(0,50).map(({archived,...item})=>item);}
+function moveConversation_(owner,payload){
+ if(!/^[a-zA-Z0-9-]{20,60}$/.test(payload.id||'')||typeof payload.archived!=='boolean')throw Error('会話の移動条件が無効です。');const lock=LockService.getScriptLock();if(!lock.tryLock(8000))throw Error('会話の整理が混み合っています。少し待って試してください。');
+ try{const library=listConversationLibrary_(owner),item=library.items.find(item=>item.id===payload.id);if(!item)throw Error('この会話は見つかりません。');if(item.archived===payload.archived)return library;if(!payload.archived&&library.capacity.active>=50)throw Error('通常一覧が50件に達しています。別の会話を保管一覧へ移してから戻してください。');
+ let sheet=database_().getSheetByName('ConversationArchive');if(!sheet)sheet=database_().insertSheet('ConversationArchive');if(!sheet.getLastRow())sheet.getRange(1,1,1,SCHEMA.ConversationArchive.length).setNumberFormat('@').setValues([SCHEMA.ConversationArchive]);sheet=sheet_('ConversationArchive');const rows=rows_('ConversationArchive'),index=rows.findIndex(r=>r[0]===payload.id&&r[1]===owner),values=[payload.id,owner,String(payload.archived),new Date().toISOString()];if(index<0)append_(sheet,[values]);else sheet.getRange(index+2,1,1,values.length).setNumberFormat('@').setValues([values]);return listConversationLibrary_(owner);
+ }finally{lock.releaseLock();}
+}
+function getConversation_(owner,id){if(!/^[a-zA-Z0-9-]{20,60}$/.test(id||''))throw Error('会話IDが無効です。');const conversation=rows_('Conversations').find(r=>r[0]===id&&r[1]===owner);if(!conversation)throw Error('この会話は見つかりません。');const messages=rows_('Messages').filter(r=>r[1]===owner&&r[2]===id).slice(-100).map(r=>({role:r[3],text:r[4],sources:JSON.parse(r[6]||'[]')}));return {id:id,title:conversation[2],context:JSON.parse(conversation[5]||'{}'),messages:messages,archived:archivedConversationIds_(owner).has(id)};}
 function cleanSources_(raw){
  if(!Array.isArray(raw)||raw.length>256)throw Error('参照リンクの形式または件数が無効です。');
  const result=[],seen=new Set();for(const entry of raw){if(!entry||typeof entry.title!=='string'||typeof entry.url!=='string'||!/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]{1,5})?(?:[/?#]|$)/.test(entry.url)||/[\s<>"\\]/.test(entry.url)||seen.has(entry.url))continue;if(entry.url.length>1200)throw Error('参照URLが長すぎるため保存できません。画面の会話書き出しをご利用ください。');seen.add(entry.url);result.push({title:entry.title.replace(/\s+/g,' ').trim().slice(0,150)||'参照',url:entry.url});}
@@ -52,9 +64,10 @@ function saveTurn_(owner,payload){
   const conversations=rows_('Conversations'),row=conversations.findIndex(r=>r[0]===id);
   if(row>=0&&conversations[row][1]!==owner)throw Error('この会話に保存できません。');
   const messages=rows_('Messages');if(messages.some(r=>r[0]===requestId+'-a'&&r[1]===owner))return {saved:true,duplicate:true};
+  const archived=archivedConversationIds_(owner);if(archived.has(id))throw Error('保管中の会話です。履歴から通常一覧へ戻してから続けてください。');
   if(messages.filter(r=>r[2]===id).length>=100)throw Error('この会話の保存上限です。新しい会話を始めてください。');
   const now=new Date().toISOString(),sheet=sheet_('Conversations');
-  if(row<0){if(conversations.filter(r=>r[1]===owner).length>=50)throw Error('会話数の保存上限です。');append_(sheet,[[id,owner,question.slice(0,40),now,now,context]]);}
+  if(row<0){const own=conversations.filter(r=>r[1]===owner);if(own.length>=250)throw Error('会話全体の保存保護上限（250件）です。既存の通常会話を開いて続けてください。');if(own.filter(r=>!archived.has(r[0])).length>=50)throw Error('通常一覧の保存保護上限（50件）です。履歴から会話を保管一覧へ移すと、新しい会話を保存できます。');append_(sheet,[[id,owner,question.slice(0,40),now,now,context]]);}
   append_(sheet_('Messages'),[[requestId+'-u',owner,id,'user',question,now,'[]'],[requestId+'-a',owner,id,'assistant',answer,now,sources]]);
   if(row>=0)sheet.getRange(row+2,5,1,2).setNumberFormat('@').setValues([[now,textCell_(context)]]);
   return {saved:true,conversationId:id};
