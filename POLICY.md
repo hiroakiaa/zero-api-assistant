@@ -101,3 +101,7 @@ GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時�
 # 地理距離の端末内計算
 
 登録済み都市の代表座標か、利用者が指定した緯度・経度を使い、半径6,371 kmの球面距離を端末内で計算します。外部への経路・地名照会や位置情報権限の要求は行いません。半径の参考は[NASA Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)です。モデル・座標・表示の丸めを明示し、道路距離や所要時間、楕円体上の測地線距離と混同させません。質問・回答・地点条件は、他の会話と同じGAS履歴保存方針に従います。
+
+# USGSの過去の地震カタログ
+
+無認証の[FDSN EventカタログAPI](https://earthquake.usgs.gov/fdsnws/event/1/)を日付指定照会だけに使用し、最近の情報は既存フィードを維持します。USGSの記録への帰属と気象庁防災情報へのリンクを表示し、写真や詳細製品データは保持しません。[USGSの著作権方針](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)に従い、第三者の写真等を一律にパブリックドメインとして扱いません。カタログはGAS共有リース・間隔・日次保護・5分キャッシュ・停止待機を適用し、期間と表示上限、網羅性の限界を結果に明示します。新規のAPI鍵・権限承認・有料契約はありません。
