@@ -110,5 +110,12 @@
     "enabled": true,
     "license": "無認証の公開API・GBIF Secretariat (2023)・CC BY 4.0・分類の項目のみ抜粋",
     "source_url": "https://doi.org/10.15468/39omei"
+  },
+  {
+    "id": "chemistry",
+    "name": "PubChem / NCBI",
+    "enabled": true,
+    "license": "無認証の公開API・計算済み基礎データのみ・NCBI免責/著作権方針・共有負荷制限",
+    "source_url": "https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest"
   }
 ]
