@@ -24,7 +24,7 @@
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
 <main><section id="conversation" aria-label="会話"><div id="welcome" class="welcome"><svg viewBox="0 0 24 24" class="welcome-icon" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 1.6-5.5A8 8 0 1 1 20 11Z"/></svg><small>Your questions start here.</small><h2>知りたいことを、ここに。</h2><p>調べる。比べる。計算する。</p><div class="suggestions"><button data-ask="東京の明日の天気は？">明日の天気は？</button><button data-ask="100ドルは何円？">100ドルは何円？</button><button data-ask="人工知能とは？">人工知能とは？</button></div></div><div id="messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><div class="composer-area"><p id="cloud-ai-status" class="info-note" hidden>クラウドAI設定済み · モデル取得不要</p><div id="context" class="context" hidden></div><form id="chat-form"><label for="prompt" class="sr-only">質問を入力</label><textarea id="prompt" rows="1" maxlength="500" placeholder="質問を入力…"></textarea><button id="send" aria-label="質問を送信" type="submit">↑</button></form><div class="composer-foot"><span id="storage-note">接続状態を確認しています。</span><span id="stats">API照会 0回</span></div></div></main></div>
-<dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。文章作成・翻訳・コード相談は、クラウドAIが設定されている場合は端末へのモデル取得なしで利用できます。端末内LLMは設定画面から、利用者が選んだモデルだけを手動で起動します。起動時の自動取得はしません。iPhone・iPadでは一括準備と大きなモデルを使わず、無料API・計算はモデルなしでも利用できます。有料の推論APIには接続しません。</p><p id="cloud-ai-note" class="info-note">クラウドAIは未接続です。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><button id="local-ai-settings" class="history-item" type="button">端末内AIの設定</button><button id="export-info" class="history-item" type="button">会話をテキストで確認・保存</button><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。</p></dialog>
+<dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。文章作成・翻訳・コード相談は、クラウドAIが設定されている場合は端末へのモデル取得なしで利用できます。端末内LLMは設定画面から、利用者が選んだモデルだけを手動で起動します。起動時の自動取得はしません。iPhone・iPadでは一括準備と大きなモデルを使わず、無料API・計算はモデルなしでも利用できます。有料の推論APIには接続しません。</p><p id="cloud-ai-note" class="info-note">クラウドAIは未接続です。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><button id="local-ai-settings" class="history-item" type="button">端末内AIの設定</button><button id="export-info" class="history-item" type="button">会話をテキストで確認・保存</button><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。天気の地点候補を検索する地名はPhotonへ送ります。</p></dialog>
 <dialog id="history-dialog"><div class="dialog-head"><h2>会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">このブラウザで保存した会話を表示します。</p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">const dictionaryParts={all:'すべて',noun:'名詞',verb:'動詞',adjective:'形容詞',adverb:'副詞',pronoun:'代名詞',preposition:'前置詞',conjunction:'接続詞',interjection:'間投詞',determiner:'限定詞',numeral:'数詞','proper noun':'固有名詞',particle:'助詞',phrase:'句',prefix:'接頭辞',suffix:'接尾辞',abbreviation:'略語',letter:'文字'};
 const dictionaryWord=s=>typeof s==='string'&&/^[a-z][a-z'-]{0,39}$/.test(s),dictionaryError=error=>[{kind:'dictionary',error}];
 function dictionaryPart(raw){const s=raw.toLowerCase();return Object.hasOwn(dictionaryParts,s)?s:Object.keys(dictionaryParts).find(k=>dictionaryParts[k]===raw)||(['全品詞','全部'].includes(raw)?'all':null);}
@@ -367,6 +367,70 @@ function createEraYearHandler({el,p,state,localDate,follows}){
  };
 }
 
+const placeKinds=new Set(['city','town','village','hamlet']),placeTypes={N:'node',W:'way',R:'relation'};
+function knownWeatherPlace(name,cities){const query=name.trim();return cities.find(c=>c.name===query||c.query?.toLowerCase()===query.toLowerCase())||cities.find(c=>c.name===query.replace(/(?:都|府|県|市)$/,''))||null;}
+function placeSearchURL(value){
+ const query=typeof value==='string'?value.normalize('NFKC').trim():'';
+ if(query.length<2||query.length>60||!/[\p{L}]/u.test(query)||/[\u0000-\u001f\u007f]/.test(query)||/https?:\/\//i.test(query))throw Error('地名は2〜60文字で、都市・町・村の名前を指定してください。');
+ return 'https://photon.komoot.io/api/?'+new URLSearchParams({q:query,limit:'5',osm_tag:'place'});
+}
+function placeCandidates(data){
+ if(data?.type!=='FeatureCollection'||!Array.isArray(data.features)||data.features.length>5)throw Error('地名候補の形式を確認できませんでした。');
+ const seen=new Set(),results=[];
+ for(const feature of data.features){const p=feature?.properties,c=feature?.geometry?.coordinates;
+  if(feature?.type!=='Feature'||feature?.geometry?.type!=='Point'||!Array.isArray(c)||c.length!==2||c.some(v=>typeof v!=='number'||!Number.isFinite(v))||Math.abs(c[0])>180||Math.abs(c[1])>90||p?.osm_key!=='place'||!placeKinds.has(p.osm_value)||!Object.hasOwn(placeTypes,p.osm_type)||!Number.isSafeInteger(p.osm_id)||p.osm_id<1||typeof p.name!=='string'||!p.name.trim()||p.name.length>120)continue;
+  const id=p.osm_type+p.osm_id;if(seen.has(id))continue;seen.add(id);
+  const text=v=>typeof v==='string'?v.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,120):'',name=text(p.name),countryCode=/^[A-Z]{2}$/i.test(p.countrycode||'')?p.countrycode.toUpperCase():null;
+  const label=[...new Set([name,text(p.city),text(p.state),text(p.country)].filter(Boolean))].join(' / ');
+  results.push({id,name,label,query:name,latitude:c[1],longitude:c[0],timezone:countryCode==='JP'&&c[1]>=20&&c[1]<=46&&c[0]>=122&&c[0]<=155?'Asia/Tokyo':null,geocoder:'photon',countryCode,osmType:p.osm_type,osmId:p.osm_id});
+ }return results;
+}
+function parsePlaceSearch(raw,context={},knownCities=[]){const text=raw.normalize('NFKC').trim().replace(/[。？?]$/,'');
+ const prefix=text.match(/^(?:地名検索|地点検索|都市検索)[：:]\s*(.+)$/);if(prefix)return[{kind:'placeSearch',query:prefix[1],weather:{offset:0,focus:'all'}}];
+ const stable=text.match(/^地点候補:([a-f0-9-]{36}):([NWR]\d{1,16})$/i);if(stable)return[{kind:'placeSearch',session:stable[1],choiceId:stable[2]}];
+ const number=text.match(/^(?:地点候補|地点の)(\d+)(?:番(?:目)?)?(?:の天気)?$/);if(number)return[{kind:'placeSearch',number:Number(number[1])}];
+ if(context.intent==='placeSearch'&&context.pending==='placeSearch'){
+  if(/^(?:今日|明日|明後日|あさって|翌日|前日|来週|来年|湿度|風速)(?:は|なら|では|も)?$/.test(text))return[{kind:'placeSearch',remind:true}];
+  const other=text.match(/^(.{2,60}?)(?:なら|では)$/);if(other){const place=knownWeatherPlace(other[1],knownCities);return[place?{kind:'weather',...context.placeWeather,places:[place]}:{kind:'placeSearch',query:other[1],weather:context.placeWeather}];}
+ }
+ if(context.intent==='weather'){
+  const other=text.match(/^([\p{L}\p{M} -]{2,40}?)(?:なら|では)$/u),query=other?.[1];
+  if(query&&!/^(?:今日|明日|明後日|あさって|翌日|前日|昨日|一昨日|来週|来年|今年|湿度|風速|風|雨|最高|最低|最新|ドル|円|ユーロ|ポンド|UTC|摂氏|華氏)$/.test(query)){const options={offset:context.offset||0,focus:context.weatherFocus||'all',...(context.weatherDate?{date:context.weatherDate}:{})},place=knownWeatherPlace(query,knownCities);return[place?{kind:'weather',...options,places:[place]}:{kind:'placeSearch',query,weather:options}];}
+ }return[];
+}
+function weatherPlaceLookup(task,knownCities=[]){
+ if(task.kind!=='weather'||task.error||!task.places?.length)return task;
+ const places=task.places.map(p=>Number.isFinite(p.latitude)?p:knownWeatherPlace(p.query||p.name,knownCities)||p),unknown=places.filter(p=>!Number.isFinite(p.latitude));if(!unknown.length)return{...task,places};
+ if(places.length!==1)return{kind:'placeSearch',error:'未登録の都市は1つずつ指定してください。例：「鹿児島の明日の天気」。'};
+ return{kind:'placeSearch',query:unknown[0].query||unknown[0].name,weather:{offset:task.offset,focus:task.focus||'all',...(task.date?{date:task.date}:{})}};
+}
+function createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather,now=Date.now,newSession=()=>crypto.randomUUID()}){
+ const attribution=body=>{source(body,'Photon · OpenStreetMap contributors','https://photon.komoot.io/');source(body,'OpenStreetMap · ODbL','https://www.openstreetmap.org/copyright');};
+ return async(task,body)=>{
+  if(task.error)throw Error(task.error);
+  if(!cloud.available)throw Error('地名検索は共有の照会間隔を守るため、GAS接続版で利用できます。');
+  if(task.remind){p(body,'先に地点候補を選んでください。天気を表示した後に、日付・風速・湿度を変更できます。');return;}
+  if(task.choiceId||task.number!==undefined){
+   const c=state.context;if(c.intent!=='placeSearch'||c.pending!=='placeSearch'||!Array.isArray(c.placeChoices)||c.placeChoices.length>5||!Number.isFinite(c.placeChoicesAt)||now()-c.placeChoicesAt>600000||now()<c.placeChoicesAt||task.session&&task.session!==c.placeSession)throw Error('現在の地点候補を確認できません。地名をもう一度検索してください。');
+   const selected=task.choiceId?c.placeChoices.find(v=>v.id===task.choiceId):c.placeChoices[task.number-1];
+   if(!selected||selected.geocoder!=='photon'||typeof selected.name!=='string'||!selected.name.trim()||selected.name.length>120||!Object.hasOwn(placeTypes,selected.osmType)||!Number.isSafeInteger(selected.osmId)||selected.id!==selected.osmType+selected.osmId||![selected.latitude,selected.longitude].every(v=>typeof v==='number'&&Number.isFinite(v))||Math.abs(selected.latitude)>90||Math.abs(selected.longitude)>180||!['Asia/Tokyo',null].includes(selected.timezone))throw Error('表示中の候補番号から地点を選んでください。');
+   if(selected.timezone==='Asia/Tokyo'&&(selected.countryCode!=='JP'||selected.latitude<20||selected.latitude>46||selected.longitude<122||selected.longitude>155))throw Error('地点の時間帯を確認できません。もう一度検索してください。');
+   await weather({kind:'weather',...c.placeWeather,places:[selected]},body);return;
+  }
+  const url=placeSearchURL(task.query),options=task.weather||{offset:0,focus:'all'};
+  if(!Number.isInteger(options.offset)||options.offset<0||options.offset>9)throw Error('現在の予報は今日から9日後まで指定できます。');
+  if(options.date)parseCivilDate(options.date);if(!['all','wind','humidity'].includes(options.focus))throw Error('天気の表示項目を確認できません。');
+  const result=await getJSON(url,21600000),choices=placeCandidates(result.data),session=newSession();
+  body.append(el('h3',`「${task.query}」の地点候補`));p(body,'天気を調べる都市・町・村を選んでください。候補の先頭を自動で採用しません。');p(body,`対象：${options.date||(['今日','明日','明後日'][options.offset]||options.offset+'日後')}の${options.focus==='wind'?'風速':options.focus==='humidity'?'湿度':'天気'}。日付は選んだ候補の基準時間で扱います。`);attribution(body);
+  if(!choices.length){p(body,'都市・町・村の候補が見つかりませんでした。都道府県や国名を添えて、もう一度指定してください。');return;}
+  choices.forEach((place,index)=>{const row=el('div',undefined,'wiki-result');p(row,`${index+1}. ${place.label}`);p(row,`代表地点：緯度 ${place.latitude.toFixed(4)} / 経度 ${place.longitude.toFixed(4)}`,'sub');
+   if(!place.timezone)p(row,'現地の時間帯は未特定です。この候補はUTC基準の日付で天気を調べます。','sub');
+   source(row,'OpenStreetMapで地点を確認','https://www.openstreetmap.org/'+placeTypes[place.osmType]+'/'+place.osmId);const button=el('button',`この地点の天気（${place.timezone?'日本時間':'UTC基準'}）`,'history-item');button.type='button';button.dataset.ask='地点候補:'+session+':'+place.id;button.dataset.askLabel=place.name+'の天気（'+(place.timezone?'日本時間':'UTC基準')+'）';row.append(button);body.append(row);
+  });
+  state.context={...state.context,intent:'placeSearch',pending:'placeSearch',placeChoices:choices,placeQuery:task.query,placeWeather:options,placeSession:session,placeChoicesAt:now()};
+ };
+}
+
 const cities = [
  ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
@@ -374,6 +438,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const placeLookup=parsePlaceSearch(text,context,cities);if(placeLookup.length)return placeLookup;
  const selectedKnowledge=parseKnowledgeFollow(text,context);if(selectedKnowledge.length)return selectedKnowledge;
  const books=parseBookTasks(text,context);if(books.length)return books;
  const scholarly=parseCrossrefTasks(text,context);if(scholarly.length)return scholarly;
@@ -397,7 +462,8 @@ function parsePlan(raw, context={}){
  const isFollow=/^(?:じゃあ|では|それなら|それと|あと)?\s*(?:明日|明後日|あさって|今日|\d+日後|.{1,25}(?:なら|では|は)[？?]?$)/.test(text)||found.length>0&&text.length<25;
  if(!protectedWeather&&(isWeather||dateFollow || (context.intent==='weather'&&isFollow&&!moneyTasks.length&&!isTime&&!/とは|って何|について|検索|調べ|為替|換算|何円|祝日|計算/.test(text)))){
   const explicit=weatherPlaceText(text).match(/^(.{2,40}?)(?:の|は)(?:天気|気温|雨|服装|風速|湿度|風)/);
-  let places=found.length?found:explicit?[{name:explicit[1],query:explicit[1]}]:context.places||[];
+  const requestedPlace=explicit?.[1]?.trim(),requestedParts=requestedPlace?.split(/[と、,・]/).map(v=>knownWeatherPlace(v,cities)),knownRequest=requestedParts?.every(Boolean);
+  let places=requestedPlace?(knownRequest?[...new Map(requestedParts.map(c=>[c.name,c])).values()]:[{name:requestedPlace,query:requestedPlace}]):found.length?found:context.places||[];
   if(context.pending==='weather'&&!places.length&&!isWeather)places=[{name:text.replace(/[？?]/g,''),query:text.replace(/[？?]/g,'')}];
   tasks.push({kind:'weather',places,offset:getOffset(text,isWeather&&!weatherDetailFollow(text,context)?0:context.offset||0),...weatherDetailsOptions(text,context,isWeather),...weatherDateOptions(text,context,isWeather&&!weatherDetailFollow(text,context))});
  }
@@ -412,7 +478,7 @@ function parsePlan(raw, context={}){
  if(knowledge&&/(?:とは|って何)/.test(text))for(let i=tasks.length-1;i>=0;i--)if(['weather','holiday','time'].includes(tasks[i].kind))tasks.splice(i,1);
  const extensions=parseExtensions(text,context,found);
  if(extensions.length){for(let i=tasks.length-1;i>=0;i--)if(tasks[i].kind==='knowledge'||tasks[i].kind==='weather'&&(!isWeather||extensions.some(t=>t.kind==='sun')))tasks.splice(i,1);}
- return [...tasks,...extensions];
+ return [...tasks,...extensions].map(task=>weatherPlaceLookup(task,cities));
 }
 function calculate(raw){
  if(/(?:\d|\.)\s+(?:\d|\.)/.test(normalize(raw)))throw Error('数字の間の空白を確認してください。');
@@ -448,10 +514,10 @@ function summarizeWeatherDetails(data,date,timezone){
  return {windMax:winds.length?Math.max(...winds):null,windSamples:winds.length,humidityMin:humidity.length?Math.min(...humidity):null,humidityMax:humidity.length?Math.max(...humidity):null,humiditySamples:humidity.length,detailSamples:points.length,windUnitOK,humidityUnitOK};
 }
 function weatherDateFollow(text,context){return (context.intent==='weather'||context.pending==='weather')&&new RegExp(`^${weatherDatePattern}(?:なら|では|は)?[。？?]?$`).test(text);}
-function weatherPlaceText(text){return text.replace(new RegExp(`${weatherDatePattern}(?:の)?`,'g'),'').replace(/(?:今日|きょう|明後日|あさって|明日|あした|一昨日|おととい|昨日|きのう|\d+日[後前])の/g,'');}
+function weatherPlaceText(text){return text.replace(/^(?:じゃあ|それなら|では)[、,\s]*/,'').replace(new RegExp(`${weatherDatePattern}(?:の)?`,'g'),'').replace(/(?:今日|きょう|明後日|あさって|明日|あした|一昨日|おととい|昨日|きのう|\d+日[後前])の/g,'');}
 function weatherDateOptions(raw,context={},explicit=true){
  const text=raw.normalize('NFKC'),dates=[...text.matchAll(new RegExp(weatherDatePattern,'g'))];
- if(/午前|午後|夕方|\d{1,2}時|\d{1,2}:\d{2}|\d+日間|から|まで|曜日|[月火水木金土日]曜|毎週|来週|先週|今週|週末|来月|先月|来年|去年|昨年|(?:朝|夜)(?:の|は)(?:天気|気温|雨|風速|風|湿度)/.test(text))return {error:'天気は1日単位です。期間・時刻指定には対応していません。調べる日を西暦を含む年月日で指定してください。'};
+ if(/午前|午後|夕方|\d{1,2}時|\d{1,2}:\d{2}|\d+日間|から|まで|同じ期間|その期間|この期間|曜日|[月火水木金土日]曜|毎週|来週|先週|今週|週末|来月|先月|来年|去年|昨年|(?:朝|夜)(?:の|は)(?:天気|気温|雨|風速|風|湿度)/.test(text))return {error:'天気は1日単位です。期間・時刻指定には対応していません。調べる日を西暦を含む年月日で指定してください。'};
  if(dates.length>1)return {error:'天気の日付は1件ずつ指定してください。例：「東京の2026-10-28の天気」。'};
  if(dates.length){
   if(/今日|明日|明後日|昨日|一昨日|\d+日[後前]/.test(text))return {error:'日付と相対日が混在しています。調べる日を1つ指定してください。'};
@@ -495,6 +561,7 @@ function createWeatherHandler({getJSON,el,p,source,state,follows,resolveCity,loc
   for(const result of results){
    if(result.status==='rejected'){p(body,result.reason.message,'error');continue;}
    const v=result.value;ok.push(v);
+   if(v.place.geocoder==='photon')source(body,'地点：Photon / © OpenStreetMap contributors · ODbL','https://www.openstreetmap.org/copyright');
    if(!v.place.timezone)p(body,`${v.place.name}：現地の時間帯は未特定です。日付の区切りはUTC（協定世界時）を使っています。`,'sub');
    const card=el('div',undefined,'result-card'),main=focus==='wind'?`${v.windMax} m/s`:focus==='humidity'?`${v.humidityMin}〜${v.humidityMax}%`:`${v.max}° / ${v.min}°`,caption=focus==='wind'?`予報時点の最大風速 · ${v.windSamples}時点`:focus==='humidity'?`予報時点の湿度範囲 · ${v.humiditySamples}時点`:`予報内の最高／最低 · ${v.samples}時点`;
    card.append(el('div',v.place.name,'city'),el('div',`${v.date} · ${placeTimezoneLabel(v.place)}`,'sub'),el('div',main,'big'),el('div',caption,'sub'),el('div',v.windMax===null?'風速：未収録・単位未確認':`最大風速 ${v.windMax} m/s（有効${v.windSamples}/${v.detailSamples}時点）`,'details'),el('div',v.humidityMin===null?'湿度：未収録・単位未確認':`相対湿度 ${v.humidityMin}〜${v.humidityMax}%（有効${v.humiditySamples}/${v.detailSamples}時点）`,'details'),el('div',v.precipitation===null?'降水量：未収録':`対象区間の降水量 ${v.precipitation} mm（${v.coveredHours}時間）`,'details'));grid.append(card);
@@ -771,7 +838,7 @@ function parseNearby(raw,context={},knownCities=[]){
 }
 function nearbyPoint(point){
  if(!point||typeof point.name!=='string'||!point.name.trim()||point.name.length>300||!Number.isFinite(point.latitude)||Math.abs(point.latitude)>90||!Number.isFinite(point.longitude)||Math.abs(point.longitude)>180)throw Error('基準地点の名前と地球上の座標を確認できませんでした。');
- return {name:point.name,latitude:Number(point.latitude.toFixed(4)),longitude:Number(point.longitude.toFixed(4)),...(Number.isSafeInteger(point.pageid)&&point.pageid>0?{pageid:point.pageid}:{})};
+ return {name:point.name,latitude:Number(point.latitude.toFixed(4)),longitude:Number(point.longitude.toFixed(4)),...(Number.isSafeInteger(point.pageid)&&point.pageid>0?{pageid:point.pageid}:{}),...(point.geocoder==='photon'?{geocoder:'photon'}:{})};
 }
 function nearbyURL(point,radius){
  const p=nearbyPoint(point),r=nearbyRadius(radius);
@@ -813,6 +880,7 @@ function createNearbyHandler({getJSON,el,p,link,source,state,follows}){
   if(result.skipped)p(body,`座標・記事情報を確認できない${result.skipped}件を除外しました。`,'sub');
   p(body,`日本語Wikipediaの座標付き記事を近い順に最大20件取得し、5件ずつ表示します。${rows.length?`${task.page*5+1}〜${task.page*5+rows.length}件目。`:''}所在地の説明と登録座標が一致しない記事もあります。距離は登録座標間の値で、徒歩距離・営業状況・施設の網羅性を表しません。実際の所在地は元記事等で確認してください。`);
   source(body,'Wikipedia · 記事の著者 / CC BY-SA 等','https://ja.wikipedia.org/wiki/Wikipedia:著作権',response);
+  if(point.geocoder==='photon')source(body,'地点：Photon / © OpenStreetMap contributors · ODbL','https://www.openstreetmap.org/copyright');
   state.context={...state.context,intent:'nearby',pending:null,nearbyPoint:point,nearbyRadius:radius,nearbyPage:task.page};
   follows(body,[...(result.rows.length>(task.page+1)*5?['他の記事']:[]),...(radius<10000?['もっと広く']:[]),'京都なら？']);
  };
@@ -949,7 +1017,7 @@ function createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,local
   for(const city of task.places.slice(0,3))try{
    if(Number.isFinite(city.latitude))solarRequestDate(task,city,localDate(city.timezone||'UTC'));
    const place=await resolveCity(city),zone=place.timezone||'UTC',date=solarRequestDate(task,place,localDate(zone)),offset=solarOffset(date,zone),query=new URLSearchParams({lat:place.latitude.toFixed(4),lon:place.longitude.toFixed(4),date,offset}),url=`https://api.met.no/weatherapi/sunrise/3.0/sun?${query}`,result=await getJSON(url,86400000),events=solarEvents(result.data,place,date,zone);
-   body.append(el('h3',`${place.name} · 基準日 ${date}`));if(!place.timezone)p(body,'現地時間帯は未特定です。基準日とイベント日時はUTCで表示します。');const card=el('div',undefined,'result-card');for(const [index,label]of ['日の出','日の入り'].entries()){const event=events[index];card.append(el('div',`${label}：${event.missing?'未収録':event.none?'時刻なし（提供元のnull）':event.date+' '+event.time}`,'big'));}card.append(el('div',`${zone} · APIへの時差指定 ${offset}`,'sub'));body.append(card);source(body,'MET Norway · CC BY 4.0',url,result);ok.push({requestedName:city.name,place,date});
+   body.append(el('h3',`${place.name} · 基準日 ${date}`));if(!place.timezone)p(body,'現地時間帯は未特定です。基準日とイベント日時はUTCで表示します。');const card=el('div',undefined,'result-card');for(const [index,label]of ['日の出','日の入り'].entries()){const event=events[index];card.append(el('div',`${label}：${event.missing?'未収録':event.none?'時刻なし（提供元のnull）':event.date+' '+event.time}`,'big'));}card.append(el('div',`${zone} · APIへの時差指定 ${offset}`,'sub'));body.append(card);source(body,'MET Norway · CC BY 4.0',url,result);if(place.geocoder==='photon')source(body,'地点：Photon / © OpenStreetMap contributors · ODbL','https://www.openstreetmap.org/copyright');ok.push({requestedName:city.name,place,date});
   }catch(error){p(body,`${city.name}：${error.message}`,'error');}
   if(!ok.length)return;
   p(body,'提供元の太陽周期に対する天文学的な時刻です。イベントは基準日の前日・翌日になる場合があるため、実際の年月日も表示しています。地形や実際の見え方とは異なり、nullから白夜・極夜や天気を断定しません。時刻は端末の時間帯データで変換しています。');
@@ -1638,6 +1706,7 @@ function requestSegments(raw,recognize,context={}){
 const CATALOG_CATEGORIES=[['all','すべて'],['life','暮らし・お出かけ'],['research','調べもの'],['tools','計算・整理'],['local','端末内']];
 const FEATURE_CATALOG=[
  {id:'weather',category:'life',title:'天気を比べる',description:'最大3都市を比較。年月日を指定し、取得できた予報を集計。',query:'東京と大阪の明日の天気を比較して',tags:'てんき 雨 傘 洗濯 気温 服装',popular:true},
+ {id:'weatherPlace',category:'life',title:'地名から天気の地点を選ぶ',description:'未登録の都市・町・村を検索して地点を確認。現地時間帯が未特定ならUTC基準。GAS版で利用。',query:'鹿児島の明日の天気',tags:'地名 ちめい 地点 住所 都市 鹿児島 北九州 町 村 天気 候補 Photon OpenStreetMap'},
  {id:'weatherDetails',category:'life',title:'風速・湿度の予報',description:'予報時点の最大風速と相対湿度の範囲。日付・都市を引き継げます。',query:'東京の明日の風速は？',tags:'風 ふうそく しつど 湿度 屋外 天気 予報 相対湿度'},
  {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
@@ -1916,6 +1985,7 @@ const names={countryTrend:'国の統計推移',countryStat:'国の統計',weathe
 names.localAI='端末内AI';
 names.cloudAI='クラウドAI';
 names.eraYear='和暦・西暦';
+names.placeSearch='天気の地点候補';
 names.unitsGuide='単位換算';names.quakesGuide='地震情報';
 names.businessDays='営業日計算';
 names.scholar='学術資料';names.doi='DOIの書誌';
@@ -1924,6 +1994,7 @@ names.nearby='周辺の記事';
 names.timeConvert='日時の時差変換';
 const registry=[
  ['端末内LLM','必要なモデルだけを手動で起動','https://huggingface.co/Qwen','公開モデルはApache 2.0。起動時の自動取得はありません。iPhone・iPadでは一括準備と大きなモデルを使いません。'],
+ ['Photon / OpenStreetMap','天気の地点を都市名から確認','https://photon.komoot.io/','登録不要の公開デモAPI。手動の地名検索だけをGAS経由で実行し、共有の照会間隔・1日100回の保護上限・6時間キャッシュを適用します。OSMデータはODbL。大量取得・自動補完・逆引きは使いません。'],
  ['MET Norway','天気予報・日の出・日の入り','https://api.met.no/','商用利用も可能な公開API・CC BY 4.0。識別情報・キャッシュ・提供元の負荷制限に従って利用します。'],
  ['Frankfurter','通貨の参考レート','https://frankfurter.dev/','キー不要・商用無料。日次更新の参考レート。両替手数料は含みません。'],
  ['Wikipedia / MediaWiki','百科事典の検索・本文抜粋','https://www.mediawiki.org/wiki/API:Main_page','キー不要。提供元の制限に従います。本文はCC BY-SA等、各記事のライセンスに従います。'],
@@ -1986,7 +2057,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
