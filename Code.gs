@@ -9,7 +9,7 @@ const SCHEMA = {
 function doGet(){return HtmlService.createHtmlOutputFromFile('App').setTitle('ZERO').addMetaTag('viewport','width=device-width,initial-scale=1,viewport-fit=cover').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function api(request){
  try{
-  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
+  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','renameConversation','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
   if(!/^[a-f0-9]{64}$/.test(request.token||''))throw Error('ブラウザの識別情報が無効です。');
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
@@ -21,6 +21,7 @@ function api(request){
    case 'listConversations':data=listConversations_(owner);break;
    case 'listConversationLibrary':data=listConversationLibrary_(owner);break;
    case 'moveConversation':data=moveConversation_(owner,payload);break;
+   case 'renameConversation':data=renameConversation_(owner,payload);break;
    case 'getConversation':data=getConversation_(owner,payload.id);break;
   }
   return {ok:true,data:data};
@@ -44,6 +45,10 @@ function moveConversation_(owner,payload){
  try{const library=listConversationLibrary_(owner),item=library.items.find(item=>item.id===payload.id);if(!item)throw Error('この会話は見つかりません。');if(item.archived===payload.archived)return library;if(!payload.archived&&library.capacity.active>=50)throw Error('通常一覧が50件に達しています。別の会話を保管一覧へ移してから戻してください。');
  let sheet=database_().getSheetByName('ConversationArchive');if(!sheet)sheet=database_().insertSheet('ConversationArchive');if(!sheet.getLastRow())sheet.getRange(1,1,1,SCHEMA.ConversationArchive.length).setNumberFormat('@').setValues([SCHEMA.ConversationArchive]);sheet=sheet_('ConversationArchive');const rows=rows_('ConversationArchive'),index=rows.findIndex(r=>r[0]===payload.id&&r[1]===owner),values=[payload.id,owner,String(payload.archived),new Date().toISOString()];if(index<0)append_(sheet,[values]);else sheet.getRange(index+2,1,1,values.length).setNumberFormat('@').setValues([values]);return listConversationLibrary_(owner);
  }finally{lock.releaseLock();}
+}
+function renameConversation_(owner,payload){
+ if(!/^[A-Za-z0-9-]{20,60}$/.test(payload.id||'')||typeof payload.title!=='string'||/[\u0000-\u001f\u007f\u2028\u2029]/.test(payload.title)||!payload.title.trim()||payload.title.trim().length>80)throw Error('会話名は改行なしの1〜80文字で指定してください。');
+ const title=payload.title.trim(),lock=LockService.getScriptLock();if(!lock.tryLock(8000))throw Error('名前の変更が混み合っています。少し待って試してください。');try{const records=rows_('Conversations'),index=records.findIndex(row=>row[0]===payload.id&&row[1]===owner);if(index<0)throw Error('この会話は見つかりません。');if(records[index][2]!==title){const range=sheet_('Conversations').getRange(index+2,3,1,1);range.setNumberFormat('@').setRichTextValue(SpreadsheetApp.newRichTextValue().setText(title).build());if(range.getFormula())throw Error('会話名の文字列保存を確認できませんでした。');}return listConversationLibrary_(owner);}finally{lock.releaseLock();}
 }
 function getConversation_(owner,id){if(!/^[a-zA-Z0-9-]{20,60}$/.test(id||''))throw Error('会話IDが無効です。');const conversation=rows_('Conversations').find(r=>r[0]===id&&r[1]===owner);if(!conversation)throw Error('この会話は見つかりません。');const messages=rows_('Messages').filter(r=>r[1]===owner&&r[2]===id).slice(-100).map(r=>({role:r[3],text:r[4],sources:JSON.parse(r[6]||'[]')}));return {id:id,title:conversation[2],context:JSON.parse(conversation[5]||'{}'),messages:messages,archived:archivedConversationIds_(owner).has(id)};}
 function cleanSources_(raw){
