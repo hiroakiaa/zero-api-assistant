@@ -1004,6 +1004,64 @@ function renderHourlyForecast(value,page,{el,p,source,body}){
 const atmosphereWeatherNotes=['風向は風が吹いてくる方向です。0°・360°は北、90°は東、180°は南、270°は西で、方角名は16方位に丸めています。風速0の予報時点は静穏と表示し、方角を断定しません。風速は地上10mの10分平均で、瞬間最大風速ではありません。','海面気圧は海面へ換算されたhPa単位の予報値です。現地の標高での気圧計の値や、過去の実測値ではありません。風向は有効な角度と単位、気圧は正の有限値とhPa単位を確認し、欠測を0で埋めません。','予報時点を6件ずつ表示し、間隔の広い区間を補間しません。日平均や安全判断は行いません。'];
 const hourlyWeatherNotes=['取得した予報時点を6件ずつ表示します。予報間隔が広い部分を1時間ごとに補間せず、夏時間の同じ時刻はUTCからの時差で区別します。現在の予報であり、過去の実測値ではありません。','気温は予報時点の地上2m、風速は地上10mの10分平均です。瞬間最大風速ではありません。降水量は予報時点から直後1時間の量だけを使い、区間の終了時刻も表示します。同じ日付・時差はその行の予報時点に従い、日付や時差が変わる場合は終了側も明示します。6時間・12時間の量を1時間分へ分割しません。','未収録・単位を確認できない値は0で埋めません。気温・降水量・風速は表示桁を丸めます。'];
 
+const seriesDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
+function currencySeriesRange(from,to,now=new Date()){
+ const start=validateCurrencyDate(from,now),end=validateCurrencyDate(to,now),days=(Date.parse(end)-Date.parse(start))/86400000+1;
+ if(!Number.isInteger(days)||days<1||days>31)throw Error('為替の推移は開始日から終了日まで、今日以前の1〜31日間で指定してください。');return {from:start,to:end,days};
+}
+function parseCurrencySeries(raw,context={},recognize){
+ let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|翻訳|文章|コード)[：:\s]|天気|祝日|地震|とは|について/.test(text))return null;
+ const active=context.intent==='currency'&&context.currencySeriesFrom&&context.currencySeriesTo,explicit=/為替推移|推移|時系列|グラフ/.test(text);
+ if(!/為替|ドル|ユーロ|ポンド|人民元|ウォン|豪ドル|カナダドル|スイスフラン|何円|ドル円|ユーロ円|\b(?:USD|EUR|JPY|GBP|CNY|KRW|AUD|CAD|CHF)\b/i.test(text)&&(!active||/人口|GDP|森林|物価|寿命|失業|気温|温度|株価|売上|円周|円面積/.test(text)))return null;
+ if(!explicit&&!active)return null;
+ if(!explicit&&active&&(/最新|今のレート|換算に戻る|比較を解除/.test(text)||new RegExp('^'+seriesDatePattern+'(?:なら|では|は)?$').test(text)))return null;
+ if(!explicit&&active&&!/から|〜|～|推移|時系列|グラフ|同じ期間|^逆|反対|なら|では|にすると/.test(text))return null;
+ if(/予測|予想|見通し|分足|時間足|リアルタイム|売買|損益|平均/.test(text))return [{kind:'currency',error:'日次参考値の推移に対応します。予測・時刻別・期間平均・売買損益へ読み替えません。'}];
+ try{
+  text=text.replace(/^為替推移[：:\s]*/,'').replace(/(?:の)?(?:推移|時系列)(?:を見せて|を教えて|を表示して|にして|なら|では)?|(?:を)?グラフ(?:にして|を見せて|で)?/g,'').replace(/^同じ期間(?:で|の|なら|では)?\s*/,'').trim();
+  const range=text.match(new RegExp('^('+seriesDatePattern+')\\s*(?:から|[〜～~])\\s*('+seriesDatePattern+')(?:まで)?')),month=!range&&text.match(/^(\d{4})年(\d{1,2})月(?!\d)/);let from,to;
+  if(range){from=range[1];to=range[2];text=text.slice(range[0].length);}
+  else if(month){const y=Number(month[1]),m=Number(month[2]);if(m<1||m>12)throw Error('推移の月を確認してください。');from=`${y}-${String(m).padStart(2,'0')}-01`;to=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);text=text.slice(month[0].length);}
+  else if(active){from=context.currencySeriesFrom;to=context.currencySeriesTo;}
+  else throw Error('推移の開始日と終了日を指定してください。例：「2025-01-01から2025-01-10の100ドルは何円の推移」。');
+  const selected=currencySeriesRange(from,to);text=text.replace(/^(?:の|で|なら|では|は)\s*/,'').replace(/(?:の|で)$/,'').trim();
+  text=text.replace(/^ドル円$/,'1ドルは何円').replace(/^ユーロ円$/,'1ユーロは何円').replace(/^([A-Z]{3})\s*\/\s*([A-Z]{3})$/i,'$1→$2');
+  const core=recognize(text,active?{intent:'currency',amount:context.amount,base:context.base,quote:context.quote}:{}),task=text?core[0]:active?{kind:'currency',amount:context.amount,base:context.base,quote:context.quote}:null;
+  if(!task||task.kind!=='currency'||task.error||task.date||task.compareDates)throw Error(task?.error||'推移を調べる金額と通貨ペアを指定してください。例：「2025年1月のドル円の推移」。');
+  return [{...task,seriesFrom:selected.from,seriesTo:selected.to}];
+ }catch(error){return [{kind:'currency',error:error.message}];}
+}
+function currencySeriesRows(data,base,quote,from,to,now=new Date()){
+ const range=currencySeriesRange(from,to,now);if(!currencyCodes.includes(base)||!currencyCodes.includes(quote)||base===quote)throw Error('推移は対応する異なる2通貨を指定してください。');
+ if(!Array.isArray(data)||data.length>range.days)throw Error('為替推移の応答件数を確認できませんでした。');
+ const seen=new Map();for(const row of data){if(row?.base!==base||row?.quote!==quote||typeof row.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(row.date)||validateCurrencyDate(row.date,now)!==row.date||row.date<range.from||row.date>range.to||seen.has(row.date)||typeof row.rate!=='number'||!Number.isFinite(row.rate)||row.rate<=0)throw Error('為替推移の通貨・日付・重複・レートが指定条件と一致しません。');seen.set(row.date,row.rate);}
+ return Array.from({length:range.days},(_,i)=>{const date=new Date(Date.parse(range.from)+i*86400000).toISOString().slice(0,10);return {date,rate:seen.get(date)??null}});
+}
+function currencySeriesCSV(rows,task,url,at){
+ const cell=v=>'"'+String(v??'').replaceAll('"','""')+'"',result=[['対象日','API返却日','基準通貨','相手通貨','レート（1基準通貨）','換算元金額','概算換算額','収録状況','指定開始日','指定終了日','出典','出典URL','取得日時','利用条件URL']];
+ for(const row of rows){const amount=row.rate===null?null:row.rate*task.amount;if(amount!==null&&!Number.isFinite(amount))throw Error('換算額が扱える範囲を超えています。');result.push([row.date,row.rate===null?'':row.date,task.base,task.quote,row.rate,task.amount,amount,row.rate===null?'未収録':'API返却あり',task.seriesFrom,task.seriesTo,'Frankfurter · blended daily reference rates',url,at||'','https://frankfurter.dev/license/']);}
+ return '\uFEFF'+result.map(r=>r.map(cell).join(',')).join('\r\n')+'\r\n';
+}
+function renderCurrencySeriesPlot(rows,label){
+ const values=rows.filter(r=>r.rate!==null).map(r=>r.rate),minimum=Math.min(...values),maximum=Math.max(...values),svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 600 110');svg.setAttribute('class','trend-plot');svg.setAttribute('role','img');svg.setAttribute('aria-label',label+'。縦軸は取得値の最小〜最大。日別の値は表に表示しています。');
+ let points=[];const flush=()=>{if(!points.length)return;const line=document.createElementNS(svg.namespaceURI,'polyline');for(const [k,v]of Object.entries({points:points.map(p=>p.x+','+p.y).join(' '),fill:'none',stroke:'#d7d7eb','stroke-width':'2','vector-effect':'non-scaling-stroke'}))line.setAttribute(k,v);svg.append(line);for(const p of points){const circle=document.createElementNS(svg.namespaceURI,'circle');for(const [k,v]of Object.entries({cx:String(p.x),cy:String(p.y),r:'2',fill:'#e2e2ef'}))circle.setAttribute(k,v);svg.append(circle)}points=[]};
+ for(const [index,row]of rows.entries()){if(row.rate===null){flush();continue;}points.push({x:rows.length===1?300:4+592*index/(rows.length-1),y:maximum===minimum?55:106-102*(row.rate-minimum)/(maximum-minimum)})}flush();return svg;
+}
+async function showCurrencySeries(task,body,{getJSON,el,p,source,state,follows,now=()=>new Date(),plot=renderCurrencySeriesPlot,download,preview}){
+ const range=currencySeriesRange(task.seriesFrom,task.seriesTo,now());if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12||!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote)||task.base===task.quote)throw Error('推移は金額0〜1兆と、対応する異なる2通貨を指定してください。');
+ const url='https://api.frankfurter.dev/v2/rates?'+new URLSearchParams({base:task.base,quotes:task.quote,from:range.from,to:range.to}),result=await getJSON(url,3600000),rows=currencySeriesRows(result.data,task.base,task.quote,range.from,range.to,now()),valid=rows.filter(r=>r.rate!==null),csv=currencySeriesCSV(rows,task,url,result.at),format=n=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:12}).format(n);
+ const change=valid.length>1?(valid.at(-1).rate-valid[0].rate)/valid[0].rate*100:null;if(change!==null&&!Number.isFinite(change))throw Error('期間のレート変化を計算できませんでした。');
+ body.append(el('h3',`${task.base} → ${task.quote} の推移`));p(body,`${range.from}〜${range.to} · ${format(task.amount)} ${task.base} の概算換算額`);
+ if(valid.length){const minimum=Math.min(...valid.map(r=>r.rate)),maximum=Math.max(...valid.map(r=>r.rate));p(body,`グラフの縦軸：${format(minimum)}〜${format(maximum)} ${task.quote} / ${task.base}（取得値に合わせた目盛）。未収録の日では線を切ります。`,'sub');body.append(plot(rows,`${task.base}/${task.quote} ${range.from}〜${range.to}`));}
+ else p(body,'この条件の日次値は未収録です。');
+ const table=el('table',undefined,'trend-table'),thead=el('thead'),head=el('tr');for(const title of ['対象日',`1 ${task.base} の${task.quote}`,`${format(task.amount)} ${task.base} の概算額`])head.append(el('th',title));thead.append(head);table.append(thead);const tbody=el('tbody');for(const row of rows){const tr=el('tr');tr.append(el('th',row.date),el('td',row.rate===null?'未収録':format(row.rate)),el('td',row.rate===null?'未収録':format(task.amount*row.rate)+' '+task.quote));tbody.append(tr)}table.append(tbody);body.append(table);
+ if(valid.length>1){const first=valid[0],last=valid.at(-1);p(body,`取得できた最初の日 ${first.date} → 最後の日 ${last.date}：レート変化率 ${change>0?'+':''}${format(change)}%`);}else p(body,'取得値が2日分に満たないため、期間の変化率は表示しません。');
+ const save=el('button','為替推移をCSV保存','history-item trend-export');save.type='button';save.addEventListener('click',()=>{try{download(csv,`zero-currency-${task.base}-${task.quote}-${range.from}-${range.to}.csv`)}catch{p(body,'CSVを保存できませんでした。「CSVの内容を確認」からコピーできます。','error')}});const inspect=el('button','CSVの内容を確認','history-item trend-export');inspect.type='button';inspect.addEventListener('click',()=>preview(csv));body.append(save,inspect);
+ p(body,'提供元の日次集計による参考値です。API返却日は個々の市場・銀行の公表日や取引時刻とは限りません。休日も提供元の返却値だけを表示し、アプリでは補間や前日値での埋め合わせをしません。実際の決済・両替レート、手数料、売買損益ではありません。表示は最大12桁、CSVは追加の丸めをせず出典・取得日時を含みます。','sub');source(body,'Frankfurter · 日次参考値の推移',url,result);
+ state.context={...state.context,intent:'currency',pending:null,amount:task.amount,base:task.base,quote:task.quote,currencySeriesFrom:range.from,currencySeriesTo:range.to};delete state.context.currencyDate;delete state.context.currencyCompareDates;follows(body,['200なら？','逆にすると？','換算に戻る']);
+}
+
 const currencyWords={米ドル:'USD',ドル:'USD',ユーロ:'EUR',日本円:'JPY',円:'JPY',英ポンド:'GBP',ポンド:'GBP',人民元:'CNY',元:'CNY',韓国ウォン:'KRW',ウォン:'KRW',豪ドル:'AUD',カナダドル:'CAD',スイスフラン:'CHF'};
 const currencyCodes=['USD','EUR','JPY','GBP','CNY','KRW','AUD','CAD','CHF'];
 const currencyDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
@@ -1075,6 +1133,7 @@ function parseCurrencyCore(raw,context={}){
  return [];
 }
 function parseCurrencyTasks(raw,context={}){
+ const series=parseCurrencySeries(raw,context,parseCurrencyCore);if(series)return series;
  const input=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'').trim(),active=context.intent==='currency';
  if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:]|天気|気温|祝日|地震|とは|って何|について/.test(input))return parseCurrencyCore(raw,context);
  const explicit=/^為替比較[：:\s]/.test(input),text=input.replace(/^為替比較[：:\s]+/,''),dates=[...text.matchAll(new RegExp(currencyDatePattern,'g'))];
@@ -1108,9 +1167,10 @@ function currencyQuote(data,base,quote,requestedDate){
  if(requestedDate&&data.date>requestedDate)throw Error('指定日より後のレートが返ったため、換算を停止しました。');
  return data;
 }
-function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Date()}){
+function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Date(),...seriesView}){
  return async function currency(task,body){
   if(task.error)throw Error(task.error);
+  if(task.seriesFrom!==undefined||task.seriesTo!==undefined)return showCurrencySeries(task,body,{getJSON,el,p,source,state,follows,now,...seriesView});
   if(task.compareDates!==undefined)return compareCurrency(task,body,{getJSON,el,p,source,state,follows,now});
   if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12)throw Error('金額は0〜1兆の数値で指定してください。');
   if(!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote))throw Error('対応する通貨を指定してください。');
@@ -1127,7 +1187,7 @@ function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Da
   p(body,'参考レートでの概算です。表示は最大12桁。実際の両替・決済レートや手数料は含みません。');
   if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');
   state.context={...state.context,intent:'currency',pending:null,base:task.base,quote:task.quote,amount:task.amount};
-  delete state.context.currencyCompareDates;
+  delete state.context.currencyCompareDates;delete state.context.currencySeriesFrom;delete state.context.currencySeriesTo;
   if(requestedDate)state.context.currencyDate=requestedDate;else delete state.context.currencyDate;
   follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？',...(requestedDate?['最新のレートで']:[])]);
  };
@@ -1153,6 +1213,7 @@ async function compareCurrency(task,body,{getJSON,el,p,source,state,follows,now}
  p(body,'日次集計の参考値を①から②へ比較しています。日付の順序は入力順です。公表時刻・実際の決済・手数料・期間の平均や損益は表しません。表示は最大12桁で、差と変化率は丸める前の値から計算します。','sub');
  for(const r of records)if(r.response)source(body,'Frankfurter · '+r.date,r.url,r.response);if(task.base===task.quote)p(body,'同じ通貨のため、API通信は行っていません。');
  state.context={...state.context,intent:'currency',pending:null,amount:task.amount,base:task.base,quote:task.quote,currencyDate:dates[1],currencyCompareDates:dates};
+ delete state.context.currencySeriesFrom;delete state.context.currencySeriesTo;
  follows(body,['200なら？','逆にすると？','換算に戻る']);
 }
 
@@ -2339,6 +2400,7 @@ const FEATURE_CATALOG=[
  {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
  {id:'distance',category:'tools',title:'2地点の距離',description:'登録都市や緯度・経度から球面上の最短距離を計算。道路距離・所要時間とは別。',query:'東京から大阪までの距離は？',tags:'距離 きょり 大円距離 地理 球面 座標 緯度 経度 km マイル 移動 都市',local:true},
  {id:'speciesSynonyms',category:'research',title:'学名の同義語を確認',description:'生物候補の分類を選んだ後に「同義語は？」。採用名との関係を確認。',query:'生物:Panthera leo',tags:'生物 学名 同義語 異名 採用名 別名 GBIF 分類'},
+ {id:'currencySeries',category:'life',title:'為替の日次推移',description:'最大31日間の参考レートをグラフ・表・CSVで確認。',query:'2025-01-01から2025-01-10の100ドルは何円の推移',tags:'為替 推移 グラフ 時系列 CSV 日次 期間 ドル 円'},
  {id:'currencyCompare',category:'life',title:'2つの日付の為替比較',description:'金額と通貨を保ち、指定日ごとの返却レートと変化を確認。',query:'為替比較:2025-01-15と2025-01-18の100ドルは何円？',tags:'為替 比較 レート 差 変化率 過去 両替'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
@@ -2773,7 +2835,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目'+(c.weatherHourlyMetric==='direction'?' · 風向':c.weatherHourlyMetric==='pressure'?' · 海面気圧':''):null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目'+(c.bookView==='subjects'?' · 主題・分野':''):c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='businessDays'?' · '+(c.businessMode==='uk'?'英国 '+(Array.isArray(c.ukBusinessRegions)?c.ukBusinessRegions.map(id=>UK_REGIONS.find(r=>r.id===id)?.name).filter(Boolean).join(' / '):''):c.businessMode==='weekdays'?'土日のみ':'日本の祝日'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目'+(c.weatherHourlyMetric==='direction'?' · 風向':c.weatherHourlyMetric==='pressure'?' · 海面気圧':''):null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目'+(c.bookView==='subjects'?' · 主題・分野':''):c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='businessDays'?' · '+(c.businessMode==='uk'?'英国 '+(Array.isArray(c.ukBusinessRegions)?c.ukBusinessRegions.map(id=>UK_REGIONS.find(r=>r.id===id)?.name).filter(Boolean).join(' / '):''):c.businessMode==='weekdays'?'土日のみ':'日本の祝日'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${c.currencySeriesFrom?' · 推移 '+c.currencySeriesFrom+'〜'+c.currencySeriesTo:Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 const cloudAnswer=createCloudAnswer({cloud,state,el,p,scroll:()=>scrollConversationToEnd(false)});
 async function localAnswer(text,body,head){
  if(state.cloudAIEnabled)return cloudAnswer(text,body,head);
@@ -2793,7 +2855,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={moon:createLunarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),quakeHistory:createQuakeHistoryHandler({getJSON,cloud,el,p,link,source,state,follows}),distance:createDistanceHandler({cities,el,p,source,state,follows}),elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={moon:createLunarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),quakeHistory:createQuakeHistoryHandler({getJSON,cloud,el,p,link,source,state,follows}),distance:createDistanceHandler({cities,el,p,source,state,follows}),elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows,download:downloadTrendCSV,preview:showTrendCSV}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
