@@ -20,6 +20,8 @@
 
 .transcript-actions{display:flex;gap:8px;flex-wrap:wrap}.transcript-preview{max-height:50dvh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;font-size:11px;line-height:1.8;padding:12px;background:#141418;border:1px solid #363640;border-radius:10px}.transcript-actions button{max-width:100%}
 .local-generated{min-width:0;max-width:100%;overflow-wrap:anywhere}.local-generated pre{max-width:100%;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.local-generated pre code{white-space:pre;overflow-wrap:normal;word-break:normal}.local-generated pre:focus-visible{outline:2px solid #b9b9c7;outline-offset:2px}.local-generated ul,.local-generated ol{padding-left:1.6em;margin:10px 0;white-space:normal}.local-generated li{white-space:pre-wrap;margin:5px 0}
+
+.result-notes{margin:12px 0;border:1px solid var(--line);border-radius:10px;padding:0 12px;color:#b9b9c2}.result-notes summary{cursor:pointer;padding:12px 0;min-height:44px;font-size:12px}.result-notes summary:focus-visible{outline:2px solid #b9b9c7;outline-offset:2px}.result-notes[open] summary{border-bottom:1px solid var(--line)}.result-notes p{margin:10px 0;line-height:1.8}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -558,6 +560,10 @@ function calculate(raw){
 const weatherLabel=code=>code===0?'快晴':code<=3?'晴れ・くもり':code<=48?'霧':code<=67?'雨':code<=77?'雪':code<=82?'にわか雨':code<=86?'にわか雪':'雷雨';
 function weatherAdvice(rain,min,max){const tips=[];if(rain>=40)tips.push('降水確率が40%以上なので、傘を持つと安心です。');else tips.push('降水確率は40%未満ですが、出発前にも予報を確認してください。');if(max>=28)tips.push('暑さに合わせて、薄手の服と飲み物を。');else if(max<=12)tips.push('防寒できる上着を用意しましょう。');else if(max-min>=8)tips.push('気温差に備えて、脱ぎ着できる上着が便利です。');else tips.push('気温に合わせて服装を調整してください。');return tips.join(' ');}
 
+const weatherResultNotes=[
+ '取得した時間別予報の集計であり、過去の実測値ではありません。1日全体を含まない場合や、将来の予報間隔が広がる場合があります。降水量は対象日に収まる区間だけを合計し、日付をまたぐ区間は推計で分割せず除きます。都市ごとの対象日付・期間の違いにご注意ください。',
+ '風速は地上10mの10分平均風速について、取得した予報時点の最大値です。瞬間最大風速ではありません。湿度は地上2mの相対湿度の範囲です。有効な数値の時点数を表示し、欠測を0や別の項目で補いません。'
+];
 const weatherDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日)';
 const weatherQueryProtected=text=>/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text);
 const weatherWindQuery=text=>/風速|風向|突風|台風/.test(text)||/(?:^|の|は)風(?:の強さ|(?:は|が)?(?:強い|弱い|どのくらい|どれくらい)?)?[。？?]?$/.test(text);
@@ -648,7 +654,7 @@ function createWeatherHandler({getJSON,el,p,source,state,follows,resolveCity,loc
    if(focus!=='all')p(card,v.samples?`気温 ${v.max}° / ${v.min}°（${v.samples}時点）`:'気温：未収録');
    if(focus==='all')p(body,`${v.place.name}：${v.precipitation>0?'降水の予報があるため、雨具を検討してください。 ':''}${v.max<=12?'防寒できる上着を用意しましょう。':v.max>=28?'薄手の服と飲み物を用意しましょう。':'気温に合わせ、脱ぎ着できる服装が便利です。'}`);source(body,'MET Norway · CC BY 4.0（時間別予報を集計）','https://api.met.no/',v.result);
   }
-  if(ok.length){state.context={...state.context,intent:'weather',pending:null,places:ok.map(v=>v.place),weatherDates:ok.map(v=>v.date),weatherDateAmbiguous:!ok.every(v=>v.date===ok[0].date)&&!ok.every(v=>v.relativeOffset===ok[0].relativeOffset),offset:ok.every(v=>v.relativeOffset===ok[0].relativeOffset)?ok[0].relativeOffset:task.offset,weatherFocus:focus,lastDate:ok.length===1&&ok[0].place.timezone==='Asia/Tokyo'?ok[0].date:null};if(task.date)state.context.weatherDate=task.date;else if(task.dates&&ok.every(v=>v.date===ok[0].date))state.context.weatherDate=ok[0].date;else delete state.context.weatherDate;p(body,'取得した時間別予報の集計であり、過去の実測値ではありません。1日全体を含まない場合や、将来の予報間隔が広がる場合があります。降水量は対象日に収まる区間だけを合計し、日付をまたぐ区間は推計で分割せず除きます。都市ごとの対象日付・期間の違いにご注意ください。','sub');p(body,'風速は地上10mの10分平均風速について、取得した予報時点の最大値です。瞬間最大風速ではありません。湿度は地上2mの相対湿度の範囲です。有効な数値の時点数を表示し、欠測を0や別の項目で補いません。','sub');source(body,'MET Norway · CC BY 4.0','https://creativecommons.org/licenses/by/4.0/');follows(body,[...(task.date||task.offset!==0?['今日は？','大阪なら？']:['明日は？','大阪なら？']),focus==='humidity'?'風速は？':'湿度は？']);}
+  if(ok.length){state.context={...state.context,intent:'weather',pending:null,places:ok.map(v=>v.place),weatherDates:ok.map(v=>v.date),weatherDateAmbiguous:!ok.every(v=>v.date===ok[0].date)&&!ok.every(v=>v.relativeOffset===ok[0].relativeOffset),offset:ok.every(v=>v.relativeOffset===ok[0].relativeOffset)?ok[0].relativeOffset:task.offset,weatherFocus:focus,lastDate:ok.length===1&&ok[0].place.timezone==='Asia/Tokyo'?ok[0].date:null};if(task.date)state.context.weatherDate=task.date;else if(task.dates&&ok.every(v=>v.date===ok[0].date))state.context.weatherDate=ok[0].date;else delete state.context.weatherDate;const notes=el('details',undefined,'result-notes');notes.append(el('summary','集計方法とデータの範囲'));for(const text of weatherResultNotes)p(notes,text,'sub');rememberAnswerText(notes,['集計方法とデータの範囲',...weatherResultNotes].join('\n'));body.append(notes);source(body,'MET Norway · CC BY 4.0','https://creativecommons.org/licenses/by/4.0/');follows(body,[...(task.date||task.offset!==0?['今日は？','大阪なら？']:['明日は？','大阪なら？']),focus==='humidity'?'風速は？':'湿度は？']);}
  };
 }
 
@@ -1942,6 +1948,7 @@ class ModelLoadRecovery{
 }
 
 const generatedSources=new WeakMap();
+function rememberAnswerText(node,text){generatedSources.set(node,text);}
 function generatedBlocks(text){
  const blocks=[],lines=String(text).replace(/\r\n?/g,'\n').split('\n');let paragraph=[],list=null,fence=null,code=[];
  const flush=()=>{if(paragraph.length){blocks.push({type:'paragraph',text:paragraph.join('\n')});paragraph=[];}if(list){blocks.push(list);list=null;}};
@@ -1965,7 +1972,7 @@ function renderGeneratedAnswer(output,text,el){
  }
 }
 // Keep the original fenced code and list markers when saving/exporting a turn.
-function generatedTranscriptText(body){const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');}
+function generatedTranscriptText(body){const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated, details.result-notes')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');}
 
 function cloudGenerationInput(raw,history=[]){
  const explicit=explicitLocalPrompt(raw),prompt=explicit?.content||raw;
