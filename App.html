@@ -1977,7 +1977,7 @@ async function runUKBusiness(task,body,{getJSON,el,p,source,state,localDate}){
  p(body,task.operation==='add'?'開始日を0日として数え、0日後は開始日をそのまま返します。':'両端を含めます。逆順の期間は同じ範囲の日数を負数で表示します。');p(body,'土日と地域別のGOV.UK登録バンクホリデーを除く参考計算です。企業・学校・店舗の営業や法定の期限を判断するものではありません。振替日はAPIの登録日を使い、独自に追加しません。','sub');
  if(response){source(body,'GOV.UK · © Crown copyright · OGL v3.0','https://www.gov.uk/bank-holidays',response);source(body,'Open Government Licence v3.0','https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/');}else p(body,'0営業日のため、外部APIを呼ばずに計算しました。');if(task.from==='今日'||task.to==='今日')p(body,'「今日」は英国時間 '+today+' です。');
  const reference=items[0].result.to,same=items.every(v=>v.result.to===reference);state.context={...state.context,intent:'businessDays',pending:null,businessMode:'uk',ukBusinessRegions:[...task.regions],ukBusinessTask:{operation:task.operation,from:task.from,...(task.operation==='add'?{days:task.days}:{to:task.to})},lastDate:same?reference:null};
- const box=el('div',undefined,'follow-ups');for(const name of ['イングランド','スコットランド','北アイルランド']){const button=el('button',name+'なら？','follow');button.type='button';button.dataset.ask=name+'なら？';box.append(button);}body.append(box);
+ const box=el('div',undefined,'followups');for(const name of ['イングランド','スコットランド','北アイルランド']){const button=el('button',name+'なら？');button.type='button';button.dataset.ask=name+'なら？';box.append(button);}body.append(box);
 }
 
 const CROSSREF_FIELDS='DOI,title,author,published,container-title,type';
