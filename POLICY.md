@@ -175,3 +175,7 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 ## 質問を入力欄へ戻す操作
 
 質問の再利用は端末内で、利用者がボタンを押した場合だけ入力欄へ原文を戻す操作です。自動送信・自動照会・履歴の再書き込み・会話条件の書き換え・クリップボード権限・追加の永続保存は行いません。現在の未送信内容を上書きせず、処理中や保管中は案内します。通常の送信を別途選ぶまではGoogle・API・PCのAIへ新たな質問を送りません。
+
+## Open Libraryの作品主題
+
+2026-10-26に[公式Books/Works API](https://openlibrary.org/dev/docs/api/books)、[Search API](https://openlibrary.org/dev/docs/api/search)、[ライセンス説明](https://openlibrary.org/developers/licensing)を確認しました。既存Open Libraryの基本書誌利用を拡張し、現在の候補から選んだ作品IDのJSONと、subjectフィールドによる最大5件の検索に限定します。提供元の登録語を原文表示し、自動要約や翻訳はしません。作品ID・書名・主題配列を検証して必要項目だけを短縮・キャッシュし、説明文・本文・画像は表示・保存しません。主題からの新しい検索は明示的なボタン操作または入力でのみ行います。既存の取得間隔・保護上限・共有キャッシュを維持し、追加の認証・申告フォーム送信・課金・Googleスコープを導入しません。
