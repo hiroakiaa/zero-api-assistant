@@ -143,3 +143,5 @@ World Bank WDIの固定指標NY.GDP.MKTP.KD.ZGだけを既存の国統計API許�
 為替の2時点比較も、Frankfurterの無償・キー不要の公開v2ブレンドレートを利用します。提供元別の直接ルートや有料サービスへ切り替えません。2指定日ごとに既存の単一ペアURLを取得し、キャッシュを再利用します。返却日と比較方向を表示し、部分失敗から架空の差を作りません。同通貨では外部通信を行いません。条件再確認：2026-10-26、https://frankfurter.dev/ の商用利用・キャッシュに関するFAQ。
 
 GBIFの学名同義語には公式公開 `/v1/species/{usageKey}/synonyms` の5件・offset 0/5/10/15/20だけを追加します。既存のspecies提供元の無効設定や共有待機・キャッシュを守り、認証・課金・追加Google権限はありません。分類の最小項目だけに縮小し、各異名のacceptedKeyと対象採用名IDの一致をサーバー・画面双方で確認します。説明・画像・分布・観察記録は取得しません。データセットのCC BY 4.0・DOIの出典を維持します。公式仕様と無料アクセス・負荷制限を2026-10-26に再確認：https://techdocs.gbif.org/en/openapi/v1/species 、https://www.gbif.org/restricted 。
+
+物価上昇率は既存World Bank公開APIのWDI固定系列 `FP.CPI.TOTL.ZG` だけを追加し、source=2・単年または最大20年・最大3か国に限定します。無認証・利用料なし・CC BY 4.0であり、IMF International Financial StatisticsとWorld Bank WDIを出典に明示します。国・指標・年・件数・重複・有限値をGASでキャッシュする前に検証し、画面側でも再検証します。負値や100%超は欠損扱いにしません。CPI指数水準・別指標・予測へ自動で切り替えません。利用条件と定義を2026-10-26に確認：https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG 、https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FP.CPI.TOTL.ZG 。
