@@ -145,3 +145,5 @@ World Bank WDIの固定指標NY.GDP.MKTP.KD.ZGだけを既存の国統計API許�
 GBIFの学名同義語には公式公開 `/v1/species/{usageKey}/synonyms` の5件・offset 0/5/10/15/20だけを追加します。既存のspecies提供元の無効設定や共有待機・キャッシュを守り、認証・課金・追加Google権限はありません。分類の最小項目だけに縮小し、各異名のacceptedKeyと対象採用名IDの一致をサーバー・画面双方で確認します。説明・画像・分布・観察記録は取得しません。データセットのCC BY 4.0・DOIの出典を維持します。公式仕様と無料アクセス・負荷制限を2026-10-26に再確認：https://techdocs.gbif.org/en/openapi/v1/species 、https://www.gbif.org/restricted 。
 
 物価上昇率は既存World Bank公開APIのWDI固定系列 `FP.CPI.TOTL.ZG` だけを追加し、source=2・単年または最大20年・最大3か国に限定します。無認証・利用料なし・CC BY 4.0であり、IMF International Financial StatisticsとWorld Bank WDIを出典に明示します。国・指標・年・件数・重複・有限値をGASでキャッシュする前に検証し、画面側でも再検証します。負値や100%超は欠損扱いにしません。CPI指数水準・別指標・予測へ自動で切り替えません。利用条件と定義を2026-10-26に確認：https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG 、https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FP.CPI.TOTL.ZG 。
+
+英国の地域別営業日計算は、既存GOV.UK Bank Holidays公開JSONだけを使います。政府の再利用案内とOGL v3.0による無償利用を2026-10-26に再確認：https://www.gov.uk/help/reuse-govuk-content 。3地域を分け、土日と登録されたバンクホリデーのみ除外します。比較全体で1回取得・既存1時間キャッシュを使い、追加の認証・Google権限・費用はありません。年初New Year・年末Christmasの登録を確認できない年は計算しません。網羅性を独自に保証せず、未収録の年の祝日や振替を補作しません。
