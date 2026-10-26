@@ -179,3 +179,7 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 ## Open Libraryの作品主題
 
 2026-10-26に[公式Books/Works API](https://openlibrary.org/dev/docs/api/books)、[Search API](https://openlibrary.org/dev/docs/api/search)、[ライセンス説明](https://openlibrary.org/developers/licensing)を確認しました。既存Open Libraryの基本書誌利用を拡張し、現在の候補から選んだ作品IDのJSONと、subjectフィールドによる最大5件の検索に限定します。提供元の登録語を原文表示し、自動要約や翻訳はしません。作品ID・書名・主題配列を検証して必要項目だけを短縮・キャッシュし、説明文・本文・画像は表示・保存しません。主題からの新しい検索は明示的なボタン操作または入力でのみ行います。既存の取得間隔・保護上限・共有キャッシュを維持し、追加の認証・申告フォーム送信・課金・Googleスコープを導入しません。
+
+## MET Norwayの風向・海面気圧
+
+2026-10-26に[公式データモデル](https://docs.api.met.no/doc/locationforecast/datamodel.html)と[Locationforecast仕様](https://api.met.no/weatherapi/locationforecast/2.0/documentation)を確認しました。既存のCC BY 4.0 compactデータ内の風向（degrees）・海面気圧（hPa）を表示する拡張で、APIホスト・権限・キー・課金先は追加しません。予報時点だけを表示し、角度は0〜360・気圧は正の有限値と単位を確認します。日平均・補間・実測への置換はせず、海面気圧と現地の気圧を区別します。既存のキャッシュ・提供元表示・取得保護上限を維持します。
