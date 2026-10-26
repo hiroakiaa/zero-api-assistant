@@ -435,25 +435,35 @@ function createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather,now=D
 const speciesBackbone='d7dddbf4-2cf0-4f39-9b2a-bb099caae36c';
 const speciesKey=value=>Number.isSafeInteger(value)&&value>0&&value<1e12;
 const speciesText=value=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,200):'';
-function speciesQuery(value){const text=typeof value==='string'?value.normalize('NFKC').trim():'';if(text.length<2||text.length>80||!/[\p{L}]/u.test(text)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(text))throw Error('生物名は2〜80文字で、日本語名または学名を指定してください。');return text;}
-function speciesURL(task){if(task.key!==undefined){if(!speciesKey(task.key))throw Error('生物の候補番号を確認してください。');return 'https://api.gbif.org/v1/species/'+task.key;}const query=speciesQuery(task.query);if(!Number.isInteger(task.page)||task.page<0||task.page>4)throw Error('生物の検索は5ページまでです。');return 'https://api.gbif.org/v1/species/search?'+new URLSearchParams({q:query,limit:'5',offset:String(task.page*5),datasetKey:speciesBackbone});}
+function speciesQuery(value){const text=typeof value==='string'?value.normalize('NFKC').trim():'';if(text.length<1||text.length>80||!/[\p{L}]/u.test(text)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(text))throw Error('生物名は1〜80文字で、日本語名または学名を指定してください。');return text;}
+const speciesNameAliases={猫:'ネコ',犬:'イヌ'};
+const speciesSearchTerm=value=>{const query=speciesQuery(value);return Object.hasOwn(speciesNameAliases,query)?speciesNameAliases[query]:query;};
+const speciesFilterRanks={種:'SPECIES',亜種:'SUBSPECIES',属:'GENUS',科:'FAMILY'},speciesFilterLabels={SPECIES:'種',SUBSPECIES:'亜種',GENUS:'属',FAMILY:'科'};
+function speciesRank(value){if(value===undefined||value===null||value==='')return null;if(typeof value==='string'){const text=value.normalize('NFKC').trim();if(Object.hasOwn(speciesFilterRanks,text))return speciesFilterRanks[text];if(Object.hasOwn(speciesFilterLabels,text.toUpperCase()))return text.toUpperCase();}throw Error('階級は「種」「亜種」「属」「科」から指定してください。');}
+function speciesURL(task){if(task.key!==undefined){if(!speciesKey(task.key))throw Error('生物の候補番号を確認してください。');return 'https://api.gbif.org/v1/species/'+task.key;}const query=speciesSearchTerm(task.query),rank=speciesRank(task.rank);if(!Number.isInteger(task.page)||task.page<0||task.page>4)throw Error('生物の検索は5ページまでです。');return 'https://api.gbif.org/v1/species/search?'+new URLSearchParams({q:query,limit:'5',offset:String(task.page*5),datasetKey:speciesBackbone,...(rank?{rank}:{})});}
 function parseSpecies(raw,context={}){
  const text=raw.normalize('NFKC').trim().replace(/[。？?]$/,'');
- const explicit=text.match(/^(?:生物検索|生物|学名検索|分類検索)[：:]\s*(.*)$/);if(explicit){try{return[{kind:'species',query:speciesQuery(explicit[1]),page:0}];}catch(error){return[{kind:'species',error:error.message}];}}
+ const explicit=text.match(/^(?:生物検索|生物|学名検索|分類検索)[：:]\s*(.*)$/);if(explicit){try{const parts=explicit[1].split(/\s*\|\s*/);if(parts.length>2||parts[1]!==undefined&&!/^階級[：:]\s*\S+/.test(parts[1]))throw Error('絞り込みは「| 階級:種」の形式で指定してください。');return[{kind:'species',query:speciesQuery(parts[0]),rank:parts[1]===undefined?null:speciesRank(parts[1].replace(/^階級[：:]\s*/,'')),page:0}];}catch(error){return[{kind:'species',error:error.message}];}}
+ if(!/^(?:本|書籍|ブック|論文|文献|学術検索|学術|検索|知識|調べる|辞書|翻訳|文章|コード)[：:\s]/.test(text)){
+  const natural=text.match(/^(.{1,80}?)の(学名|生物学的な分類|分類)(?:は(?:何|なに)?(?:ですか)?|を(?:教えて|調べて|確認して|知りたい)|とは)?(?:ください)?$/);
+  if(natural){try{const refer=/^(?:その生物|この生物)$/.test(natural[1]),query=natural[1];if(refer){if(context.intent!=='species'||!speciesKey(context.speciesSelectedKey))throw Error('先に生物名を検索し、分類を確認する候補を選んでください。');return[{kind:'species',key:context.speciesSelectedKey,session:context.speciesSession}];}const biological=natural[2]!=='分類'||Object.hasOwn(speciesNameAliases,query)||Object.values(speciesNameAliases).includes(query)||/^[A-Z][a-z]+ [a-z][a-z-]+(?: [a-z][a-z-]+)?$/.test(query)||context.intent==='species'&&query===context.speciesQuery;if(biological)return[{kind:'species',query:speciesQuery(query),rank:null,page:0}];}catch(error){return[{kind:'species',error:error.message}];}}
+ }
  const stable=text.match(/^生物候補:([a-f0-9-]{36}):(\d{1,12})$/i);if(stable)return[{kind:'species',session:stable[1],key:Number(stable[2])}];
  if(context.intent!=='species')return[];
  const choice=text.match(/^(?:生物候補|生物の)(\d+)(?:番(?:目)?)?(?:の分類|を詳しく)?$/);if(choice)return[{kind:'species',number:Number(choice[1])}];
- if(/^(?:生物の候補に戻る|生物の一覧に戻る)$/.test(text))return[{kind:'species',query:context.speciesQuery,page:context.speciesPage}];
- if(/^(?:生物の続き|次の生物候補|ほかには|他には)$/.test(text))return[{kind:'species',query:context.speciesQuery,page:context.speciesPage+1,...(context.speciesEnd?{error:'この条件の続きはありません。別の生物名で検索できます。'}:{})}];
+ const filter=text.match(/^(種|亜種|属|科)(?:だけ|のみ)(?:なら|では|は)?$/);if(filter)return[{kind:'species',query:context.speciesQuery,rank:speciesRank(filter[1]),page:0}];
+ if(/^(?:階級を解除|階級の条件を解除|すべての階級)$/.test(text))return[{kind:'species',query:context.speciesQuery,rank:null,page:0}];
+ if(/^(?:生物の候補に戻る|生物の一覧に戻る)$/.test(text))return[{kind:'species',query:context.speciesQuery,rank:context.speciesRank||null,page:context.speciesPage}];
+ if(/^(?:生物の続き|次の生物候補|ほかには|他には)$/.test(text))return[{kind:'species',query:context.speciesQuery,rank:context.speciesRank||null,page:context.speciesPage+1,...(context.speciesEnd?{error:'この条件の続きはありません。別の生物名で検索できます。'}:{})}];
  return[];
 }
 function speciesRecord(raw,key){
  if(!raw||raw.datasetKey!==speciesBackbone||!speciesKey(raw.key)||key!==undefined&&raw.key!==key||!speciesText(raw.scientificName))throw Error('生物の分類データを確認できませんでした。');
  const record={key:raw.key};for(const field of ['scientificName','canonicalName','rank','taxonomicStatus','accepted','kingdom','phylum','class','order','family','genus'])record[field]=speciesText(raw[field]);if(speciesKey(raw.acceptedKey))record.acceptedKey=raw.acceptedKey;return record;
 }
-function speciesPage(raw,page){
+function speciesPage(raw,page,rank=null){
  if(!raw||raw.offset!==page*5||raw.limit!==5||!Number.isSafeInteger(raw.count)||raw.count<0||typeof raw.endOfRecords!=='boolean'||!Array.isArray(raw.results)||raw.results.length>5)throw Error('生物の検索結果の形式を確認できませんでした。');
- const records=raw.results.map(row=>speciesRecord(row));if(new Set(records.map(row=>row.key)).size!==records.length)throw Error('生物の候補が重複しています。別の条件で検索してください。');return{records,count:raw.count,end:raw.endOfRecords||!records.length||page===4};
+ const records=raw.results.map(row=>speciesRecord(row));if(rank&&records.some(row=>row.rank!==rank))throw Error('指定した階級と検索結果が一致しません。条件を変えて検索してください。');if(new Set(records.map(row=>row.key)).size!==records.length)throw Error('生物の候補が重複しています。別の条件で検索してください。');return{records,count:raw.count,end:raw.endOfRecords||!records.length||page===4};
 }
 const speciesRanks={KINGDOM:'界',PHYLUM:'門',CLASS:'綱',ORDER:'目',FAMILY:'科',GENUS:'属',SPECIES:'種',SUBSPECIES:'亜種',VARIETY:'変種',FORM:'品種'},speciesStatuses={ACCEPTED:'採用名',SYNONYM:'異名',HOMOTYPIC_SYNONYM:'同タイプ異名',HETEROTYPIC_SYNONYM:'異タイプ異名',DOUBTFUL:'疑義あり',MISAPPLIED:'誤適用名',PROPARTE_SYNONYM:'部分異名'};
 function createSpeciesHandler({getJSON,el,p,link,source,state,follows,now=Date.now,newSession=()=>crypto.randomUUID()}){
@@ -465,18 +475,18 @@ function createSpeciesHandler({getJSON,el,p,link,source,state,follows,now=Date.n
    const c=state.context,choices=c.speciesChoices;
    if(c.intent!=='species'||!Array.isArray(choices)||choices.length>5||!Number.isFinite(c.speciesAt)||now()<c.speciesAt||now()-c.speciesAt>600000||task.session&&task.session!==c.speciesSession)throw Error('現在の生物候補を確認できません。生物名をもう一度検索してください。');
    const key=task.key??choices[task.number-1]?.key;if(!speciesKey(key)||!choices.some(choice=>choice.key===key))throw Error('表示中の生物候補番号から選んでください。');
-   const result=await getJSON(speciesURL({key}),21600000),record=speciesRecord(result.data,key);
+   const selectedRank=speciesRank(c.speciesRank),result=await getJSON(speciesURL({key}),21600000),record=speciesRecord(result.data,key);if(selectedRank&&record.rank!==selectedRank)throw Error('候補と分類の階級が一致しません。生物名をもう一度検索してください。');
    body.append(el('h3',record.scientificName));p(body,status(record));
    for(const [field,label]of [['kingdom','界'],['phylum','門'],['class','綱'],['order','目'],['family','科'],['genus','属']])p(body,label+'：'+(record[field]||'未収録'));
    if(record.taxonomicStatus.includes('SYNONYM')){p(body,'異名として登録されています。採用名：'+(record.accepted||'名称はこの応答に未収録'));if(record.acceptedKey)body.append(link('GBIFで採用名を確認','https://www.gbif.org/species/'+record.acceptedKey));}
    body.append(link('GBIFでこの分類を確認','https://www.gbif.org/species/'+key));credits(body);source(body,'GBIF · 分類データ取得',speciesURL({key}),result);
-   p(body,'GBIF Backbone Taxonomyの分類記録です。日本語名の同定・写真判定・生息状況・毒性や食用の判断は行いません。分類体系や更新時点によって別の資料と異なる場合があります。','sub');follows(body,['生物の候補に戻る']);return;
+   p(body,'GBIF Backbone Taxonomyの分類記録です。日本語名の同定・写真判定・生息状況・毒性や食用の判断は行いません。分類体系や更新時点によって別の資料と異なる場合があります。','sub');state.context={...state.context,speciesSelectedKey:key};follows(body,['生物の候補に戻る']);return;
   }
-  const query=speciesQuery(task.query),page=task.page,url=speciesURL({query,page}),result=await getJSON(url,21600000),data=speciesPage(result.data,page),session=newSession();
-  body.append(el('h3',`「${query}」の生物候補 · ${page+1}ページ目`));p(body,'検索候補：'+data.count.toLocaleString('ja-JP')+'件。分類を確認する名前を選んでください。近い名前・異名・亜種などが含まれ、先頭が正解とは限りません。');
+  const query=speciesQuery(task.query),rank=speciesRank(task.rank),page=task.page,url=speciesURL({query,page,rank}),result=await getJSON(url,21600000),data=speciesPage(result.data,page,rank),session=newSession();
+  body.append(el('h3',`「${query}」の生物候補${rank?' · '+speciesFilterLabels[rank]+'のみ':''} · ${page+1}ページ目`));if(speciesSearchTerm(query)!==query)p(body,`検索語：${speciesSearchTerm(query)}（「${query}」の表記対応）`,'sub');p(body,'検索候補：'+data.count.toLocaleString('ja-JP')+'件。分類を確認する名前を選んでください。近い名前・異名・亜種などが含まれ、先頭が正解とは限りません。');
   for(const [index,record]of data.records.entries()){const row=el('div',undefined,'wiki-result');p(row,`${index+1}. ${record.scientificName}`);p(row,status(record),'sub');row.append(link('GBIFの分類ページ','https://www.gbif.org/species/'+record.key));const button=el('button','この生物の分類を見る','history-item');button.type='button';button.dataset.ask='生物候補:'+session+':'+record.key;button.dataset.askLabel=record.scientificName+'の分類';row.append(button);body.append(row);}
   if(!data.records.length)p(body,'候補がありません。別の日本語名や学名で検索してください。');if(page===4&&!result.data.endOfRecords)p(body,'最大25候補まで表示します。別の名前で検索を絞り込めます。');credits(body);source(body,'GBIF · 名前の検索',url,result);
-  state.context={...state.context,intent:'species',pending:null,speciesQuery:query,speciesPage:page,speciesEnd:data.end,speciesSession:session,speciesAt:now(),speciesChoices:data.records.map(row=>({key:row.key,scientificName:row.scientificName}))};if(!data.end)follows(body,['生物の続き']);
+  state.context={...state.context,intent:'species',pending:null,speciesQuery:query,speciesRank:rank,speciesSelectedKey:null,speciesPage:page,speciesEnd:data.end,speciesSession:session,speciesAt:now(),speciesChoices:data.records.map(row=>({key:row.key,scientificName:row.scientificName}))};follows(body,[...(!data.end?['生物の続き']:[]),...(rank?['階級を解除']:['種だけ','属だけ','科だけ'])]);
  };
 }
 
@@ -1767,7 +1777,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
  const articleChoice=/^(?:ニュースの)?\d+(?:番(?:目)?|件目)(?:の記事)?(?:を|の)?(?:詳しく|詳細)[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||(follow.test(part)||articleChoice.test(part))&&(index>0||recognize(part,context).length)))return parts;
  return [text];
@@ -1788,7 +1798,7 @@ const FEATURE_CATALOG=[
  {id:'postal',category:'life',title:'郵便番号から住所',description:'7桁の郵便番号に対応する住所候補。',query:'〒100-0014',tags:'ゆうびん 郵便番号 住所 町域 配送',popular:true},
  {id:'quakes',category:'life',title:'地震の公開記録',description:'重要地震の期間指定と、過去24時間のM4.5以上の記録。',query:'日本周辺の過去24時間のM4.5以上の地震',tags:'じしん 防災 揺れ USGS マグニチュード 重要地震 過去7日 過去30日'},
  {id:'knowledge',category:'research',title:'百科事典',description:'候補から記事を選び、Wikipediaの冒頭原文を確認。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア 候補 選択 番号 詳しく',popular:true},
- {id:'species',category:'research',title:'生物の学名・分類',description:'日本語名や学名からGBIFの候補を検索し、選んだ名前の界・科・属などを確認。',query:'生物:ネコ',tags:'生き物 いきもの 動物 植物 生物 学名 分類 ネコ GBIF 科 属 種 異名'},
+ {id:'species',category:'research',title:'生物の学名・分類',description:'日本語名や学名から候補を選び分類を確認。種・亜種・属・科で絞り込めます。',query:'猫の学名は？',tags:'生き物 いきもの 動物 植物 生物 学名 分類 ネコ GBIF 科 属 種 異名'},
  {id:'nearby',category:'life',title:'地点の周辺の記事を探す',description:'座標付きの百科事典記事を距離順に表示。施設・営業情報の一覧ではありません。',query:'周辺記事: 京都駅',tags:'周辺 地理 散策 場所 地点 近く 京都 駅 半径 距離 Wikipedia'},
  {id:'dictionary',category:'research',title:'英英辞書・発音記号',description:'品詞で絞り、語義・同義語・反意語・IPAを確認。',query:'辞書: light | 品詞:動詞',tags:'英語 えいご 英単語 意味 じしょ dictionary 名詞 動詞 発音 同義語 反意語 定義'},
  {id:'books',category:'research',title:'本を探す',description:'キーワード・書名・著者名で検索し、同じ条件で続きを表示。',query:'本: space',tags:'書籍 読書 ほん 著者 図書館 書名検索 著者検索 続き'},
