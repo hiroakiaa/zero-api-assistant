@@ -57,7 +57,18 @@
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
 <main><section id="conversation" aria-label="会話"><div id="welcome" class="welcome"><svg viewBox="0 0 24 24" class="welcome-icon" aria-hidden="true"><path d="M20 11a8 8 0 0 1-8 8H5l-4 3 1.6-5.5A8 8 0 1 1 20 11Z"/></svg><small>Your questions start here.</small><h2>知りたいことを、ここに。</h2><p>調べる。比べる。計算する。</p><div class="suggestions"><button data-ask="東京の明日の天気は？">明日の天気は？</button><button data-ask="100ドルは何円？">100ドルは何円？</button><button data-ask="人工知能とは？">人工知能とは？</button></div></div><div id="messages" role="log" aria-live="polite" aria-relevant="additions"></div></section><div class="composer-area"><p id="cloud-ai-status" class="info-note" hidden>クラウドAI設定済み · モデル取得不要</p><div id="context" class="context" hidden></div><form id="chat-form"><label for="prompt" class="sr-only">質問を入力</label><textarea id="prompt" rows="1" maxlength="500" placeholder="質問を入力…"></textarea><button id="send" aria-label="質問を送信" type="submit">↑</button></form><div class="composer-foot"><span id="storage-note" role="status">接続状態を確認しています。</span><button id="connection-retry" class="connection-retry" type="button" hidden>接続を再試行</button><span id="stats">API照会 0回</span></div></div></main></div>
 <dialog id="info"><div class="dialog-head"><h2>設定と仕組み</h2><button id="close-info" class="icon-button" aria-label="閉じる">×</button></div><p>無料APIからデータを取得し、条件に合わせて整理・計算します。文章作成・翻訳・コード相談は、クラウドAIが設定されている場合は端末へのモデル取得なしで利用できます。端末内LLMは設定画面から、利用者が選んだモデルだけを手動で起動します。起動時の自動取得はしません。iPhone・iPadでは一括準備と大きなモデルを使わず、無料API・計算はモデルなしでも利用できます。有料の推論APIには接続しません。</p><p id="cloud-ai-note" class="info-note">クラウドAIは未接続です。</p><button id="cloud-status-check" class="history-item" type="button">PCのAI中継への接続を確認</button><p id="cloud-status-result" class="info-note" role="status">手動で中継への接続を確認できます。文章の生成やモデルの取得は行いません。</p><div class="flow">GitHub → GAS → スプレッドシート</div><p id="database-detail" class="info-note"></p><button id="local-ai-settings" class="history-item" type="button">端末内AIの設定</button><button id="export-info" class="history-item" type="button">会話をテキストで確認・保存</button><div id="api-list"></div><p class="info-note">利用料を要求しない公開APIと端末内処理を使います。カード登録・有料API・従量課金への切替はありません。提供元やGASの利用上限に達したら処理を停止します。無料と無制限は異なります。</p><p class="info-note">GAS接続時は質問・回答・会話条件を管理者のスプレッドシートに保存します。ブラウザに保存したランダムな識別情報で自分の履歴を呼び出します。同じブラウザ・プロファイルを共有する人は履歴を見られます。外部APIには検索語・地域・通貨などを送信します。天気の地点候補を検索する地名はPhotonへ送ります。生物名・学名の検索語はGBIFへ送ります。化合物名はPubChemへ送ります。</p></dialog>
-<dialog id="history-dialog" aria-labelledby="history-title"><div class="history-header"><div class="dialog-head"><h2 id="history-title">会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">タイトル・更新日で絞り込み、「本文も検索」で保存した質問・回答も探せます。本文は2〜80文字の語句で部分一致検索します。</p><p id="history-capacity" class="info-note" role="status"></p><div class="history-modes" role="group" aria-label="履歴の一覧"><button id="history-active" type="button" aria-pressed="true" disabled>通常の履歴</button><button id="history-archived" type="button" aria-pressed="false" disabled>保管一覧</button></div><label class="skills-search">履歴を検索<input id="history-filter" type="search" maxlength="120" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="例：天気、地震、2026-10-26" disabled></label><div class="history-search-status"><p id="history-count" class="info-note" role="status" aria-live="polite"></p><button id="history-search-body" type="button" class="history-clear" disabled>本文も検索</button><button id="history-clear" type="button" class="history-clear" disabled>検索をクリア</button></div></div><p id="history-notice" class="info-note" role="status"></p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">// Restore text for explicit review, never replay a request or change conversation context.
+<dialog id="history-dialog" aria-labelledby="history-title"><div class="history-header"><div class="dialog-head"><h2 id="history-title">会話履歴</h2><button id="history-close" class="icon-button" aria-label="履歴を閉じる">×</button></div><p class="info-note">タイトル・更新日で絞り込み、「本文も検索」で保存した質問・回答も探せます。本文は2〜80文字の語句で部分一致検索します。</p><p id="history-capacity" class="info-note" role="status"></p><div class="history-modes" role="group" aria-label="履歴の一覧"><button id="history-active" type="button" aria-pressed="true" disabled>通常の履歴</button><button id="history-archived" type="button" aria-pressed="false" disabled>保管一覧</button></div><label class="skills-search">履歴を検索<input id="history-filter" type="search" maxlength="120" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="例：天気、地震、2026-10-26" disabled></label><div class="history-search-status"><p id="history-count" class="info-note" role="status" aria-live="polite"></p><button id="history-search-body" type="button" class="history-clear" disabled>本文も検索</button><button id="history-clear" type="button" class="history-clear" disabled>検索をクリア</button></div></div><p id="history-notice" class="info-note" role="status"></p><div id="history-list"></div></dialog><dialog id="skills-dialog" aria-labelledby="skills-title"><div class="catalog-header"><div class="dialog-head"><h2 id="skills-title">できること</h2><button id="skills-close" class="icon-button" aria-label="できることを閉じる">×</button></div><p class="info-note">質問例を選ぶと、そのまま送信します。</p><label class="skills-search">キーワードで探す<input id="skills-filter" type="search" maxlength="100" placeholder="例：てんき、英語、締め切り"></label><div id="skill-categories" class="skill-categories" role="group" aria-label="質問例のカテゴリ"></div><p id="skill-count" class="info-note" role="status"></p></div><div class="catalog-results"><div id="skill-examples"></div><div id="skills-empty" class="skills-empty" hidden><p>一致する質問例がありません。別の言葉やカテゴリを試してください。</p><button id="skills-clear" class="history-item" type="button">絞り込みを解除</button></div></div></dialog><script type="module">// Normalize only outer courtesy expressions used to route data requests.
+// Original prompts, quoted payloads and explicit search/generation fields stay intact.
+function requestLanguage(raw,keepQuestion=false){
+ const input=String(raw).normalize('NFKC').trim();
+ if(/[\n\r「」『』“”"`]/.test(input)||/https?:\/\//i.test(input)||/^(?:本|書籍|ブック|書名検索|タイトル検索|著者検索|主題検索|論文|文献|論文検索|検索|知識|調べる|辞書|英英辞書|学術検索|学術|Crossref|周辺記事|生物検索|生物|学名検索|分類検索|化合物|化学検索|翻訳|translate|文章|文章作成|作文|write|要約|summarize|コード|プログラミング|code|AI|相談)[：:\s]/i.test(input))return input;
+ let text=input.replace(/^(?:すみません|すいません|恐れ入ります)(?:が)?[、,\s]+/,'').replace(/[。？?]+$/,'').trim();
+ if(!keepQuestion)text=text.replace(/(?:の答え)?(?:を|か)教えて(?:ください|下さい)?$/,'');
+ text=text.replace(/(?:を)?お願いします$/,'').replace(/(?:ください|下さい)$/,'').replace(/(?:ですか|でしょうか)$/,'').trim();
+ return text||input;
+}
+
+// Restore text for explicit review, never replay a request or change conversation context.
 function returnQuestion({input,text,busy=false,archived=false,notify=()=>{}}){
  const finish=(state,message)=>{notify(message);return state;};
  if(archived)return finish('archived','保管中の会話です。通常一覧へ戻すと、質問を入力欄へ戻せます。');
@@ -733,13 +744,13 @@ function sphericalDistance(from,to,unit='km'){
 function savedDistancePoint(point){return point.type==='city'?{type:'city',name:point.name}:{type:'coordinate',latitude:point.latitude,longitude:point.longitude};}
 function parseDistance(raw,context={}){
  const text=raw.normalize('NFKC').trim().replace(/[。?？]$/,'');const namedPrefix=text.match(/^([^:：]{1,30})[：:]/);if(namedPrefix&&!['距離','大円距離'].includes(namedPrefix[1])||/^(?:本|書籍|ブック|論文|文献|学術|学術検索|検索|知識|辞書|翻訳|文章|コード)\s/.test(text))return[];
- const explicit=text.match(/^(?:距離|大円距離)[：:]\s*(.*)$/);let from,to,unit='km';
+ const explicit=text.match(/^(?:距離|大円距離|直線距離)[：:]\s*(.*)$/);let from,to,unit='km';
  try{
   if(/から.+まで/.test(text)&&/道路|徒歩|自転車|車で|電車|鉄道|高速|ルート|所要時間/.test(text)&&/距離|何(?:km|キロメートル|時間)|所要時間/i.test(text))throw Error('この機能で計算できるのは球モデルの距離です。道路・鉄道の距離や所要時間は取得できません。');
   if(explicit){const parts=explicit[1].split(/\s*\|\s*/);if(parts.length>2)throw Error('距離:出発地 → 到着地 | 単位:km の形式で指定してください。');if(parts[1]){const choice=parts[1].match(/^単位:\s*(.+)$/);if(!choice)throw Error('単位は「| 単位:mi」の形式で指定してください。');unit=distanceUnit(choice[1]);}const pair=parts[0].split(/\s*(?:→|->)\s*/);if(pair.length!==2||pair.some(item=>!item.trim()))throw Error('2地点を → で区切って指定してください。例：距離:東京 → 大阪');[from,to]=pair.map(v=>v.trim());}
   else{
    const ending='(?:は(?:何(km|m|mi|キロメートル|メートル|マイル))?(?:ですか)?|を教えて(?:ください)?)?';
-   const named=text.match(new RegExp('^(.{1,90}?)から(.{1,90}?)まで(?:の)?(?:距離|大円距離)'+ending+'$','i'))||text.match(new RegExp('^(.{1,90}?)と(.{1,90}?)の(?:距離|大円距離)'+ending+'$','i'));
+   const named=text.match(new RegExp('^(.{1,90}?)から(.{1,90}?)まで(?:の)?(?:距離|大円距離|直線距離)'+ending+'$','i'))||text.match(new RegExp('^(.{1,90}?)と(.{1,90}?)の(?:距離|大円距離|直線距離)'+ending+'$','i'));
    const measured=text.match(/^(.{1,90}?)から(.{1,90}?)まで(?:は)?何(km|m|mi|キロメートル|メートル|マイル)(?:ですか)?$/i);
    if(named||measured){const match=named||measured;from=match[1].trim();to=match[2].trim();if(match[3])unit=distanceUnit(match[3]);}
   }
@@ -797,7 +808,11 @@ const cities = [
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
 function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
-function parsePlan(raw, context={}){
+function parsePlan(raw,context={}){
+ const input=normalize(raw),direct=requestLanguage(input),tasks=parsePlanCore(direct,context);if(tasks.length)return tasks;
+ const question=requestLanguage(input,true);return question===direct?tasks:parsePlanCore(question,context);
+}
+function parsePlanCore(raw, context={}){
  const text=normalize(raw),tasks=[];
  const quakeHistory=parseQuakeHistory(text,context);if(quakeHistory.length)return quakeHistory;
  const distance=parseDistance(text,context);if(distance.length)return distance;
@@ -1120,7 +1135,7 @@ function parseCurrencyCore(raw,context={}){
   if(/^最新(?:のレート)?で?\s*/.test(input)){requestedDate=undefined;input=input.replace(/^最新(?:のレート)?で?\s*/,'');}
   if(active&&(/^(?:日付|明日|昨日|今日|先週|来週|去年|来年)(?:なら|のレートで|の為替で)?$/.test(input)||/^\d{4}[-/年][\d年月日/\-]+(?:なら|では|は)?$/.test(input)))return currencyError('為替の日付は年月日で指定してください。例：「2025-01-15なら？」。最新へ戻すには「最新のレートで」。');
   if(active){
-   if(/^(?:逆(?:にすると|に|方向|は)?|反対に)$/.test(input))return task(context.amount,context.quote,context.base);
+   if(/^(?:逆(?:にすると|にして|に|方向|は)?|反対に)$/.test(input))return task(context.amount,context.quote,context.base);
    const amountOnly=input.match(new RegExp(`^(${moneyNumber})(?:なら|では|は)$`));
    if(amountOnly)return task(currencyAmount(amountOnly[1]),context.base,context.quote);
    const target=input.match(new RegExp(`^(?:何)?(${currencyToken})(?:に(?:すると|したら|して|換算(?:して)?|変換(?:して)?)|で(?:は|いくら))$`,'i'));
@@ -1947,7 +1962,7 @@ function parseCalendarFollow(input,context){
  const months=text.match(new RegExp('^(?:('+datePattern+'|今日)(?:から|の))?(\\d{1,6})(か月|ヶ月|ケ月|カ月|箇月|年)(後|前)'+ending+'$'));
  if(months)return[{kind:'dateMath',operation:'addMonths',from:months[1]||'今日',months:Number(months[2])*(months[3]==='年'?12:1)*(months[4]==='前'?-1:1),unit:months[3]==='年'?'year':'month'}];
  const amount=text.match(new RegExp('^(?:その|この)(?:日(?:から|の)?)?(\\d{1,7})(日|か月|ヶ月|ケ月|カ月|箇月|年)(後|前)'+ending+'$')),
-  relative=text.match(new RegExp('^(?:その|この)?(翌日|前日|翌月|前月|翌年|前年)'+ending+'$')),
+  relative=text.match(new RegExp('^(?:(?:その|この)(?:日の)?)?(翌日|前日|翌月|前月|翌年|前年)'+ending+'$')),
   weekday=/^(?:その日|この日)(?:は|の)(?:何曜日|曜日|日付|何日)$/.test(text),due=/^(?:あと何日|(?:その日|この日)まで(?:あと)?何日)$/.test(text),
   diff=text.match(new RegExp('^('+datePattern+'|今日|その日|この日)から('+datePattern+'|今日|その日|この日)まで(?:は)?(?:何日|の日数|の日数差)$'));
  if(!amount&&!relative&&!weekday&&!due&&!(diff&&/その日|この日/.test(text))){
@@ -2354,7 +2369,7 @@ function normalizePostalCode(raw){
 }
 function parsePostalTasks(text){
  const input=text.normalize('NFKC').trim();
- const match=input.match(/^(?:郵便番号|郵便番号検索)[：:]\s*(.+?)[。？?]?$/)||input.match(/^郵便番号\s*(\d[\d\s-]*)[？?]?$/)||input.match(/^〒\s*(.+?)[。？?]?$/)||input.match(/^(\d{3}-?\d{4})の(?:住所|地域|町域)(?:は|を教えて)?[。？?]?$/);
+ const match=input.match(/^(?:郵便番号|郵便番号検索)[：:]\s*(.+?)[。？?]?$/)||input.match(/^郵便番号\s*(\d[\d\s-]*)[？?]?$/)||input.match(/^〒\s*(.+?)[。？?]?$/)||input.match(/^(?:郵便番号\s*)?(\d{3}-?\d{4})の(?:住所|地域|町域)(?:は|を教えて)?[。？?]?$/);
  return match?[{kind:'postal',code:match[1]}]:[];
 }
 function postalAddresses(data,expected){
