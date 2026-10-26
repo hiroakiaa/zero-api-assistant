@@ -31,6 +31,16 @@ function cloudRequestBody(req,timeoutMS){
   const timer=setTimeout(()=>fail(408,'input_timeout'),timeoutMS);req.on('data',onData);req.once('end',onEnd);req.once('aborted',onAborted);req.once('error',onError);
  });
 }
+export const MAX_MODEL_RESPONSE_BYTES=65536;
+export async function cloudModelResponse(response,signal){
+ const invalid=()=>Object.assign(Error('invalid_model_response'),{code:'invalid_model_response'}),cancel=()=>{try{const stopped=response.body?.cancel();stopped?.catch(()=>{});}catch{}};
+ if(!response.body||Number(response.headers.get('content-length')||0)>MAX_MODEL_RESPONSE_BYTES){cancel();throw invalid();}
+ const reader=response.body.getReader(),chunks=[];let size=0;const abort=()=>{reader.cancel().catch(()=>{});};
+ if(signal.aborted){abort();reader.releaseLock();signal.throwIfAborted();}signal.addEventListener('abort',abort,{once:true});
+ try{for(;;){signal.throwIfAborted();const {done,value}=await reader.read();signal.throwIfAborted();if(done)break;if(!value.byteLength)continue;size+=value.byteLength;if(size>MAX_MODEL_RESPONSE_BYTES){abort();throw invalid();}chunks.push(value);}
+  try{return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks,size)));}catch{throw invalid();}
+ }finally{signal.removeEventListener('abort',abort);reader.releaseLock();}
+}
 export function createCloudServer({token,model='qwen2.5:7b-instruct',translationModel=model,fetchImpl=fetch,timeoutMS=70000,inputTimeoutMS=10000}={}){
  if(typeof token!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(token))throw Error('ZERO_AI_SECRET must be 32–128 URL-safe characters');
  if(!models.has(model))throw Error('Use an approved local Qwen2.5-Instruct model; hosted/cloud tags are not allowed');
@@ -40,19 +50,19 @@ export function createCloudServer({token,model='qwen2.5:7b-instruct',translation
   const reply=(status,data,close=false)=>{if(res.destroyed||res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Zero-AI':'self-hosted-v1','X-Content-Type-Options':'nosniff',...(close?{Connection:'close'}:{})});res.end(JSON.stringify(data),close?()=>req.destroy():undefined);};
   // No CORS: only the server-to-server GAS connection is supported.
   const expected=Buffer.from('Bearer '+token),supplied=Buffer.from(String(req.headers.authorization||''));
-  if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){req.resume();reply(401,{error:'unauthorized'});return;}
+  if(req.rawHeaders.filter((v,i)=>i%2===0&&v.toLowerCase()==='authorization').length!==1||supplied.length!==expected.length||!timingSafeEqual(supplied,expected)){reply(401,{error:'unauthorized'},true);return;}
   if(req.method==='GET'&&req.url==='/zero/health'){reply(200,{service:'zero-self-hosted',model,translationModel,readyToAccept:!busy});return;}
-  if(req.method!=='POST'||req.url!=='/zero/chat'){req.resume();reply(404,{error:'not_found'});return;}
-  if(busy){req.resume();reply(429,{error:'busy'});return;}
-  if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||'')){req.resume();reply(415,{error:'json_required'});return;}
-  if(Number(req.headers['content-length']||0)>16000){req.resume();reply(413,{error:'input_too_large'});return;}
+  if(req.method!=='POST'||req.url!=='/zero/chat'){reply(404,{error:'not_found'},true);return;}
+  if(busy){reply(429,{error:'busy'},true);return;}
+  if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||'')){reply(415,{error:'json_required'},true);return;}
+  if(Number(req.headers['content-length']||0)>16000){reply(413,{error:'input_too_large'},true);return;}
   busy=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMS);res.on('close',()=>{if(!res.writableEnded)controller.abort();});
   try{
    const raw=await cloudRequestBody(req,Math.min(inputTimeoutMS,timeoutMS));let input,messages;try{input=JSON.parse(raw.toString('utf8'));messages=cloudMessages(input);}catch{reply(400,{error:'invalid_input'});return;}
    const wanted=sentenceConstraint(input);
    for(let attempt=0;attempt<2;attempt++){
     const response=await fetchImpl('http://127.0.0.1:11434/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',signal:controller.signal,body:JSON.stringify({model:input.kind==='翻訳'?translationModel:model,messages,stream:false,keep_alive:'5m',options:{num_ctx:4096,num_predict:256,temperature:0.3}})});
-    if(!response.ok){reply(502,{error:'local_model_unavailable'});return;}const result=await response.json(),text=result?.message?.content;
+    if(!response.ok){response.body?.cancel().catch(()=>{});reply(502,{error:'local_model_unavailable'});return;}const result=await cloudModelResponse(response,controller.signal),text=result?.message?.content;
     if(result?.done!==true||typeof text!=='string'||!text.trim()||text.length>8000){reply(502,{error:'invalid_model_response'});return;}
     if(wanted&&result.done_reason==='stop'&&japaneseSentenceCount(text.trim())!==wanted){
      if(attempt===1){reply(502,{error:'format_not_satisfied'});return;}
@@ -60,7 +70,7 @@ export function createCloudServer({token,model='qwen2.5:7b-instruct',translation
     }
     reply(200,{text:text.trim(),finishReason:['stop','length'].includes(result.done_reason)?result.done_reason:'unknown'});return;
    }
-  }catch(error){if([400,408,413].includes(error?.status)){controller.abort();reply(error.status,{error:error.code},true);}else reply(controller.signal.aborted?504:502,{error:controller.signal.aborted?'timeout':'local_model_unavailable'});}finally{clearTimeout(timer);busy=false;}
+  }catch(error){if([400,408,413].includes(error?.status)){controller.abort();reply(error.status,{error:error.code},true);}else if(error?.code==='invalid_model_response'){controller.abort();reply(502,{error:'invalid_model_response'});}else reply(controller.signal.aborted?504:502,{error:controller.signal.aborted?'timeout':'local_model_unavailable'});}finally{clearTimeout(timer);busy=false;}
  });
  server.requestTimeout=75000;server.headersTimeout=10000;server.maxHeadersCount=30;server.maxConnections=10;return server;
 }
