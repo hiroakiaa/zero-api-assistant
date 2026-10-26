@@ -76,3 +76,9 @@ The owner-approved test deployment currently uses Cloudflare Quick Tunnel. Its h
 - Before retiring the device-local option, verify real text quality, latency, concurrency behavior, outages, restarts and iPhone browser use on the selected host. Keep model downloads manual until this has passed.
 
 Official references: [Ollama chat API](https://docs.ollama.com/api/chat), [local-only mode and networking](https://docs.ollama.com/faq), [Qwen2.5-7B-Instruct model registry](https://ollama.com/library/qwen2.5:7b-instruct), [model license](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct).
+
+## Bounded upstream responses
+
+The bridge reads the local Ollama response as a stream with a 65,536-byte maximum before JSON parsing. It rejects excessive declared lengths, oversized chunked bodies, invalid UTF-8, malformed JSON and empty responses. The existing 8,000-character answer check still applies. Input, inference and response-body handling share the request timeout; response-body cancellation frees the request slot. Non-success upstream bodies are cancelled. Errors return fixed codes without model output, credentials or exception details.
+
+Unauthenticated requests, duplicate Authorization headers, unknown routes, busy requests, non-JSON input and oversized declared input close their connection after the error response. Ollama remains loopback-only and this change adds no public route, firewall rule, automatic startup or permission. These controls reduce resource retention; they do not replace external access controls, abuse protection, network isolation or production load testing.
