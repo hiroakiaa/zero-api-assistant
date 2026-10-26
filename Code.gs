@@ -110,7 +110,7 @@ function validateAPI_(url){
  }else if(host==='earthquake.usgs.gov'&&/^\/earthquakes\/feed\/v1\.0\/summary\/(?:significant_(?:hour|day|week|month)|4\.5_day)\.geojson$/.test(path)){provider='quakes';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&path==='/fdsnws/event/1/query'){provider='quakes';allowed=['format','starttime','endtime','minmagnitude','eventtype','orderby','limit','minlatitude','maxlatitude','minlongitude','maxlongitude'];expected={format:'geojson',eventtype:'earthquake',orderby:'time',limit:'26'};validateQuakeHistoryParams_(params);
  }else if(host==='api.worldbank.org'&&path==='/v2/country'){provider='country';allowed=['format','per_page'];expected={format:'json',per_page:'400'};
- }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN))?$/.test(path)){
+ }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN|SL\.UEM\.TOTL\.NE\.ZS))?$/.test(path)){
   provider='country';
   if(!path.includes('/indicator/')){allowed=['format'];expected={format:'json'};}
   else if(path.endsWith('/SP.POP.TOTL')&&params.mrv==='1'&&!params.source){allowed=['format','mrv','per_page'];expected={format:'json',mrv:'1',per_page:'1'};}
@@ -127,7 +127,7 @@ function validateAPI_(url){
 }
 function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
- const quakeHistory=url.startsWith('https://earthquake.usgs.gov/fdsnws/event/1/query?'),rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='quakes'?(quakeHistory?'quakes-history-v71:':'quakes-v43:'):provider==='news'?'news-v49:':provider==='geocoding'?'geocoding-v60:':provider==='chemistry'?'chemistry-v65:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
+ const quakeHistory=url.startsWith('https://earthquake.usgs.gov/fdsnws/event/1/query?'),rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?')?'unemployment-v73:':provider==='quakes'?(quakeHistory?'quakes-history-v71:':'quakes-v43:'):provider==='news'?'news-v49:':provider==='geocoding'?'geocoding-v60:':provider==='chemistry'?'chemistry-v65:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
  const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
  const quakeHistoryLease=quakeHistory?reserveQuakeHistory_():null,crossrefLease=provider==='crossref'?reserveCrossref_():null,geocodingLease=provider==='geocoding'?reserveGeocoding_():null,chemistryLease=provider==='chemistry'?reserveChemistry_():null;try{
  const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
@@ -144,6 +144,7 @@ function fetchAPI_(url){
  }
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  if(quakeHistory)data=leanQuakeHistory_(data,url,status===204);
+ if(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?'))validateUnemployment_(data,url);
  if(provider==='geocoding')data=leanGeocoding_(data);
  if(provider==='chemistry')data=url.endsWith('/periodictable/JSON')?leanElements_(data):leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
  if(provider==='species'){data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
@@ -205,4 +206,11 @@ function leanQuakeHistory_(data,url,empty){
  const seen=new Set();let last=Infinity;return{type:'FeatureCollection',metadata:{count:data.features.length,status:200,generated:data.metadata.generated},features:data.features.map(f=>{
  const d=f?.properties,c=f?.geometry?.coordinates;if(f?.type!=='Feature'||typeof f.id!=='string'||! /^[A-Za-z0-9_-]{1,80}$/.test(f.id)||seen.has(f.id)||f.geometry?.type!=='Point'||!Array.isArray(c)||c.length!==3||!c.every(n=>typeof n==='number'&&Number.isFinite(n))||Math.abs(c[0])>180||Math.abs(c[1])>90||c[2]<-100||c[2]>1000||d?.type!=='earthquake'||!Number.isFinite(d.mag)||d.mag<w.minMag||d.mag>10||!Number.isSafeInteger(d.time)||d.time<w.start||d.time>w.end||d.time>last||w.japan&&(c[0]<122||c[0]>155||c[1]<20||c[1]>48))throw Error('地震記録のID・座標・時刻・規模が指定条件と一致しません。');seen.add(f.id);last=d.time;return{type:'Feature',id:f.id,geometry:{type:'Point',coordinates:c},properties:{type:'earthquake',mag:d.mag,time:d.time,place:typeof d.place==='string'?d.place.replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,200):'',url:typeof d.url==='string'&&/^https:\/\/earthquake\.usgs\.gov\/earthquakes\/eventpage\/[A-Za-z0-9_-]+(?:\/overview)?$/.test(d.url)?d.url:null}};
  })};
+}
+
+function validateUnemployment_(data,url){
+ if(Array.isArray(data)&&data.length===2&&data[0]?.total===0&&data[0]?.pages===0&&data[1]===null)return;
+ const code=url.match(/\/country\/([A-Z]{3})\//)[1],date=url.match(/[?&]date=([^&]+)/),years=date?decodeURIComponent(date[1]).split(':').map(Number):[1960,new Date(Date.now()+9*3600000).getUTCFullYear()],from=years[0],to=years[1]??years[0],limit=/[?&]per_page=20(?:&|$)/.test(url)?20:1;
+ if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Array.isArray(data[1])||data[1].length>limit||data[0].total!==data[1].length)throw Error('失業率の応答件数・形式を確認できませんでした。');
+ const seen=new Set();for(const row of data[1]){const year=Number(row?.date);if(row?.countryiso3code!==code||row?.indicator?.id!=='SL.UEM.TOTL.NE.ZS'||!/^\d{4}$/.test(row.date)||year<from||year>to||seen.has(year)||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||row.value>100))throw Error('失業率の国・系列・年・百分率が指定条件と一致しません。');seen.add(year);}
 }
