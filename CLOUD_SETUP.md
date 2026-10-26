@@ -86,3 +86,17 @@ Unauthenticated requests, duplicate Authorization headers, unknown routes, busy 
 ## Manual connectivity check in the app
 
 The GAS settings dialog offers an explicit bridge connectivity check. GAS derives `/zero/health` from the already configured `/zero/chat` URL, uses the existing bearer secret and refuses redirects. Only a recognized bridge response becomes connected/busy. No prompt or history is sent and no model is started. The public result contains only a state, timestamp and cache flag, never model names, URL or credentials. Results are shared for at most15seconds; a separate85second lease prevents overlapping probes. Each actual probe uses the existing external-request protection budget, not the generation quota. A healthy bridge does not prove model availability or successful generation.
+
+## Read-only runtime check
+
+After setting the same `ZERO_AI_SECRET` and optional port/model environment variables used for the bridge, run:
+
+```powershell
+node CloudServer.mjs --check
+```
+
+From this source tree, use `node cloud/CloudServer.mjs --check`. This mode does not start a server. It makes only local GET requests to Ollama `/api/version`, `/api/tags`, and the authenticated bridge `/zero/health`. Redirects are refused, each body is bounded, and the complete probe has a5second timeout. Without a valid secret, the bridge is reported as unverified; no unauthenticated health request is sent.
+
+The JSON report lists the Ollama version, bridge response/busy state, and whether the required approved model tags are registered. If a valid bridge response reports the14B translation route, that model is checked as well. Only the required model names, reported digest and size are included; other installed model names, paths, hostnames, environment contents and credentials are not output. Exit0 means these checks passed, exit2 means attention is needed, and exit1 means an invalid invocation or configuration. A busy but responding bridge can pass the diagnostic while `readyToAccept` remains false.
+
+No prompt, generation, pull, model load, service restart, firewall change or Google request occurs. The report does not test model file checksums, GPU execution, answer quality, speed, the public tunnel, or network isolation. It is an operator diagnostic, not production readiness certification. Official metadata endpoints: [list models](https://docs.ollama.com/api/tags) and [version specification](https://github.com/ollama/ollama/blob/main/docs/openapi.yaml).
