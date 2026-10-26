@@ -145,8 +145,9 @@ function validateAPI_(url){
   if(Object.prototype.hasOwnProperty.call(params,'query.bibliographic')){allowed=['query.bibliographic','rows','offset','select'];expected.rows='3';if(!params['query.bibliographic'].trim()||params['query.bibliographic'].length>100||/[\u0000-\u001f]/.test(params['query.bibliographic'])||! /^(0|3|6|9|12)$/.test(params.offset||''))throw Error('学術検索の条件が無効です。');}
   else{allowed=['filter','rows','select'];expected.rows='1';const doi=(params.filter||'').slice(4);if(!(params.filter||'').startsWith('doi:')||!/^10\.\d{4,9}\/[A-Za-z0-9._;()/:+\-]{1,180}$/.test(doi)||/(?:^|\/)\.{1,2}(?:\/|$)/.test(doi))throw Error('DOIの検索条件が無効です。');}
  }else if(host==='openlibrary.org'&&path==='/api/books'){provider='books';allowed=['bibkeys','jscmd','format'];expected={jscmd:'data',format:'json'};const isbn=(params.bibkeys||'').match(/^ISBN:((?:978|979)\d{10})$/)?.[1];if(!isbn||Array.from(isbn).reduce((sum,d,i)=>sum+Number(d)*(i%2?3:1),0)%10!==0)throw Error('ISBN書誌は検証済みISBN-13を1件だけ指定してください。');
+ }else if(host==='openlibrary.org'&&/^\/works\/OL[1-9]\d{0,11}W\.json$/.test(path)){provider='books';allowed=[];
  }else if(host==='openlibrary.org'&&path==='/search.json'){
-  provider='books';allowed=['q','title','author','limit','page','fields'];expected={limit:'5'};if(!['key,title,author_name,first_publish_year','key,title,author_name,first_publish_year,editions,editions.key,editions.title,editions.isbn'].includes(params.fields))throw Error('書籍の取得項目が無効です。');const bookFields=['q','title','author'].filter(key=>Object.prototype.hasOwnProperty.call(params,key));if(bookFields.length!==1||!params[bookFields[0]].trim()||params[bookFields[0]].length>80||/[\u0000-\u001f]/.test(params[bookFields[0]])||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
+  provider='books';allowed=['q','title','author','subject','limit','page','fields'];expected={limit:'5'};if(!['key,title,author_name,first_publish_year','key,title,author_name,first_publish_year,editions,editions.key,editions.title,editions.isbn'].includes(params.fields))throw Error('書籍の取得項目が無効です。');const bookFields=['q','title','author','subject'].filter(key=>Object.prototype.hasOwnProperty.call(params,key));if(bookFields.length!==1||!params[bookFields[0]].trim()||params[bookFields[0]].length>80||/[\u0000-\u001f]/.test(params[bookFields[0]])||!/^[1-5]$/.test(params.page||''))throw Error('書籍の検索条件が無効です。');
  }else if(host==='www.ebi.ac.uk'&&path==='/europepmc/webservices/rest/search'){
   provider='papers';allowed=['query','format','pageSize','resultType','cursorMark'];expected={format:'json',pageSize:'5',resultType:'lite'};if(!params.query||params.query.length>200||/[\u0000-\u001f]/.test(params.query)||!/^[A-Za-z0-9+/=*]{1,256}$/.test(params.cursorMark||''))throw Error('文献の検索条件が無効です。');
  }else if(host==='www.gov.uk'&&path==='/bank-holidays.json'){provider='ukHoliday';allowed=[];
@@ -168,6 +169,18 @@ function validateAPI_(url){
  if(Object.keys(params).some(k=>!allowed.includes(k))||Object.keys(expected).some(k=>params[k]!==expected[k]))throw Error('許可されていない検索条件です。');
  return provider;
 }
+function leanBookSubjects_(data,id){
+ if(!/^OL[1-9]\d{0,11}W$/.test(id)||data?.key!=='/works/'+id||typeof data.title!=='string'||!data.title.trim()||data.title.length>500)throw Error('選んだ作品と主題データのID・書名が一致しません。');
+ const result={key:data.key,title:data.title,counts:{}};
+ for(const [field,limit] of Object.entries({subjects:12,subject_places:8,subject_people:8,subject_times:8})){
+  const raw=data[field]??[];if(!Array.isArray(raw)||raw.length>2000||raw.some(v=>typeof v!=='string'||!v.trim()||v.length>300||/[\u0000-\u001f\u007f]/.test(v)))throw Error('作品の主題項目の形式を確認できませんでした。');
+  const values=[...new Set(raw.map(v=>v.trim()))],total=values.length;
+  if(!Number.isInteger(total)||total<values.length||total>2000)throw Error('作品の主題件数を確認できませんでした。');
+  result[field]=values.slice(0,limit);result.counts[field]=total;
+ }
+ return result;
+}
+
 function readPublicFetchLeases_(raw){
  let leases;try{leases=raw?JSON.parse(raw):{};}catch{throw Error('データ取得の保護設定を確認してください。');}
  if(!leases||typeof leases!=='object'||Array.isArray(leases)||Object.keys(leases).length>20||Object.entries(leases).some(([key,value])=>! /^[a-f0-9]{64}$/.test(key)||!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||typeof value.token!=='string'||! /^[a-f0-9-]{36}$/i.test(value.token)||!Number.isSafeInteger(value.until)||value.until<=0))throw Error('データ取得の保護設定を確認してください。');
@@ -209,6 +222,7 @@ function fetchAPI_(url){
   const pair=url.slice(url.indexOf('?')+1).split('&').find(part=>decodeURIComponent(part.split('=')[0])==='bibkeys'),key=decodeURIComponent(pair.slice(pair.indexOf('=')+1).replace(/\+/g,' '));if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).length>1||Object.keys(data).some(k=>k!==key))throw Error('ISBN書誌の応答形式が指定と一致しません。');
   if(Object.keys(data).length){const book=data[key];if(!book||typeof book!=='object'||Array.isArray(book))throw Error('ISBN書誌の形式が不正です。');const lean={};for(const field of ['title','subtitle','url','publish_date','number_of_pages'])if(Object.prototype.hasOwnProperty.call(book,field))lean[field]=book[field];for(const field of ['authors','publishers'])if(Object.prototype.hasOwnProperty.call(book,field))lean[field]=Array.isArray(book[field])?book[field].map(row=>({name:row?.name})):book[field];lean.identifiers={};for(const field of ['isbn_10','isbn_13','openlibrary'])if(book.identifiers&&Object.prototype.hasOwnProperty.call(book.identifiers,field))lean.identifiers[field]=book.identifiers[field];data={[key]:lean};}
  }
+ if(provider==='books'&&/^https:\/\/openlibrary\.org\/works\/OL[1-9]\d{0,11}W\.json$/.test(url))data=leanBookSubjects_(data,url.match(/\/works\/(OL[1-9]\d{0,11}W)/)[1]);
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  if(quakeHistory)data=leanQuakeHistory_(data,url,status===204);
  if(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?'))validateUnemployment_(data,url);
