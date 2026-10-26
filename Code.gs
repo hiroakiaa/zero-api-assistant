@@ -69,6 +69,8 @@ function validateAPI_(url){
   provider='chemistry';allowed=['name_type'];expected={name_type:'complete'};const encoded=path.match(/\/name\/([^/]+)\/cids\/JSON$/)[1],name=decodeURIComponent(encoded);if(name.length<1||name.length>80||!/[\p{L}]/u.test(name)||! /^[\p{L}\p{M}\p{N} ,.'()+\-]+$/u.test(name)||encodeURIComponent(name)!==encoded)throw Error('化合物名の検索条件が無効です。');
  }else if(host==='pubchem.ncbi.nlm.nih.gov'&&/^\/rest\/pug\/compound\/cid\/[1-9]\d{0,9}(?:,[1-9]\d{0,9}){0,4}\/property\/MolecularFormula,MolecularWeight,IUPACName\/JSON$/.test(path)){
   provider='chemistry';allowed=[];const ids=path.match(/\/cid\/([^/]+)\/property\//)[1].split(',');if(new Set(ids).size!==ids.length)throw Error('化合物のIDが重複しています。');
+ }else if(host==='pubchem.ncbi.nlm.nih.gov'&&path==='/rest/pug/periodictable/JSON'){
+  provider='chemistry';allowed=[];
  }else if(host==='api.gbif.org'&&path==='/v1/species/search'){
   provider='species';allowed=['q','limit','offset','datasetKey','rank'];expected={limit:'5',datasetKey:'d7dddbf4-2cf0-4f39-9b2a-bb099caae36c'};
   if(typeof params.q!=='string'||params.q.length<1||params.q.length>80||!/[\p{L}]/u.test(params.q)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(params.q)||! /^(0|5|10|15|20)$/.test(params.offset||'')||Object.prototype.hasOwnProperty.call(params,'rank')&&!['SPECIES','SUBSPECIES','GENUS','FAMILY'].includes(params.rank))throw Error('生物検索の条件が無効です。');
@@ -141,7 +143,7 @@ function fetchAPI_(url){
  }
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  if(provider==='geocoding')data=leanGeocoding_(data);
- if(provider==='chemistry')data=leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
+ if(provider==='chemistry')data=url.endsWith('/periodictable/JSON')?leanElements_(data):leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
  if(provider==='species'){data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result=Object.assign(rangeJSON?{dataJSON:text}:provider==='news'?{dataJSON:JSON.stringify(data)}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=provider==='geocoding'?21600:provider==='news'?600:provider==='quakes'?300:['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
@@ -168,10 +170,21 @@ function cooldownMessage_(until){return '提供元への新しい照会を '+Uti
 
 function reserveChemistry_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('化合物検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),now=Date.now();if(Number(props.getProperty('CHEMISTRY_BUSY_UNTIL')||0)>now)throw Error('化合物検索は別の照会中です。少し待って送信してください。');const day=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),count=props.getProperty('CHEMISTRY_DAY')===day?Number(props.getProperty('CHEMISTRY_COUNT')||0):0;if(!Number.isSafeInteger(count)||count<0||count>=100)throw Error('本日の化合物検索の保護上限です。時間を置いてお試しください。');const delay=1100-(Date.now()-Number(props.getProperty('CHEMISTRY_LAST_END')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));const lease=Utilities.getUuid();props.setProperties({CHEMISTRY_BUSY_UNTIL:String(Date.now()+360000),CHEMISTRY_LEASE:lease,CHEMISTRY_DAY:day,CHEMISTRY_COUNT:String(count+1)});return lease;}finally{lock.releaseLock();}}
 function releaseChemistry_(lease){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))return;try{const props=PropertiesService.getScriptProperties();if(props.getProperty('CHEMISTRY_LEASE')===lease)props.setProperties({CHEMISTRY_BUSY_UNTIL:'0',CHEMISTRY_LEASE:'',CHEMISTRY_LAST_END:String(Date.now())});}finally{lock.releaseLock();}}
+function leanElements_(raw){
+ const columns=raw?.Table?.Columns?.Column,rows=raw?.Table?.Row,required=['AtomicNumber','Symbol','Name','AtomicMass'];
+ if(!Array.isArray(columns)||columns.length>30||new Set(columns).size!==columns.length||!required.every(key=>columns.includes(key))||!Array.isArray(rows)||rows.length!==118)throw Error('周期表の応答形式を確認できませんでした。');
+ const seen=new Set(),symbols=new Set();return{Table:{Columns:{Column:required},Row:rows.map(row=>{
+  if(!Array.isArray(row?.Cell)||row.Cell.length!==columns.length)throw Error('元素の列数が一致しません。');
+  const [number,symbol,name,mass]=required.map(key=>row.Cell[columns.indexOf(key)]),n=Number(number);
+  if(typeof number!=='string'||! /^[1-9]\d{0,2}$/.test(number)||n>118||seen.has(n)||typeof symbol!=='string'||! /^[A-Z][a-z]?$/.test(symbol)||symbols.has(symbol)||typeof name!=='string'||! /^[A-Za-z]{1,40}$/.test(name)||typeof mass!=='string'||mass!==''&&(! /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(mass)||Number(mass)<=0||Number(mass)>400))throw Error('元素データの形式・重複を確認できませんでした。');
+  seen.add(n);symbols.add(symbol);return{Cell:[number,symbol,name,mass]};
+ })}};
+}
+
 function leanChemistry_(data,requested){
  const valid=id=>Number.isSafeInteger(id)&&id>0&&id<1e10;
  if(requested===null){const ids=data?.IdentifierList?.CID;if(!Array.isArray(ids)||ids.length>1000||!ids.every(valid)||new Set(ids).size!==ids.length)throw Error('化合物候補の応答形式を確認できませんでした。');return{IdentifierList:{CID:ids.slice(0,5)},truncated:ids.length>5};}
  const rows=data?.PropertyTable?.Properties;if(!Array.isArray(rows)||rows.length!==requested.length||new Set(rows.map(row=>row?.CID)).size!==rows.length)throw Error('化合物の基礎データの件数・IDが一致しません。');
  return{PropertyTable:{Properties:rows.map(row=>{if(!valid(row?.CID)||!requested.includes(row.CID))throw Error('化合物の基礎データのIDが一致しません。');const result={CID:row.CID};if(row.MolecularFormula!==undefined){if(typeof row.MolecularFormula!=='string'||row.MolecularFormula.length>200||! /^[A-Za-z0-9()[\].+\-]+$/.test(row.MolecularFormula))throw Error('分子式の応答形式が無効です。');result.MolecularFormula=row.MolecularFormula;}if(row.MolecularWeight!==undefined){if(typeof row.MolecularWeight!=='string'||! /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(row.MolecularWeight)||Number(row.MolecularWeight)<=0||Number(row.MolecularWeight)>1e8)throw Error('モル質量の応答形式が無効です。');result.MolecularWeight=row.MolecularWeight;}if(typeof row.IUPACName==='string'&&row.IUPACName.length<=300)result.IUPACName=row.IUPACName.replace(/[\u0000-\u001f\u007f]/g,' ').trim();return result;})}};
 }
-function registerChemistryProvider_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('設定処理が混み合っています。');try{if(rows_('Providers').some(row=>row[0]==='chemistry')){console.log('PubChem provider already registered; enabled setting preserved.');return{added:false};}append_(sheet_('Providers'),[['chemistry','PubChem / NCBI',true,'無認証の公開API・計算済み基礎データのみ・NCBI免責/著作権方針・共有負荷制限','https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest']]);console.log('PubChem provider registered.');return{added:true};}finally{lock.releaseLock();}}
+function registerChemistryProvider_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('設定処理が混み合っています。');try{if(rows_('Providers').some(row=>row[0]==='chemistry')){console.log('PubChem provider already registered; enabled setting preserved.');return{added:false};}append_(sheet_('Providers'),[['chemistry','PubChem / NCBI',true,'無認証の公開API・化合物と元素の基礎データのみ・NCBI免責/著作権方針・共有負荷制限','https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest']]);console.log('PubChem provider registered.');return{added:true};}finally{lock.releaseLock();}}
