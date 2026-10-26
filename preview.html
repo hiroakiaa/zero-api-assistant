@@ -732,7 +732,7 @@ function parsePlan(raw, context={}){
  const solar=parseSolarTasks(text,context,cities);if(solar.length)return solar;
  const jpHolidays=parseJapaneseHolidays(text,context);if(jpHolidays.length)return jpHolidays;
  const ukHolidays=parseUKHolidays(text,context);if(ukHolidays.length)return ukHolidays;
- const business=parseBusinessTasks(text);if(business.length)return business;
+ const business=parseBusinessTasks(text,context);if(business.length)return business;
  const era=parseEraYear(text,context);if(era.length)return era;
  const local=parseLocalTasks(text,context);if(local.length)return local;
  const trend=parseCountryTrend(text,context);if(trend.length)return trend;
@@ -1073,7 +1073,7 @@ function parseUKHolidays(raw,context={}){
  if(holiday&&/日本/.test(text)&&!uk&&!unspecified)return [];
  if(holiday&&/日本/.test(text)&&uk)return ukError('日本と英国の祝日は、依頼を改行で分けて指定してください。');
  if(holiday&&!uk&&unspecified)return ukError('祝日の照会は現在、日本と英国3地域に対応しています。例：「日本の祝日」「スコットランドの祝日」。');
- if(uk&&/営業日|平日/.test(text))return ukError('英国は祝日一覧・次の祝日に対応しています。営業日計算は日本の祝日または土日のみで指定してください。');
+ if(uk&&/営業日|平日/.test(text))return [];
  const short=active&&(/^(?:今年|来年|再来年|\d{4}年)(?:は|なら)?$/.test(text)||regions.length&&/なら|では|は$/.test(text));
  const follow=active&&/^(?:(?:(?:今年|来年|再来年|\d{4}年)(?:の)?)?(?:次の祝日|今後の祝日|これからの祝日|祝日一覧|祝日|バンクホリデー)(?:は)?)$/.test(text);
  if(!(holiday&&uk||short||follow))return [];
@@ -1888,8 +1888,8 @@ function createLocalHandlers({el,p,state,localDate,source,follows}){
 
 
 const businessDate='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月\\d{1,2}日|今日)';
-function parseBusinessTasks(raw){
- let text=raw.normalize('NFKC').trim().replace(/^営業日(?:計算)?[：:]\s*/,''),mode='jp';
+function parseJapaneseBusinessTasks(raw){
+ let text=raw.normalize('NFKC').trim().replace(/^日本(?:国内)?の/,'').replace(/^営業日(?:計算)?[：:]\s*/,''),mode='jp';
  const weekends=text.match(/^土日(?:のみ|だけ)(?:を)?(?:除く|除いて)[：:、\s]*/);if(weekends){mode='weekdays';text=text.slice(weekends[0].length);}
  const unit=mode==='weekdays'?'日':'(?:営業日|平日)';
  const add=text.match(new RegExp(`^(?:(${businessDate})(?:から|の))?(\\d{1,7})${unit}(後|前)(?:は(?:何日)?|は何曜日|の日付)?[。？?]?$`));
@@ -1899,9 +1899,25 @@ function parseBusinessTasks(raw){
  if(weekends||/^(?:\d|今日|[+-]\d)/.test(text)&&/(営業日|平日)/.test(text))return[{kind:'businessDays',operation:'invalid',mode}];
  return[];
 }
+const ukBusinessNames=['英国','イギリス','UK',...UK_REGIONS.flatMap(r=>[r.name,...r.aliases])].sort((a,b)=>b.length-a.length);
+function ukBusinessRegions(value){const text=value.trim();if(/^(?:英国|イギリス|UK)$/i.test(text))return UK_REGIONS.map(r=>r.id);const names=text.split(/と|、|,/).map(v=>v.trim()),out=[];for(const name of names){const region=UK_REGIONS.find(r=>[r.name,...r.aliases].some(v=>v.toLowerCase()===name.toLowerCase()));if(!region)return null;if(!out.includes(region.id))out.push(region.id);}return out.length?out:null;}
+function parseBusinessTasks(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,''),active=context.intent==='businessDays'&&context.businessMode==='uk';
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|翻訳|文章|コード)[：:\s]|とは|って何|について/.test(text))return [];
+ const follow=text.match(/^(.{1,60}?)(?:なら|では|は)$/);if(active&&follow){if(follow[1]==='日本'&&context.ukBusinessTask)return[{kind:'businessDays',...context.ukBusinessTask,mode:'jp'}];const regions=ukBusinessRegions(follow[1]);if(regions&&context.ukBusinessTask)return[{kind:'businessDays',...context.ukBusinessTask,mode:'uk',regions}];}
+ const wants=/営業日|平日|土日/.test(text),mentionsUK=ukBusinessNames.some(n=>text.toLowerCase().includes(n.toLowerCase()));
+ if(wants&&mentionsUK){
+  const match=text.replace(/^営業日(?:計算)?[：:]\s*/,'').match(/^(.{1,80}?)(?:の|[：:])\s*(.*)$/),regions=match?ukBusinessRegions(match[1]):null;
+  if(!regions)return[{kind:'businessDays',error:'英国の地域を先頭に指定してください。例：「スコットランドの2026-12-31から1営業日後は？」。英国全体なら3地域を比較します。'}];
+  const task=parseJapaneseBusinessTasks(match[2])[0];if(!task||task.mode!=='jp'||task.operation==='invalid')return[{kind:'businessDays',error:'英国の営業日は、年月日と前後の日数、または期間内の日数を指定してください。'}];return[{...task,mode:'uk',regions}];
+ }
+ const tasks=parseJapaneseBusinessTasks(raw);if(!/^日本(?:国内)?の/.test(text)&&(active&&Array.isArray(context.ukBusinessRegions)||context.intent==='ukHoliday'&&Array.isArray(context.ukRegions)))return tasks.map(t=>t.mode==='jp'?{...t,mode:'uk',regions:active?context.ukBusinessRegions:context.ukRegions}:t);return tasks;
+}
 const businessISO=date=>date.toISOString().slice(0,10);
 function validateBusinessTask(task,today){
- if(!['jp','weekdays'].includes(task.mode)||!['add','count'].includes(task.operation))throw Error('営業日計算の条件を確認してください。');
+ if(task.error)throw Error(task.error);
+ if(!['jp','uk','weekdays'].includes(task.mode)||!['add','count'].includes(task.operation))throw Error('営業日計算の条件を確認してください。');
+ if(task.mode==='uk'&&(!Array.isArray(task.regions)||!task.regions.length||task.regions.length>3||new Set(task.regions).size!==task.regions.length||task.regions.some(id=>!UK_REGIONS.some(r=>r.id===id))))throw Error('英国の営業日計算は対応する3地域から指定してください。');
  const from=parseCivilDate(task.from,today),to=task.operation==='count'?parseCivilDate(task.to,today):null;
  if(task.operation==='add'&&(!Number.isInteger(task.days)||Math.abs(task.days)>1000))throw Error('営業日の前後は1000日以内で指定してください。');
  if(to&&Math.abs(to-from)/86400000>3660)throw Error('営業日数を数える期間は3660日以内で指定してください。');
@@ -1915,7 +1931,11 @@ function holidayCalendar(data){
  return{holidays,years};
 }
 function businessDays(task,today,data=null){
- const {from,to}=validateBusinessTask(task,today),zero=task.operation==='add'&&task.days===0,calendar=task.mode==='jp'&&!zero?holidayCalendar(data):null;
+ if(task.mode==='uk')throw Error('英国は地域別の営業日計算を指定してください。');
+ const zero=task.operation==='add'&&task.days===0,calendar=task.mode==='jp'&&!zero?holidayCalendar(data):null;return calculateBusinessDays(task,today,calendar);
+}
+function calculateBusinessDays(task,today,calendar=null){
+ const {from,to}=validateBusinessTask(task,today);if(task.mode==='uk'&&!(task.operation==='add'&&task.days===0)&&(!calendar?.holidays||!calendar?.years))throw Error('英国の地域別祝日カレンダーを確認できませんでした。');
  const coverage=date=>{if(date.getUTCFullYear()<1||date.getUTCFullYear()>9999)throw Error('計算結果が日付の対応範囲を超えます。');if(calendar&&!calendar.years.has(businessISO(date).slice(0,4)))throw Error(`${date.getUTCFullYear()}年の祝日データが未収録のため計算できません。土日のみを除く計算なら指定できます。`);};
  let weekends=0,holidayCount=0;const excluded=[];
  const working=date=>{coverage(date);if([0,6].includes(date.getUTCDay())){weekends++;return false;}const name=calendar?.holidays.get(businessISO(date));if(name){holidayCount++;excluded.push({date:businessISO(date),name});return false;}return true;};
@@ -1930,6 +1950,7 @@ function businessDays(task,today,data=null){
 }
 function createBusinessHandler({getJSON,el,p,source,state,localDate}){
  return async(task,body)=>{
+  if(task.mode==='uk')return runUKBusiness(task,body,{getJSON,el,p,source,state,localDate});
   const today=localDate('Asia/Tokyo');validateBusinessTask(task,today);
   const response=task.mode==='jp'&&!(task.operation==='add'&&task.days===0)?await getJSON('https://holidays-jp.github.io/api/v1/date.json',86400000):null;
   const result=businessDays(task,today,response?.data);body.append(el('h3',task.mode==='weekdays'?(task.operation==='add'?'土日を除いて日付を計算':'土日を除いた日数'):(task.operation==='add'?'営業日で日付を計算':'期間内の営業日数')));
@@ -1941,8 +1962,22 @@ function createBusinessHandler({getJSON,el,p,source,state,localDate}){
   if(result.excluded.length)p(body,'除いた祝日：'+result.excluded.slice(0,8).map(item=>`${item.date} ${item.name}`).join(' ／ ')+(result.excluded.length>8?' ほか':''));
   if(response){p(body,`祝日データ収録年：${result.years.join('・')}年。未収録の年は計算しません。`);source(body,'Holidays JP · MIT','https://holidays-jp.github.io/',response);}else p(body,'外部APIを呼ばずに端末内で計算しました。');
   if(task.from==='今日'||task.to==='今日')p(body,`「今日」は日本時間 ${today} です。`);
-  state.context={...state.context,intent:'businessDays',pending:null,lastDate:result.to};
+  state.context={...state.context,intent:'businessDays',pending:null,businessMode:task.mode,ukBusinessTask:null,lastDate:result.to};
  };
+}
+
+function ukBusinessCalendar(data,id){
+ const events=ukHolidayEvents(data,id),byYear=new Map(),holidays=new Map();for(const e of events){const year=e.date.slice(0,4);if(!byYear.has(year))byYear.set(year,[]);byYear.get(year).push(e);const name=e.title+(e.notes?'（'+e.notes+'）':'');holidays.set(e.date,holidays.has(e.date)?holidays.get(e.date)+' / '+name:name);}
+ const years=new Set([...byYear].filter(([year,rows])=>rows.some(e=>e.date>=year+'-01-01'&&e.date<=year+'-01-07'&&/New Year/i.test(e.title))&&rows.some(e=>e.date>=year+'-12-25'&&e.date<=year+'-12-28'&&/Christmas Day/i.test(e.title))).map(([year])=>year));if(!years.size)throw Error('年初・年末を含む英国祝日の収録年を確認できませんでした。');return {holidays,years};
+}
+function ukBusinessResults(task,today,data){validateBusinessTask(task,today);const zero=task.operation==='add'&&task.days===0;return task.regions.map(id=>({region:UK_REGIONS.find(r=>r.id===id),result:calculateBusinessDays(task,today,zero?null:ukBusinessCalendar(data,id))}));}
+async function runUKBusiness(task,body,{getJSON,el,p,source,state,localDate}){
+ const today=localDate('Europe/London');validateBusinessTask(task,today);const zero=task.operation==='add'&&task.days===0,response=zero?null:await getJSON(UK_HOLIDAY_URL,3600000),items=ukBusinessResults(task,today,response?.data);
+ body.append(el('h3',task.operation==='add'?'英国の祝日を除いて日付を計算':'英国の祝日を除いた日数'));for(const {region,result}of items){const section=el('section',undefined,'wiki-result');section.append(el('h4',region.name));const card=el('div',undefined,'result-card');card.append(el('div',task.operation==='add'?result.from+' から '+Math.abs(task.days)+'営業日'+(task.days<0?'前':'後'):result.from+' → '+result.to,'sub'),el('div',task.operation==='add'?result.to:result.count+' 日','big'));section.append(card);p(section,'除いた日：土日 '+result.weekends+'日、平日の銀行休業日 '+result.holidayCount+'日。');if(result.excluded.length)p(section,'除いた銀行休業日：'+result.excluded.slice(0,8).map(v=>v.date+' '+v.name).join(' ／ ')+(result.excluded.length>8?' ほか':''));if(response)p(section,'収録年（年初・年末の登録を確認）：'+result.years.join('・')+'年。','sub');body.append(section);}
+ p(body,task.operation==='add'?'開始日を0日として数え、0日後は開始日をそのまま返します。':'両端を含めます。逆順の期間は同じ範囲の日数を負数で表示します。');p(body,'土日と地域別のGOV.UK登録バンクホリデーを除く参考計算です。企業・学校・店舗の営業や法定の期限を判断するものではありません。振替日はAPIの登録日を使い、独自に追加しません。','sub');
+ if(response){source(body,'GOV.UK · © Crown copyright · OGL v3.0','https://www.gov.uk/bank-holidays',response);source(body,'Open Government Licence v3.0','https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/');}else p(body,'0営業日のため、外部APIを呼ばずに計算しました。');if(task.from==='今日'||task.to==='今日')p(body,'「今日」は英国時間 '+today+' です。');
+ const reference=items[0].result.to,same=items.every(v=>v.result.to===reference);state.context={...state.context,intent:'businessDays',pending:null,businessMode:'uk',ukBusinessRegions:[...task.regions],ukBusinessTask:{operation:task.operation,from:task.from,...(task.operation==='add'?{days:task.days}:{to:task.to})},lastDate:same?reference:null};
+ const box=el('div',undefined,'follow-ups');for(const name of ['イングランド','スコットランド','北アイルランド']){const button=el('button',name+'なら？','follow');button.type='button';button.dataset.ask=name+'なら？';box.append(button);}body.append(box);
 }
 
 const CROSSREF_FIELDS='DOI,title,author,published,container-title,type';
@@ -2236,6 +2271,7 @@ const FEATURE_CATALOG=[
  {id:'dateMonths',category:'tools',title:'月・年で日付を計算',description:'同じ日がない月は月末に合わせ、補正を表示。',query:'2026-01-31の1か月後は何日？',tags:'日付 ひづけ 月 年 誕生日 記念日 月末 翌月 翌年',local:true},
  {id:'dateDifference',category:'tools',title:'日付の差',description:'開始日を0日とした暦上の日数差。',query:'2026-10-25から2027-01-01まで何日？',tags:'期間 にっすう 日数 日付 何日 期限',local:true},
  {id:'compound',category:'tools',title:'まとめて質問する',description:'依頼を区切り、条件を引き継いで順に処理。',query:'5kmは何m？それとcmなら？そして今日から100日後は何日？',tags:'複数 いくつか まとめて 会話 続き',local:true},
+ {id:'ukBusiness',category:'tools',title:'英国の地域別営業日計算',description:'土日と登録バンクホリデーを除き、3地域の日付や日数を比較。',query:'英国の2026-12-31から1営業日後は？',tags:'英国 イギリス 営業日 平日 銀行 休業 スコットランド イングランド ウェールズ 北アイルランド'},
  {id:'businessDays',category:'tools',title:'営業日で日付を計算',description:'土日と日本の祝日を除いて前後の日付を計算。',query:'2026-10-30から3営業日後は何日？',tags:'仕事 締め切り 期限 平日 営業日 納期'},
  {id:'businessCount',category:'tools',title:'期間内の営業日数',description:'両端の日付を含め、土日祝を除いた日数。',query:'2026-10-01から2026-10-31までの営業日は何日？',tags:'仕事 期間 平日 営業日 日数 稼働日'},
  {id:'weekdays',category:'tools',title:'土日のみ除いて計算',description:'祝日は数えて土日のみ除く。API不要。',query:'土日のみ除く: 今日から5日後は何日？',tags:'土日 平日 期限 カレンダー',local:true},
@@ -2619,7 +2655,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='businessDays'?' · '+(c.businessMode==='uk'?'英国 '+(Array.isArray(c.ukBusinessRegions)?c.ukBusinessRegions.map(id=>UK_REGIONS.find(r=>r.id===id)?.name).filter(Boolean).join(' / '):''):c.businessMode==='weekdays'?'土日のみ':'日本の祝日'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 const cloudAnswer=createCloudAnswer({cloud,state,el,p,scroll:()=>scrollConversationToEnd(false)});
 async function localAnswer(text,body,head){
  if(state.cloudAIEnabled)return cloudAnswer(text,body,head);
