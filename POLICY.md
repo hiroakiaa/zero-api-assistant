@@ -109,3 +109,7 @@ GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時�
 # World Bank・ILOの失業率
 
 年次の各国推計系列`SL.UEM.TOTL.NE.ZS`のみを追加し、[当該指標の公式メタデータ](https://databank.worldbank.org/metadataglossary/world-development-indicators/series/SL.UEM.TOTL.NE.ZS)に記載されたCC BY 4.0と、[World Bankの無償利用・帰属条件](https://data.worldbank.org/summary-terms-of-use)に従います。World Bank WDIおよびILO Labour Force Statistics（LFS）を結果・CSVに帰属表示し、表示の丸め・日本語名への変更を明示します。国ごとの定義差、年次系列であること、他のモデル推計系列や月次値との違いを明示し、未収録を補完しません。新しいプロバイダ登録・API鍵・権限・有料契約は不要です。
+
+# 会話の保管一覧
+
+通常一覧と保管一覧の移動は、同じ非公開スプレッドシート内の保管状態を変更する機能です。既存の会話本文・条件は保持し、外部APIやAIに送信しません。保管中の会話は読み取り専用で、通常へ戻した後に追記できます。所有者を照合し、通常50件・全体250件・各データシート20000行の保存保護上限を適用します。移動・復元で本文を削除したり発言上限をリセットしたりしません。保管状態の記録用シートは初回の移動時にGASが同じデータベース内で初期化します。
