@@ -617,3 +617,71 @@ Frankfurter v2の `/rates?base=USD&quotes=JPY&from=...&to=...` を1回取得し�
 CSV保存・コピー・候補への操作などのボタン文言と次の質問の候補は本文から除きます。ただし記事名やDOIなど候補を識別するデータは明示的に記録します。本文が操作ボタンと同じ言葉でも、文字列一致で消しません。生成文は元のコードフェンス・改行・空白・リスト記号を、登録済みの折りたたみ注記は全文を維持します。HTMLのような文字は保存・復元時も文字として扱います。
 
 過去に保存済みの会話は書き換えません。既に一続きの文章として記録された表から、列や数値を推測して復元する処理は行いません。
+
+
+## 丁寧な依頼と対応判定の診断（2026-10-26）
+
+「100ドルを日本円に換算してください」「5kmをmに換算してください」「2026-10-30は何曜日ですか」のような依頼に対応します。判定の際に外側の丁寧語だけを整理し、質問の表示・保存・生成AIへ渡す原文は変えません。明示した書名・検索語・翻訳文・コード、引用・URLの内部は整理しません。一般的な「人工知能を教えてください」は知識検索として残します。
+
+「その日の翌月」のような日付の続きや「郵便番号1000001の住所」、地名を使った「直線距離」も受け付けます。距離は従来どおり地表に沿う球モデルの大円距離で、道路距離・所要時間・地球内部を通る弦の長さではありません。結果には計算方法を表示します。
+
+### 診断の範囲と限界
+
+自己作成の固定50例について、生成専用の依頼を振り分ける処理を含め、本番と同じ対応判定を外部API・LLMなしで評価しました。1件の依頼が期待した処理種別・指定フィールド・エラー判定となるかを確認し、修正前 26/50、修正後 50/50 でした。同じ質問セットを修正に使用した診断・回帰確認です。独立した未知問題の試験ではなく、API回答の正しさ・生成文の品質・速度・汎用的な正答率・有料モデルとの能力比・サービス全体の達成度を示しません。異なる種類の単位はまず単位換算へ振り分け、実行側で不適合を拒否します。この表ではその判定段階までを評価します。
+
+修正前後で質問と期待条件を変更していません。セットのSHA-256: `868b4c957db06c8623adec2478d19c46dd654b65a225f5f7d99f00b524537159`。別途、否定文・検索語の保持・会話の続きなどの回帰テストを実行しています。以下の各期待条件は部分一致で検証し、種別があるケースでは処理が1件であることも確認します。`error:true` はエラー文があること、`null` はデータ処理へ回さないことを意味します。
+
+| ID | 依頼 | 期待する判定・条件 | 修正前 | 修正後 |
+|---|---|---|---|---|
+| currency-basic | 100ドルは何円？ | `{"kind":"currency","amount":100,"base":"USD","quote":"JPY"}` | 適合 | 適合 |
+| currency-polite | 100ドルを日本円に換算してください。 | `{"kind":"currency","amount":100,"base":"USD","quote":"JPY"}` | 不適合 | 適合 |
+| currency-lead | すみません、100ユーロは何円ですか？ | `{"kind":"currency","amount":100,"base":"EUR","quote":"JPY"}` | 不適合 | 適合 |
+| currency-teach | 100ドルは何円か教えてください | `{"kind":"currency","amount":100,"base":"USD","quote":"JPY"}` | 不適合 | 適合 |
+| currency-date | 2025年1月15日の100ドルは何円？ | `{"kind":"currency","date":"2025-01-15"}` | 適合 | 適合 |
+| currency-series | 2025年1月のドル円の推移を見せてください | `{"kind":"currency","seriesFrom":"2025-01-01","seriesTo":"2025-01-31"}` | 不適合 | 適合 |
+| currency-follow | ユーロに換算してください | `{"kind":"currency","amount":100,"base":"USD","quote":"EUR"}` | 不適合 | 適合 |
+| currency-inverse | 逆にしてください | `{"kind":"currency","amount":100,"base":"JPY","quote":"USD"}` | 不適合 | 適合 |
+| unit-basic | 5kmは何m？ | `{"kind":"units","amount":5,"from":"km","to":"m"}` | 適合 | 適合 |
+| unit-polite | 5kmをmに換算してください | `{"kind":"units","amount":5,"from":"km","to":"m"}` | 不適合 | 適合 |
+| unit-temp | 20℃を℉に変換してください | `{"kind":"units","amount":20,"from":"℃","to":"℉"}` | 不適合 | 適合 |
+| unit-data | 1GiBは何MBですか？ | `{"kind":"units","amount":1,"from":"GiB","to":"MB"}` | 適合 | 適合 |
+| unit-teach | 1マイルは何kmか教えてください | `{"kind":"units","amount":1,"from":"mi","to":"km"}` | 不適合 | 適合 |
+| unit-follow | cmにしてください | `{"kind":"units","amount":5,"from":"km","to":"cm"}` | 不適合 | 適合 |
+| calc-basic | 12*8 | `{"kind":"calc","expression":"12*8"}` | 適合 | 適合 |
+| calc-polite | 12*8を計算してください | `{"kind":"calc","expression":"12*8"}` | 不適合 | 適合 |
+| calc-teach | 12*8の答えを教えてください | `{"kind":"calc","expression":"12*8"}` | 不適合 | 適合 |
+| calc-please | (10+2)*8をお願いします | `{"kind":"calc","expression":"(10+2)*8"}` | 不適合 | 適合 |
+| date-weekday | 2026-10-30は何曜日ですか？ | `{"kind":"dateMath","operation":"weekday","from":"2026-10-30"}` | 不適合 | 適合 |
+| date-add | 2026-10-30から3日後は何日ですか？ | `{"kind":"dateMath","operation":"add","days":3}` | 不適合 | 適合 |
+| date-diff | 2026-10-01から2026-10-31までは何日ですか？ | `{"kind":"dateMath","operation":"difference","from":"2026-10-01","to":"2026-10-31"}` | 不適合 | 適合 |
+| date-month | 2026-01-31の1か月後は何日ですか？ | `{"kind":"dateMath","operation":"addMonths","months":1}` | 不適合 | 適合 |
+| weather-basic | 東京の明日の天気は？ | `{"kind":"weather","offset":1}` | 適合 | 適合 |
+| weather-polite | 東京の明日の天気を教えてください | `{"kind":"weather","offset":1}` | 適合 | 適合 |
+| weather-pressure | 東京の明日の気圧を教えてください | `{"kind":"weather","focus":"hourly","hourlyMetric":"pressure"}` | 適合 | 適合 |
+| weather-wind | 東京の明日の風向を教えてください | `{"kind":"weather","focus":"hourly","hourlyMetric":"direction"}` | 適合 | 適合 |
+| book-literal | 本:100ドルは何円か教えてください | `{"kind":"books","query":"100ドルは何円か教えてください"}` | 適合 | 適合 |
+| book-title | 書名検索:計算してください | `{"kind":"books","query":"計算してください"}` | 適合 | 適合 |
+| knowledge-literal | 検索:ドル円の推移を教えてください | `{"kind":"knowledge","query":"ドル円の推移を教えてください"}` | 適合 | 適合 |
+| dictionary-literal | 辞書:please | `{"kind":"dictionary","word":"please"}` | 適合 | 適合 |
+| knowledge-polite | 人工知能について教えてください | `{"kind":"knowledge","query":"人工知能"}` | 不適合 | 適合 |
+| knowledge-definition | ドルとは何ですか？ | `{"kind":"knowledge","query":"ドル"}` | 不適合 | 適合 |
+| knowledge-basic | 人工知能とは？ | `{"kind":"knowledge","query":"人工知能"}` | 適合 | 適合 |
+| postal-basic | 郵便番号:1000001 | `{"kind":"postal"}` | 適合 | 適合 |
+| postal-polite | 郵便番号1000001の住所を教えてください | `{"kind":"postal"}` | 不適合 | 適合 |
+| distance-basic | 東京から大阪までの直線距離は？ | `{"kind":"distance"}` | 不適合 | 適合 |
+| distance-polite | 東京から大阪までの直線距離を教えてください | `{"kind":"distance"}` | 不適合 | 適合 |
+| chemical-basic | 水の分子式は？ | `{"kind":"chemistry"}` | 適合 | 適合 |
+| chemical-polite | 水の分子式を教えてください | `{"kind":"chemistry"}` | 適合 | 適合 |
+| country-basic | 日本の人口は？ | `{"kind":"countryStat","metric":"population"}` | 適合 | 適合 |
+| country-polite | 日本の人口を教えてください | `{"kind":"countryStat","metric":"population"}` | 適合 | 適合 |
+| wrong-unit | 5kmは何kg？ | `{"kind":"units","from":"km","to":"kg"}` | 適合 | 適合 |
+| invalid-fx-date | 2025-02-30の100ドルは何円？ | `{"kind":"currency","error":true}` | 適合 | 適合 |
+| future-fx-date | 9999-01-01の100ドルは何円ですか？ | `{"kind":"currency","error":true}` | 適合 | 適合 |
+| ambiguous-fx | ユーロなら？ | `{"kind":"currency","error":true}` | 適合 | 適合 |
+| ambiguous-reference | その日は何曜日ですか？ | `{"kind":"dateMath","error":true}` | 不適合 | 適合 |
+| reference-follow | その日の翌月は何日ですか？ | `{"kind":"dateMath","operation":"addMonths","months":1}` | 不適合 | 適合 |
+| bare-greeting | こんにちは | `null` | 適合 | 適合 |
+| translation-content | 翻訳:100ドルは何円か教えてください | `null` | 適合 | 適合 |
+| writing-content | 文章:12*8を計算してください | `null` | 適合 | 適合 |
+
+会話の続きのケースでは、為替は100 USD→JPY、単位は5km→m、日付は2026-01-31を事前条件とします。過去日や比較条件を伴う追加の回帰テストも別に確認しています。
