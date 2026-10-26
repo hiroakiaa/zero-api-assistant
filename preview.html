@@ -1409,24 +1409,28 @@ function createCountryResolver(getJSON,knownCountries){
 
 const countryIndicators={population:{id:'SP.POP.TOTL',label:'人口',unit:'人',note:'年次の人口統計です。リアルタイムの人口ではありません。'},gdp:{id:'NY.GDP.MKTP.CD',label:'GDP（名目米ドル）',unit:'米ドル',note:'当年価格・米ドル換算のGDPです。実質GDP・購買力平価・成長率ではありません。'},gdpPerCapita:{id:'NY.GDP.PCAP.CD',label:'1人当たりGDP（名目米ドル）',unit:'米ドル/人',note:'当年価格・米ドル換算の1人当たりGDPです。個人の所得や給与ではありません。'},life:{id:'SP.DYN.LE00.IN',label:'平均寿命（出生時）',unit:'年',note:'出生時の平均余命の年次統計です。個人の余命を予測する値ではありません。'}};
 countryIndicators.unemployment={id:'SL.UEM.TOTL.NE.ZS',label:'失業率（各国推計）',unit:'%',maxValue:100,sourceLabel:'World Bank, World Development Indicators / ILO, Labour Force Statistics (LFS)',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/SL.UEM.TOTL.NE.ZS',note:'労働力人口に占める失業者の割合を示す年次の各国推計系列です。国ごとに調査・定義が異なるため、単純な順位づけや厳密な比較には注意が必要です。ILOモデル推計・月次・季節調整値とは別の系列です。'};
+countryIndicators.gdpGrowth={id:'NY.GDP.MKTP.KD.ZG',label:'GDP成長率（実質・年次）',unit:'%',allowNegative:true,pointDifference:true,sourceLabel:'World Bank, World Development Indicators / national statistics, OECD national accounts and World Bank estimates',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/NY.GDP.MKTP.KD.ZG',note:'一定価格のGDPの前年比を示す年次系列です。名目米ドルGDPの増減率・四半期・前期比年率・予測値とは異なります。国民経済計算の改定や基準年変更で過去値も更新されることがあります。'};
 const statCountries=new Map(countryAliases.flatMap(([name,code])=>[[name,{name,code}],[code,{name:countryAliases.find(c=>c[1]===code)[0],code}]]));
 const statError=error=>[{kind:'countryStat',error}];
 const statCountryText=text=>text.replace(/(?:の|を|は|なら|では|いくら|何人|何歳|教えて|調べて|確認して|比較して|比べて|比較|比べる)/g,'').trim();
 function parseCountryStats(raw,context={}){
  let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
- if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text))return [];
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術|翻訳|文章|コード)[：:\s]|とは|って何|について/.test(text))return [];
  const active=context.intent==='countryStat',explicit=/^(?:国統計|統計)[：:\s]/.test(text);text=text.replace(/^(?:国統計|統計)[：:\s]+/,'');
+ if(active&&['gdp','gdpGrowth'].includes(context.countryMetric)&&/^(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?$/.test(text))text=text.replace(/^(?:実質)?(?:成長率|伸び率)/,'GDP成長率');
  const found=[];
- const patterns=[['gdpPerCapita',/(?:1人|一人)(?:当たり|あたり)(?:の)?GDP/i],['gdp',/GDP|国内総生産/i],['population',/人口/],['life',/平均寿命|出生時平均余命/],['unemployment',/失業率/]];
+ const patterns=[['gdpPerCapita',/(?:1人|一人)(?:当たり|あたり)(?:の)?GDP/i],['gdpGrowth',/(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率/i],['gdp',/GDP|国内総生産/i],['population',/人口/],['life',/平均寿命|出生時平均余命/],['unemployment',/失業率/]];
  for(const [key,pattern] of patterns)if(pattern.test(text)){found.push(key);text=text.replace(pattern,'');}
  if(!found.length&&!active&&!explicit)return [];
  if((found.includes('unemployment')||!found.length&&active&&context.countryMetric==='unemployment')&&/モデル|月次|季節調整|完全失業率|完全|若年|若者|青少年|女性|男性|男女|15.?24/.test(raw))return statError('この機能は年次の失業率（各国推計・男女計）に対応します。モデル推計・月次・季節調整・年齢別・男女別・国内の完全失業率へ読み替えません。');
+ if((found.includes('gdpGrowth')||!found.length&&active&&context.countryMetric==='gdpGrowth')&&/名目|四半期|月次|前期比|年率|予測|予想|見通し|PPP|購買力|1人|一人/.test(raw))return statError('GDP成長率は実質・年次の公表値に対応します。名目・四半期・前期比年率・予測・PPP・1人当たりへ読み替えません。');
+ if(found.includes('gdpGrowth'))text=text.replace(/\(実質(?:[・、]年次)?\)|\(?実質\)?|年次/g,'');
  if(found.includes('unemployment'))text=text.replace(/\(?各国推計\)?|年次/g,'');
  if(found.length===1&&found[0]==='population'&&/首都|国情報/.test(text))return [];
  if(found.length>1)return statError('指標は1件ずつ指定してください。例：「日本のGDP」。別の指標は改行して質問できます。');
  if(found.length&&/実質|PPP|購買力|成長率|密度|所得|給与|女性|男性/i.test(text))return statError('実質値・PPP・成長率・人口密度・男女別には対応していません。指標を変更せず、別の条件として指定してください。');
  const metric=found[0]||(active?context.countryMetric:null);
- if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命・失業率のいずれかを指定してください。');
+ if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命・失業率・GDP成長率のいずれかを指定してください。');
  if(!found.length&&!explicit){const probe=statCountryText(text.replace(/\d{4}年|最新(?:の)?/g,''));if(probe){let tokens;try{tokens=splitStatCountries(probe);}catch{return [];}const unknown=tokens.some(token=>!statCountries.has(token)&&!statCountries.has(token.toUpperCase()));if(unknown&&(!(context.pending==='countryStat'||/(?:なら|では|は)$/.test(text)||/^[A-Za-z]{2,3}$/.test(probe))||/天気|時刻|明日|今日|昨日|来年|去年|来週|先週/.test(probe)||tokens.some(token=>!validCountryQuery(token))))return [];}}
  const years=[...text.matchAll(/(\d{4})年/g)];
  if(years.length>1)return statError('統計の年は1年ずつ指定してください。');
@@ -1451,6 +1455,10 @@ function validateStatTask(task,now=new Date()){
  if(task.year!==null&&(!Number.isInteger(task.year)||task.year<1960||task.year>Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4))))throw Error('統計の年は1960年以降、今年（日本時間）までで指定してください。');
  return countryIndicators[task.metric];
 }
+function formatStatNumber(value,metric,{compact=false}={}){
+ if(typeof value!=='number'||!Number.isFinite(value))throw Error('統計の表示値を確認してください。');const small=metric==='gdpGrowth'&&value!==0&&Math.abs(value)<.01;
+ return new Intl.NumberFormat('ja-JP',{...(small?{maximumSignificantDigits:3,notation:Math.abs(value)<1e-6?'scientific':'standard'}:{maximumFractionDigits:metric==='population'?0:2,...(compact&&metric==='gdp'?{notation:'compact'}:{})})}).format(value===0?0:value);
+}
 function countryStatRow(data,code,indicator,year,now=new Date()){
  if(Array.isArray(data)&&data.length===2&&data[0]?.total===0&&data[0]?.pages===0&&data[1]===null)return null;
  if(!Array.isArray(data)||data.length!==2||!data[0]||!Array.isArray(data[1])||data[1].length>1)throw Error('統計の応答形式を確認できませんでした。');
@@ -1458,7 +1466,7 @@ function countryStatRow(data,code,indicator,year,now=new Date()){
  const row=data[1][0],maxYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));
  if(row?.countryiso3code!==code||row?.indicator?.id!==indicator||!/^\d{4}$/.test(row.date)||Number(row.date)<1960||Number(row.date)>maxYear||year!==null&&row.date!==String(year))throw Error('指定した国・指標・統計年と異なる応答のため、表示を停止しました。');
  if(row.value===null)return null;
- if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value)||indicator==='SL.UEM.TOTL.NE.ZS'&&row.value>100)throw Error(`${row.date}年の統計の数値を確認できませんでした。`);
+ if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0&&indicator!=='NY.GDP.MKTP.KD.ZG'||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value)||indicator==='SL.UEM.TOTL.NE.ZS'&&row.value>100)throw Error(`${row.date}年の統計の数値を確認できませんでした。`);
  return row;
 }
 function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date()}){
@@ -1472,7 +1480,7 @@ function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()
   for(let i=0;i<results.length;i++){
    const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}
    const v=result.value;if(ok.some(c=>c.code===v.country.code))continue;ok.push(v.country);const card=el('div',undefined,'result-card');card.append(el('div',v.country.name,'city'));
-   if(v.row){const formatted=new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2,...(task.metric==='gdp'?{notation:'compact'}:{})}).format(v.row.value);card.append(el('div',formatted,'big'),el('div',`${indicator.unit} · ${v.row.date}年`,'details'));if(task.metric==='gdp')card.append(el('div',`元データ：${new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(v.row.value)} 米ドル`,'sub'));}
+   if(v.row){const formatted=formatStatNumber(v.row.value,task.metric,{compact:true});card.append(el('div',formatted,'big'),el('div',`${indicator.unit} · ${v.row.date}年`,'details'));if(task.metric==='gdp')card.append(el('div',`元データ：${new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(v.row.value)} 米ドル`,'sub'));}
    else card.append(el('div','未収録','big'),el('div',task.year===null?'この条件で数値を取得できませんでした。':`${task.year}年の数値は未収録です。`,'details'));
    grid.append(card);source(body,`World Bank · ${indicator.id}`,v.url,v.result);
   }
@@ -1482,19 +1490,19 @@ function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()
   p(body,'出典：'+(indicator.sourceLabel||'World Bank, World Development Indicators')+'。表示桁を丸め、指標名を日本語で表示しています。');if(indicator.definitionURL)body.append(link('指標の定義・調査範囲',indicator.definitionURL));body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
   if(results.some(result=>result.status==='rejected'))p(body,'一部の国を取得できませんでした。次の年・指標の質問でも、指定した比較対象の国は維持します。');
   const nextCountries=results.map((result,i)=>result.status==='fulfilled'?result.value.country:task.countries[i]).filter((country,i,all)=>all.findIndex(other=>(other.code||other.query||other.name)===(country.code||country.query||country.name))===i);
-  state.context={...state.context,intent:'countryStat',lastDate:null,pending:null,countryMetric:task.metric,statYear:task.year,statCountries:nextCountries.map(country=>({...country}))};follows(body,['2020年なら？','最新では？',task.metric==='life'?'人口は？':'平均寿命は？']);
+  state.context={...state.context,intent:'countryStat',lastDate:null,pending:null,countryMetric:task.metric,statYear:task.year,statCountries:nextCountries.map(country=>({...country}))};follows(body,[...(task.metric==='gdp'?['成長率は？']:task.metric==='gdpGrowth'?['GDPは？']:[]),'2020年なら？','最新では？',task.metric==='life'?'人口は？':'平均寿命は？']);
  };
 }
 
 const trendError=error=>[{kind:'countryTrend',error}];
 function parseCountryTrend(raw,context={},now=new Date()){
  let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術|翻訳|文章|コード)[：:\s]|とは|って何|について/.test(text))return [];
- const change=/前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減/.test(text),explicit=change||/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/人口|GDP|国内総生産|平均寿命|出生時平均余命|失業率/i.test(text);
+ const change=/前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減/.test(text),explicit=change||/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/実質経済成長率|人口|GDP|国内総生産|平均寿命|出生時平均余命|失業率/i.test(text);
  if(active)text=text.replace(/^(?:同じ|その)期間(?:で|の|なら|では)?\s*/,'');
  if(!explicit&&!active||explicit&&!hasMetric&&!['countryTrend','countryStat'].includes(context.intent))return [];
  if(active&&/^最新(?:では|なら|は)?$/.test(text))return [{kind:'countryStat',countries:context.statCountries||[],metric:context.countryMetric,year:null}];
  if(!hasMetric&&/天気|気温|日の出|地震|祝日|為替|ドル|円|計算|時刻|翻訳|文章|ニュース/.test(text))return [];
- if(!explicit&&hasMetric&&!/^(?:人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命|失業率)(?:は|なら|では)?$/i.test(text))return [];
+ if(!explicit&&hasMetric&&!/^(?:(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率|人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命|失業率)(?:は|なら|では)?$/i.test(text))return [];
  const ranges=[...text.matchAll(/(\d{4})年?\s*(?:から|[~〜～–-])\s*(\d{4})年/g)],recent=[...text.matchAll(/(?:過去|直近)(\d{1,3})年(?:間)?/g)];if(ranges.length+recent.length>1)return trendError('推移の期間は1つだけ指定してください。');
  const currentYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));let from=active?context.trendFrom:currentYear-9,to=active?context.trendTo:currentYear;
  if(ranges.length){from=Number(ranges[0][1]);to=Number(ranges[0][2]);text=text.replace(ranges[0][0],'');}
@@ -1518,12 +1526,12 @@ function countryTrendRows(data,code,id,from,to,now=new Date()){
  const byYear=new Map();for(const row of rows){const year=Number(row?.date);if(year<from||year>to||byYear.has(year))throw Error('指定範囲外または重複した統計年が返ったため、表示を停止しました。');countryStatRow([{},[row]],code,id,year,now);byYear.set(year,row.value);}
  return Array.from({length:to-from+1},(_,i)=>({year:from+i,value:byYear.get(from+i)??null}));
 }
-function trendChanges(rows){
+function trendChanges(rows,{points=false}={}){
  if(!Array.isArray(rows)||rows.length>20)throw Error('前年比較の年別データを確認してください。');
  return rows.map((row,index)=>{
-  if(!row||!Number.isInteger(row.year)||row.year<1960||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0)||index&&row.year!==rows[index-1].year+1)throw Error('前年比較は連続した年と有効な数値で指定してください。');
+  if(!row||!Number.isInteger(row.year)||row.year<1960||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0&&!points)||index&&row.year!==rows[index-1].year+1)throw Error('前年比較は連続した年と有効な数値で指定してください。');
   const previous=index?rows[index-1]:null;let delta=null,rate=null,status='比較可能';
-  if(row.value===null)status='当年未収録';else if(!previous)status='前年が範囲外';else if(previous.value===null)status='前年未収録';else {delta=row.value-previous.value;if(previous.value===0)status='前年が0のため率は計算不可';else {rate=(delta/previous.value)*100;if(!Number.isFinite(rate)){rate=null;status='増減率が計算範囲外';}}}
+  if(row.value===null)status='当年未収録';else if(!previous)status='前年が範囲外';else if(previous.value===null)status='前年未収録';else {delta=row.value-previous.value;if(points){if(!Number.isFinite(delta)){delta=null;status='差が計算範囲外';}return {year:row.year,value:row.value,previous:previous.value,delta,rate:null,status};}if(previous.value===0)status='前年が0のため率は計算不可';else {rate=(delta/previous.value)*100;if(!Number.isFinite(rate)){rate=null;status='増減率が計算範囲外';}}}
   return {year:row.year,value:row.value,previous:previous?.value??null,delta,rate,status};
  });
 }
@@ -1532,22 +1540,24 @@ function formatTrendChange(value,integer=false){
  const small=value!==0&&Math.abs(value)<.01;
  return new Intl.NumberFormat('ja-JP',{...(small?{maximumSignificantDigits:3,notation:Math.abs(value)<1e-6?'scientific':'standard'}:{maximumFractionDigits:integer?0:2}),signDisplay:'exceptZero'}).format(value===0?0:value);
 }
-function trendSegments(rows,maximum){
- if(!Number.isFinite(maximum)||maximum<=0||!rows.length)throw Error('グラフの目盛を確認してください。');
+function trendFraction(value,minimum,maximum){const span=maximum-minimum;return Number.isFinite(span)?(value-minimum)/span:((value/2)-(minimum/2))/((maximum/2)-(minimum/2));}
+function trendSegments(rows,maximum,minimum=0){
+ if(!Number.isFinite(maximum)||!Number.isFinite(minimum)||minimum>0||maximum<0||maximum<=minimum||!rows.length)throw Error('グラフの目盛を確認してください。');
  const groups=[];let points=[];const flush=()=>{if(points.length)groups.push(points);points=[];};
- for(let index=0;index<rows.length;index++){const value=rows[index].value;if(value===null){flush();continue;}if(!Number.isFinite(value)||value<0||value>maximum)throw Error('グラフの数値を確認してください。');points.push({x:rows.length===1?300:4+index*592/(rows.length-1),y:106-(value/maximum)*102});}flush();return groups;
+ for(let index=0;index<rows.length;index++){const value=rows[index].value;if(value===null){flush();continue;}if(!Number.isFinite(value)||value<minimum||value>maximum)throw Error('グラフの数値を確認してください。');points.push({x:rows.length===1?300:4+index*592/(rows.length-1),y:106-trendFraction(value,minimum,maximum)*102});}flush();return groups;
 }
-function renderTrendPlot(rows,maximum,label){
+function renderTrendPlot(rows,maximum,label,minimum=0){
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 600 110');svg.setAttribute('preserveAspectRatio','none');svg.setAttribute('class','trend-plot');svg.setAttribute('role','img');svg.setAttribute('aria-label',label+'。年別の値は続く表に表示しています。');
- const baseline=document.createElementNS(svg.namespaceURI,'line');for(const [key,value]of Object.entries({x1:'4',x2:'596',y1:'106',y2:'106',stroke:'#666'}))baseline.setAttribute(key,value);svg.append(baseline);
- for(const group of trendSegments(rows,maximum)){const line=document.createElementNS(svg.namespaceURI,'polyline');for(const [key,value]of Object.entries({points:group.map(p=>`${p.x},${p.y}`).join(' '),fill:'none',stroke:'#d7d7eb','stroke-width':'2','vector-effect':'non-scaling-stroke'}))line.setAttribute(key,value);svg.append(line);for(const point of group){const circle=document.createElementNS(svg.namespaceURI,'circle');for(const [key,value]of Object.entries({cx:String(point.x),cy:String(point.y),r:'2',fill:'#e2e2ef'}))circle.setAttribute(key,value);svg.append(circle);}}
+ const zeroY=String(106-trendFraction(0,minimum,maximum)*102),baseline=document.createElementNS(svg.namespaceURI,'line');for(const [key,value]of Object.entries({x1:'4',x2:'596',y1:zeroY,y2:zeroY,stroke:'#666'}))baseline.setAttribute(key,value);svg.append(baseline);
+ for(const group of trendSegments(rows,maximum,minimum)){const line=document.createElementNS(svg.namespaceURI,'polyline');for(const [key,value]of Object.entries({points:group.map(p=>`${p.x},${p.y}`).join(' '),fill:'none',stroke:'#d7d7eb','stroke-width':'2','vector-effect':'non-scaling-stroke'}))line.setAttribute(key,value);svg.append(line);for(const point of group){const circle=document.createElementNS(svg.namespaceURI,'circle');for(const [key,value]of Object.entries({cx:String(point.x),cy:String(point.y),r:'2',fill:'#e2e2ef'}))circle.setAttribute(key,value);svg.append(circle);}}
  return svg;
 }
 function countryTrendCSV(series,indicator,change=false){
+ const points=indicator.pointDifference===true||indicator.id==='SL.UEM.TOTL.NE.ZS';
  const cell=value=>{let text=String(value??'');if(typeof value==='string'&&(/^[\s\uFEFF]*[=+\-@]|^[\t\r\n]/.test(text)))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};
  const rows=[['国・地域','コード','指標（日本語表記）','指標コード','単位','年','値（追加の丸めなし）','収録状況','出典','出典URL','ライセンス','ライセンスURL','取得日時']];
- if(change)rows[0].push('前年値（追加の丸めなし）',indicator.id==='SL.UEM.TOTL.NE.ZS'?'前年差（ポイント）':'前年差（'+indicator.unit+'）',...(indicator.id==='SL.UEM.TOTL.NE.ZS'?[]:['前年比増減率（%）']),'前年比較状況');
- for(const value of series)for(const row of change?trendChanges(value.rows):value.rows){const record=[value.country.name,value.country.code,indicator.label,indicator.id,indicator.unit,row.year,row.value===null?'':row.value,row.value===null?'未収録':'収録あり',indicator.sourceLabel||'World Bank, World Development Indicators',value.url,'CC BY 4.0','https://creativecommons.org/licenses/by/4.0/',value.result.at||''];if(change)record.push(row.previous??'',row.delta??'',...(indicator.id==='SL.UEM.TOTL.NE.ZS'?[]:[row.rate??'']),indicator.id==='SL.UEM.TOTL.NE.ZS'&&row.delta!==null?'比較可能':row.status);rows.push(record);}
+ if(change)rows[0].push('前年値（追加の丸めなし）',points?'前年差（ポイント）':'前年差（'+indicator.unit+'）',...(points?[]:['前年比増減率（%）']),'前年比較状況');
+ for(const value of series)for(const row of change?trendChanges(value.rows,{points}):value.rows){const record=[value.country.name,value.country.code,indicator.label,indicator.id,indicator.unit,row.year,row.value===null?'':row.value,row.value===null?'未収録':'収録あり',indicator.sourceLabel||'World Bank, World Development Indicators',value.url,'CC BY 4.0','https://creativecommons.org/licenses/by/4.0/',value.result.at||''];if(change)record.push(row.previous??'',row.delta??'',...(points?[]:[row.rate??'']),points&&row.delta!==null?'比較可能':row.status);rows.push(record);}
  return '\uFEFF'+rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
 }
 function downloadTrendCSV(csv,filename){
@@ -1561,16 +1571,16 @@ function showTrendCSV(csv){
 function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date(),plot=renderTrendPlot,download=downloadTrendCSV,preview=showTrendCSV}){
  const directory=createCountryResolver(getJSON,statCountries);
  return async function countryTrend(task,body){
-  const indicator=validateTrendTask(task,now());if(!task.countries.length){state.context={...state.context,intent:'countryTrend',lastDate:null,pending:'countryStat',countryMetric:task.metric,statCountries:[],trendFrom:task.from,trendTo:task.to};p(body,`${task.from}〜${task.to}年の${indicator.label}を調べる国・地域を指定してください。`);follows(body,['日本なら？','スイスなら？']);return;}
+  const indicator=validateTrendTask(task,now()),points=indicator.pointDifference===true||task.metric==='unemployment';if(!task.countries.length){state.context={...state.context,intent:'countryTrend',lastDate:null,pending:'countryStat',countryMetric:task.metric,statCountries:[],trendFrom:task.from,trendTo:task.to};p(body,`${task.from}〜${task.to}年の${indicator.label}を調べる国・地域を指定してください。`);follows(body,['日本なら？','スイスなら？']);return;}
   const calls=new Map(),results=await Promise.allSettled(task.countries.map(async requested=>{const country=await directory.resolve(requested),query=new URLSearchParams({format:'json',source:'2',date:`${task.from}:${task.to}`,per_page:'20'}),url=`https://api.worldbank.org/v2/country/${country.code}/indicator/${indicator.id}?${query}`;if(!calls.has(url))calls.set(url,getJSON(url,86400000));const result=await calls.get(url);return{country,url,result,rows:countryTrendRows(result.data,country.code,indicator.id,task.from,task.to,now())};}));
-  const valid=results.filter(r=>r.status==='fulfilled').map(r=>r.value),values=valid.flatMap(v=>v.rows.filter(r=>r.value!==null).map(r=>r.value)),maximum=Math.max(1,...values),format=value=>new Intl.NumberFormat('ja-JP',{maximumFractionDigits:task.metric==='population'?0:2}).format(value);
-  body.append(el('h3',`${indicator.label}の推移${task.change?'・前年比較':''} · ${task.from}〜${task.to}年`));if(task.change)p(body,'指定期間内の連続する2年を比較します。増減値は表示桁を丸め、0.01未満の非ゼロの変化は有効数字3桁で表示します。最初の年は前年が範囲外、未収録の年は比較できません。範囲外の年を追加照会しません。'+(task.metric==='unemployment'?'失業率は%同士の差をポイントで表示します。':'増減率は（当年−前年）÷前年×100です。前年が0の率は計算しません。'+(['gdp','gdpPerCapita'].includes(task.metric)?'名目米ドル値の増減で、実質GDP成長率ではありません。':'')),'sub');if(values.length)p(body,`グラフの共通目盛：0〜${format(maximum)} ${indicator.unit}。未収録の年では線を切ります。`,'sub');
-  const shown=new Set();for(let i=0;i<results.length;i++){const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}const value=result.value;if(shown.has(value.country.code))continue;shown.add(value.country.code);body.append(el('h3',value.country.name));if(value.rows.some(row=>row.value!==null)){body.append(plot(value.rows,maximum,`${value.country.name} ${indicator.label} ${task.from}〜${task.to}年`));p(body,`${task.from}年 — ${task.to}年`,'sub');}else p(body,'この期間の数値は未収録です。');const table=el('table',undefined,'trend-table'),head=el('thead'),heading=el('tr');heading.append(el('th','年'),el('th',indicator.unit+'（丸め表示）'));head.append(heading);table.append(head);if(task.change){heading.append(el('th',task.metric==='unemployment'?'前年差（ポイント）':'前年差（'+indicator.unit+'）'));if(task.metric!=='unemployment')heading.append(el('th','前年比増減率'));}const signed=n=>formatTrendChange(n,task.metric==='population'),percent=n=>formatTrendChange(n)+'%';const tbody=el('tbody');for(const row of task.change?trendChanges(value.rows):value.rows){const tr=el('tr');tr.append(el('th',String(row.year)),el('td',row.value===null?'未収録':format(row.value)));if(task.change){tr.append(el('td',row.delta===null?row.status:signed(row.delta)));if(task.metric!=='unemployment')tr.append(el('td',row.rate===null?row.status:percent(row.rate)));}tbody.append(tr);}table.append(tbody);body.append(table);source(body,`World Bank · ${indicator.id}`,value.url,value.result);}
+  const valid=results.filter(r=>r.status==='fulfilled').map(r=>r.value),values=valid.flatMap(v=>v.rows.filter(r=>r.value!==null).map(r=>r.value)),minimum=indicator.allowNegative?Math.min(0,...values):0,maximum=indicator.allowNegative?(Math.max(0,...values)>minimum?Math.max(0,...values):1):Math.max(1,...values),format=value=>formatStatNumber(value,task.metric);
+  body.append(el('h3',`${indicator.label}の推移${task.change?'・前年比較':''} · ${task.from}〜${task.to}年`));if(task.change)p(body,'指定期間内の連続する2年を比較します。増減値は表示桁を丸め、0.01未満の非ゼロの変化は有効数字3桁で表示します。最初の年は前年が範囲外、未収録の年は比較できません。範囲外の年を追加照会しません。'+(points?'率どうしの前年差をポイントで表示します。' :'増減率は（当年−前年）÷前年×100です。前年が0の率は計算しません。'+(['gdp','gdpPerCapita'].includes(task.metric)?'名目米ドル値の増減で、実質GDP成長率ではありません。':'')),'sub');if(values.length)p(body,`グラフの共通目盛：${format(minimum)}〜${format(maximum)} ${indicator.unit}。未収録の年では線を切ります。${indicator.allowNegative?'線の基準は0%です。':''}`,'sub');
+  const shown=new Set();for(let i=0;i<results.length;i++){const result=results[i];if(result.status==='rejected'){p(body,`${task.countries[i].name}：${result.reason.message}`,'error');continue;}const value=result.value;if(shown.has(value.country.code))continue;shown.add(value.country.code);body.append(el('h3',value.country.name));if(value.rows.some(row=>row.value!==null)){body.append(plot(value.rows,maximum,`${value.country.name} ${indicator.label} ${task.from}〜${task.to}年`,minimum));p(body,`${task.from}年 — ${task.to}年`,'sub');}else p(body,'この期間の数値は未収録です。');const table=el('table',undefined,'trend-table'),head=el('thead'),heading=el('tr');heading.append(el('th','年'),el('th',indicator.unit+'（丸め表示）'));head.append(heading);table.append(head);if(task.change){heading.append(el('th',points?'前年差（ポイント）':'前年差（'+indicator.unit+'）'));if(!points)heading.append(el('th','前年比増減率'));}const signed=n=>formatTrendChange(n,task.metric==='population'),percent=n=>formatTrendChange(n)+'%';const tbody=el('tbody');for(const row of task.change?trendChanges(value.rows,{points}):value.rows){const tr=el('tr');tr.append(el('th',String(row.year)),el('td',row.value===null?'未収録':format(row.value)));if(task.change){tr.append(el('td',row.delta===null?row.status:signed(row.delta)));if(!points)tr.append(el('td',row.rate===null?row.status:percent(row.rate)));}tbody.append(tr);}table.append(tbody);body.append(table);source(body,`World Bank · ${indicator.id}`,value.url,value.result);}
   if(!valid.length)return;
   const exported=valid.filter((value,index,all)=>all.findIndex(other=>other.country.code===value.country.code)===index),save=el('button','年別データをCSV保存','history-item trend-export');save.type='button';save.addEventListener('click',()=>{try{download(countryTrendCSV(exported,indicator,!!task.change),`zero-${indicator.id}-${task.from}-${task.to}${task.change?'-changes':''}.csv`);}catch{p(body,'CSVを保存できませんでした。「CSVの内容を確認」からコピーできます。','error');}});body.append(save);
   const inspect=el('button','CSVの内容を確認','history-item trend-export');inspect.type='button';inspect.addEventListener('click',()=>preview(countryTrendCSV(exported,indicator,!!task.change)));body.append(inspect);p(body,`取得できた${exported.length}か国・地域の全対象年を保存します。未収録は値を空欄にして明示し、数値には表示用の丸めを加えません。出典・単位・取得日時を含みます。${task.change?'前年比較の計算値と比較できない理由も保存します。':''}`,'sub');
   if(indicator.definitionURL)body.append(link('指標の定義・調査範囲',indicator.definitionURL));if(directory.meta)source(body,'World Bank · 国・地域名の照合',COUNTRY_DIRECTORY_URL,directory.meta);p(body,indicator.note);p(body,'年別の公表値です。未収録は表に明示し、表示桁を丸めています。出典：'+(indicator.sourceLabel||'World Bank, World Development Indicators')+'。指標名は日本語で表示しています。');body.append(link('指標の説明・CC BY 4.0',`https://data.worldbank.org/indicator/${indicator.id}`));
-  const next=results.map((r,i)=>r.status==='fulfilled'?r.value.country:task.countries[i]).filter((country,index,all)=>all.findIndex(c=>(c.code||c.query||c.name)===(country.code||country.query||country.name))===index);state.context={...state.context,intent:'countryTrend',lastDate:null,pending:null,countryMetric:task.metric,statCountries:next,trendFrom:task.from,trendTo:task.to};follows(body,[...(task.change?['グラフにして']:['前年との差は？']),'過去5年なら？',task.metric==='life'?'人口は？':'平均寿命は？','スイスなら？']);
+  const next=results.map((r,i)=>r.status==='fulfilled'?r.value.country:task.countries[i]).filter((country,index,all)=>all.findIndex(c=>(c.code||c.query||c.name)===(country.code||country.query||country.name))===index);state.context={...state.context,intent:'countryTrend',lastDate:null,pending:null,countryMetric:task.metric,statCountries:next,trendFrom:task.from,trendTo:task.to};follows(body,[...(task.metric==='gdp'?['成長率は？']:task.metric==='gdpGrowth'?['GDPは？']:[]),...(task.change?['グラフにして']:['前年との差は？']),'過去5年なら？',task.metric==='life'?'人口は？':'平均寿命は？','スイスなら？']);
  };
 }
 
@@ -1989,7 +1999,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
  const articleChoice=/^(?:ニュースの)?\d+(?:番(?:目)?|件目)(?:の記事)?(?:を|の)?(?:詳しく|詳細)[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||(follow.test(part)||articleChoice.test(part))&&(index>0||recognize(part,context).length)))return parts;
  return [text];
@@ -2025,6 +2035,7 @@ const FEATURE_CATALOG=[
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
  {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
+ {id:'gdpGrowth',category:'research',title:'GDP成長率（実質・年次）',description:'国ごとの年指定・比較・推移。マイナス成長と成長率どうしのポイント差にも対応。',query:'2020年の日本とアメリカの実質GDP成長率',tags:'GDP 国内総生産 成長率 経済成長 実質 年次 マイナス 統計 比較 ポイント'},
  {id:'unemployment',category:'research',title:'国の失業率（各国推計）',description:'ILO経由の年次系列。国ごとの定義の違いを示し、年指定・推移にも対応。',query:'2024年の日本とアメリカの失業率',tags:'失業率 しつぎょう 雇用 労働力 人口 国統計 WorldBank ILO 各国推計 年次 比較'},
  {id:'countryTrend',category:'research',title:'国統計の年ごとの推移',description:'人口・GDP・平均寿命を最大20年のグラフと表で確認。未収録は埋めません。',query:'2020年から2025年の日本の人口推移',tags:'推移 経年 時系列 グラフ 統計 年ごと 人口 GDP 平均寿命 比較'},
  {id:'news',category:'research',title:'技術ニュース',description:'注目・新着・高評価を切替。番号で投稿情報と元記事リンクを確認。',query:'技術ニュース',tags:'IT テック 記事 ニュース HN 新着 高評価 続き コメント 詳細 投稿者'},
