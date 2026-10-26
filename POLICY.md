@@ -97,3 +97,7 @@ PubChem PUG RESTの無認証GETを使い、完全名検索の候補IDと、Molec
 GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時間1日100回・共有キャッシュを適用し、失敗も試行に含めます。名前と物性を別に数え、429/503では共有の待機を守ります。プレビューから直接取得しません。参照：[PUG REST仕様](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest)、[負荷制限](https://pubchem.ncbi.nlm.nih.gov/docs/dynamic-request-throttling)。APIキーやカード、有料APIへの切替はありません。
 
 周期表の固定エンドポイント`/rest/pug/periodictable/JSON`も利用し、AtomicNumber・Symbol・Name・AtomicMassの4項目だけを抜粋します。第三者の説明文や画像は保持しません。既存のPubChem負荷制御とキャッシュを共有し、利用・免責・著作権方針のリンクを表示します。AtomicMassを標準原子量と同一視せず、欠測を推測で埋めません。
+
+# 地理距離の端末内計算
+
+登録済み都市の代表座標か、利用者が指定した緯度・経度を使い、半径6,371 kmの球面距離を端末内で計算します。外部への経路・地名照会や位置情報権限の要求は行いません。半径の参考は[NASA Earth Fact Sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)です。モデル・座標・表示の丸めを明示し、道路距離や所要時間、楕円体上の測地線距離と混同させません。質問・回答・地点条件は、他の会話と同じGAS履歴保存方針に従います。
