@@ -102,6 +102,8 @@ function validateAPI_(url){
  }else if(host==='api.gbif.org'&&path==='/v1/species/search'){
   provider='species';allowed=['q','limit','offset','datasetKey','rank'];expected={limit:'5',datasetKey:'d7dddbf4-2cf0-4f39-9b2a-bb099caae36c'};
   if(typeof params.q!=='string'||params.q.length<1||params.q.length>80||!/[\p{L}]/u.test(params.q)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(params.q)||! /^(0|5|10|15|20)$/.test(params.offset||'')||Object.prototype.hasOwnProperty.call(params,'rank')&&!['SPECIES','SUBSPECIES','GENUS','FAMILY'].includes(params.rank))throw Error('生物検索の条件が無効です。');
+ }else if(host==='api.gbif.org'&&/^\/v1\/species\/[1-9]\d{0,11}\/synonyms$/.test(path)){
+  provider='species';allowed=['limit','offset'];expected={limit:'5'};if(!/^(0|5|10|15|20)$/.test(params.offset||''))throw Error('生物の同義語ページが無効です。');
  }else if(host==='api.gbif.org'&&/^\/v1\/species\/[1-9]\d{0,11}$/.test(path)){
   provider='species';allowed=[];
  }else if(host==='photon.komoot.io'&&path==='/api/'){
@@ -176,7 +178,7 @@ function fetchAPI_(url){
  if(provider==='country'&&url.includes('/NY.GDP.MKTP.KD.ZG?'))validateGDPGrowth_(data,url);
  if(provider==='geocoding')data=leanGeocoding_(data);
  if(provider==='chemistry')data=url.endsWith('/periodictable/JSON')?leanElements_(data):leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
- if(provider==='species'){data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
+ if(provider==='species'){data=/\/synonyms\?/.test(url)?leanSpeciesSynonyms_(data,Number(url.match(/\/species\/(\d+)/)[1]),Number(url.match(/[?&]offset=(\d+)/)[1])):leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result=Object.assign(rangeJSON?{dataJSON:text}:provider==='news'?{dataJSON:JSON.stringify(data)}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=provider==='geocoding'?21600:provider==='news'?600:provider==='quakes'?300:['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(quakeHistoryLease)releaseQuakeHistory_(quakeHistoryLease);if(crossrefLease)releaseCrossref_(crossrefLease);if(geocodingLease)releaseGeocoding_(geocodingLease);if(chemistryLease)releaseChemistry_(chemistryLease);}
@@ -249,4 +251,9 @@ function validateGDPGrowth_(data,url){
  const code=url.match(/\/country\/([A-Z]{3})\//)[1],date=url.match(/[?&]date=([^&]+)/),years=date?decodeURIComponent(date[1]).split(':').map(Number):[1960,new Date(Date.now()+9*3600000).getUTCFullYear()],from=years[0],to=years[1]??years[0],limit=/[?&]per_page=20(?:&|$)/.test(url)?20:1;
  if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Array.isArray(data[1])||data[1].length>limit||data[0].total!==data[1].length)throw Error('GDP成長率の応答件数・形式を確認できませんでした。');
  const seen=new Set();for(const row of data[1]){const year=Number(row?.date);if(row?.countryiso3code!==code||row?.indicator?.id!=='NY.GDP.MKTP.KD.ZG'||!/^\d{4}$/.test(row.date)||year<from||year>to||seen.has(year)||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)))throw Error('GDP成長率の国・系列・年・百分率が指定条件と一致しません。');seen.add(year);}
+}
+
+function leanSpeciesSynonyms_(data,key,offset){
+ if(!data||data.limit!==5||data.offset!==offset||![0,5,10,15,20].includes(offset)||typeof data.endOfRecords!=='boolean'||!Array.isArray(data.results)||data.results.length>5)throw Error('生物の同義語ページの応答形式を確認できませんでした。');
+ const results=data.results.map(row=>leanSpecies_(row,row?.key));if(new Set(results.map(r=>r.key)).size!==results.length||results.some(r=>r.key===key||r.acceptedKey!==key||typeof r.taxonomicStatus!=='string'||!r.taxonomicStatus.includes('SYNONYM')))throw Error('生物の同義語と採用名の関連IDが一致しません。');return {offset,limit:5,endOfRecords:data.endOfRecords,results};
 }
