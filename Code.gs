@@ -9,13 +9,14 @@ const SCHEMA = {
 function doGet(){return HtmlService.createHtmlOutputFromFile('App').setTitle('ZERO').addMetaTag('viewport','width=device-width,initial-scale=1,viewport-fit=cover').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function api(request){
  try{
-  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','renameConversation','searchConversationBody','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
+  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','renameConversation','searchConversationBody','getConversation','generate','cloudStatus'].includes(request.action))throw Error('対応していない操作です。');
   if(!/^[a-f0-9]{64}$/.test(request.token||''))throw Error('ブラウザの識別情報が無効です。');
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
   switch(request.action){
    case 'bootstrap':data={version:'5.0.0',settings:settings_(),conversations:listConversations_(owner),cloudAIEnabled:cloudAIEnabled_()};break;
    case 'generate':data=generateCloudAI_(payload);break;
+   case 'cloudStatus':data=checkCloudStatus_(payload);break;
    case 'fetch':data=fetchAPI_(payload.url);break;
    case 'saveTurn':data=saveTurn_(owner,payload);break;
    case 'listConversations':data=listConversations_(owner);break;
@@ -172,7 +173,7 @@ function fetchAPI_(url){
  const quakeHistory=url.startsWith('https://earthquake.usgs.gov/fdsnws/event/1/query?'),rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?')?'unemployment-v73:':provider==='quakes'?(quakeHistory?'quakes-history-v71:':'quakes-v43:'):provider==='news'?'news-v49:':provider==='geocoding'?'geocoding-v60:':provider==='chemistry'?'chemistry-v65:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
  const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
  const quakeHistoryLease=quakeHistory?reserveQuakeHistory_():null,crossrefLease=provider==='crossref'?reserveCrossref_():null,geocodingLease=provider==='geocoding'?reserveGeocoding_():null,chemistryLease=provider==='chemistry'?reserveChemistry_():null;try{
- const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
+ reserveFetchBudget_();
  if(provider==='books'){const serial=LockService.getScriptLock();if(!serial.tryLock(5000))throw Error('書籍検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),delay=1100-(Date.now()-Number(props.getProperty('LAST_BOOK_FETCH')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));props.setProperties({LAST_BOOK_FETCH:String(Date.now())});}finally{serial.releaseLock();}}
  const response=UrlFetchApp.fetch(url,Object.assign({muteHttpExceptions:true,followRedirects:provider==='weather',headers:{'User-Agent':'ZERO-API-Assistant/3.0 github.com/hiroakiaa/zero-api-assistant'}},['geocoding','species','chemistry'].includes(provider)?{escaping:false}:{})),status=response.getResponseCode(),responseHeaders=response.getHeaders?response.getHeaders():{};
  if([429,503].includes(status)){const key=Object.keys(responseHeaders).find(k=>k.toLowerCase()==='retry-after');let until=retryDeadline_(provider,key?responseHeaders[key]:null,Date.now(),status);const waitLock=LockService.getScriptLock();if(!waitLock.tryLock(5000))throw Error('混み合っています。');try{until=Math.max(Number(providerProps.getProperty('COOLDOWN_'+provider)||0),until);providerProps.setProperties({['COOLDOWN_'+provider]:String(until)});}finally{waitLock.releaseLock();}throw Object.assign(Error(cooldownMessage_(until)),{retryAt:until});}
@@ -276,4 +277,8 @@ function validateInflation_(data,url){
  const code=url.match(/\/country\/([A-Z]{3})\//)[1],date=url.match(/[?&]date=([^&]+)/),years=date?decodeURIComponent(date[1]).split(':').map(Number):[1960,new Date(Date.now()+9*3600000).getUTCFullYear()],from=years[0],to=years[1]??years[0],limit=/[?&]per_page=20(?:&|$)/.test(url)?20:1;
  if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Array.isArray(data[1])||data[1].length>limit||data[0].total!==data[1].length)throw Error('物価上昇率の応答件数・形式を確認できませんでした。');
  const seen=new Set();for(const row of data[1]){const year=Number(row?.date);if(row?.countryiso3code!==code||row?.indicator?.id!=='FP.CPI.TOTL.ZG'||!/^\d{4}$/.test(row.date)||year<from||year>to||seen.has(year)||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)))throw Error('物価上昇率の国・系列・年・百分率が指定条件と一致しません。');seen.add(year);}
+}
+
+function reserveFetchBudget_(){
+ const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('混み合っています。');try{const props=PropertiesService.getScriptProperties(),today=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),day=props.getProperty('FETCH_DAY'),count=day===today?Number(props.getProperty('FETCH_COUNT')||0):0;if(!Number.isSafeInteger(count)||count<0)throw Error('API取得回数の保護設定を確認してください。');if(count>=1000)throw Error('本日のAPI取得上限です。');props.setProperties({FETCH_DAY:today,FETCH_COUNT:String(count+1)});}finally{lock.releaseLock();}
 }
