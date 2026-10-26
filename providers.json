@@ -115,7 +115,7 @@
     "id": "chemistry",
     "name": "PubChem / NCBI",
     "enabled": true,
-    "license": "無認証の公開API・計算済み基礎データのみ・NCBI免責/著作権方針・共有負荷制限",
+    "license": "無認証の公開API・化合物と元素の基礎データのみ・NCBI免責/著作権方針・共有負荷制限",
     "source_url": "https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest"
   }
 ]
