@@ -21,3 +21,21 @@ function generateCloudAI_(payload){
   return {text:data.text,finishReason:data.finishReason};
  }finally{const endLock=LockService.getScriptLock();if(endLock.tryLock(5000)){try{if(props.getProperty('ZERO_AI_LEASE')===lease)props.setProperties({ZERO_AI_BUSY_UNTIL:'0',ZERO_AI_LEASE:''});}finally{endLock.releaseLock();}}}
 }
+
+/** Explicit bridge-only check. Does not send prompts or start models. */
+function checkCloudStatus_(payload){
+ if(!payload||typeof payload!=='object'||Array.isArray(payload)||Object.keys(payload).length)throw Error('接続確認には追加の条件を指定できません。');
+ const config=cloudAIConfiguration_(),at=()=>new Date().toISOString();if(!config)return{state:'unconfigured',at:at(),cache:false};
+ const cache=CacheService.getScriptCache(),key='cloud-status:v1:'+hash_(config.url),hit=readCloudStatusCache_(cache,key);if(hit)return hit;
+ const props=PropertiesService.getScriptProperties(),lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('接続確認が混み合っています。少し待って試してください。');const lease=Utilities.getUuid();
+ try{const again=readCloudStatusCache_(cache,key);if(again)return again;if(Number(props.getProperty('ZERO_AI_STATUS_BUSY_UNTIL')||0)>Date.now())return{state:'checking',at:at(),cache:false};props.setProperties({ZERO_AI_STATUS_BUSY_UNTIL:String(Date.now()+85000),ZERO_AI_STATUS_LEASE:lease});}finally{lock.releaseLock();}
+ try{
+  reserveFetchBudget_();let state='unavailable';
+  try{const response=UrlFetchApp.fetch(config.url.replace(/\/zero\/chat$/,'/zero/health'),{method:'get',headers:{Authorization:'Bearer '+config.secret},followRedirects:false,muteHttpExceptions:true}),headers=response.getHeaders(),name=Object.keys(headers).find(k=>k.toLowerCase()==='x-zero-ai');if(response.getResponseCode()===200&&name&&headers[name]==='self-hosted-v1'){const raw=response.getContentText();if(raw.length<=4096){const data=JSON.parse(raw);if(data?.service==='zero-self-hosted'&&typeof data.readyToAccept==='boolean')state=data.readyToAccept?'connected':'busy';}}}catch{}
+  const result={state,at:at(),cache:false};cache.put(key,JSON.stringify(result),15);return result;
+ }finally{const end=LockService.getScriptLock();if(end.tryLock(5000)){try{if(props.getProperty('ZERO_AI_STATUS_LEASE')===lease)props.setProperties({ZERO_AI_STATUS_BUSY_UNTIL:'0',ZERO_AI_STATUS_LEASE:''});}finally{end.releaseLock();}}}
+}
+
+function readCloudStatusCache_(cache,key){
+ try{const raw=cache.get(key);if(!raw)return null;const data=JSON.parse(raw),time=Date.parse(data?.at),age=Date.now()-time;if(!['connected','busy','unavailable'].includes(data?.state)||typeof data.at!=='string'||!Number.isFinite(time)||new Date(time).toISOString()!==data.at||age<0||age>15000)return null;return {state:data.state,at:data.at,cache:true};}catch{return null;}
+}
