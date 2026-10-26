@@ -348,6 +348,14 @@ GASのスクリプトプロパティ ZERO_AI_ENABLED=true / ZERO_AI_URL=https://
 
 確認資料：[内閣府「元号について」](https://www.cao.go.jp/others/soumu/gengou/index.html)、[国立国会図書館「江戸から明治の改暦」](https://www.ndl.go.jp/koyomi/chapter1/s2.html)、[国立公文書館の元号別検索](https://www.digital.archives.go.jp/search)。資料の本文は転載せず、年番号の対応を独自の計算処理として実装しています。
 
+## 生物名・学名と分類
+
+`生物:ネコ`、`学名検索:Panthera leo`で、GBIF Backbone Taxonomyの名前を1回5件・最大5ページ検索します。候補のボタンや`生物候補2`で界・門・綱・目・科・属を確認でき、`生物の候補に戻る`や`生物の続き`で検索を続けられます。検索結果には近い名前・亜種・異名が含まれます。先頭を自動で採用せず、分類階級と採用名・異名の区別を表示します。候補の有効期間は10分で、古い検索のボタンを新しい番号へ読み替えません。
+
+出典は[GBIF Secretariat (2023), GBIF Backbone Taxonomy](https://doi.org/10.15468/39omei)、許諾は[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)です。この特定の分類データセットだけを扱い、表示項目を抜粋したことを明記します。分類体系や更新時点による差があり、最新の分類への一致を保証しません。日本語名の同定、写真判定、生息記録、保全状況、食用・毒性の判断は行いません。写真・説明文・観察地点・遺伝情報は取得・配布しません。
+
+[公式Species API](https://techdocs.gbif.org/en/openapi/v1/species)の無認証GETだけを使います。検索語がGBIFへ送信され、GASの許可リストは固定データセット・5件単位の先頭25件と単一分類IDだけに制限します。GASの全体取得上限・キャッシュ・429/503の共有待機が適用されます。カード登録や有料APIへの切替はありません。Providersへの初回登録は非公開の`registerSpeciesProvider_()`を所有者のGAS開発版から実行し、既存の管理者の無効設定を保ちます。実行メニュー用の一時ラッパーを使う場合は、削除してから公開バージョンをデプロイします。[GBIF利用条件](https://www.gbif.org/terms)と[APIの負荷制限](https://techdocs.gbif.org/en/openapi/)に従い、大量取得や未公開APIは使用しません。
+
 ## 未登録都市の天気と地点候補
 
 「鹿児島の明日の天気」「東京都八王子市の天気」など、登録済みの都市でない場合は、[Photonの公開API](https://photon.komoot.io/)から最大5件の地名候補を取得し、都市・町・村の代表地点だけを表示します。最初の候補を自動採用せず、利用者が地点を確認してからMET Norwayへ天気を照会します。地名だけを「地名検索:鹿児島」のように検索することもできます。都道府県・郡などの広い範囲や施設は候補にしません。
