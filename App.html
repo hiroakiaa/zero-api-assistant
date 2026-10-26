@@ -377,7 +377,7 @@ function knowledgePages(data,pageId){
  return results.sort((a,b)=>a.index-b.index);
 }
 function createKnowledgeHandler({getJSON,el,p,link,source,state,follows}){
- function choices(body,candidates){p(body,'番号で記事を選んでください。例：「1番を詳しく」。');const group=el('div',undefined,'wiki-choices');for(const [i,c]of candidates.entries()){const button=el('button',(i+1)+'. '+c.title+' の冒頭を詳しく','history-item');button.type='button';button.dataset.ask='百科事典の記事:'+c.id;button.dataset.askLabel=c.title+' の冒頭を詳しく';group.append(button);}body.append(group);}
+ function choices(body,candidates){p(body,'番号で記事を選んでください。例：「1番を詳しく」。');const group=el('div',undefined,'wiki-choices');for(const [i,c]of candidates.entries()){const button=el('button',(i+1)+'. '+c.title+' の冒頭を詳しく','history-item');rememberAnswerText(button,(i+1)+'. '+c.title);button.type='button';button.dataset.ask='百科事典の記事:'+c.id;button.dataset.askLabel=c.title+' の冒頭を詳しく';group.append(button);}body.append(group);}
  function article(body,page,number){const row=el('div',undefined,'wiki-result');row.append(link((number?number+'. ':'')+page.title,'https://ja.wikipedia.org/?curid='+page.id));if(page.disambiguation)p(row,'曖昧さ回避ページです。複数の意味を案内しているため、元記事で候補を確認するか、検索語を具体化してください。');else p(row,page.extract||'冒頭の抜粋は未収録です。記事リンクをご確認ください。');row.append(link('この記事の著者・編集履歴','https://ja.wikipedia.org/w/index.php?curid='+page.id+'&action=history'));body.append(row);}
  return async function knowledge(task,body){
   if(task.error)throw Error(task.error);
@@ -2245,7 +2245,7 @@ function createCrossrefHandlers({getJSON,el,p,link,source,state,follows,now=Date
  };
  const citation=async(task,body)=>{
   if(task.error)throw Error(task.error);const format=task.format||'simple';if(!['simple','bibtex'].includes(format))throw Error('参考文献は簡易形式かBibTeXで指定してください。');
-  if(task.choices){if(!Array.isArray(task.choices)||task.choices.length<2||task.choices.length>3)throw Error('参考文献の候補を確認できません。');body.append(el('h3','参考文献にする資料を選択'));p(body,'候補が複数あります。元の検索結果の番号とDOIで資料を選んでください。');for(const [index,value]of task.choices.entries()){const doi=normalizeDOI(value),button=el('button',(index+1)+'. '+doi,'history-item');button.type='button';button.dataset.ask=(format==='bibtex'?'BibTeX:':'参考文献:')+doi;button.dataset.askLabel=(index+1)+'番の資料を'+(format==='bibtex'?'BibTeX':'参考文献')+'にして';body.append(button);}return;}
+  if(task.choices){if(!Array.isArray(task.choices)||task.choices.length<2||task.choices.length>3)throw Error('参考文献の候補を確認できません。');body.append(el('h3','参考文献にする資料を選択'));p(body,'候補が複数あります。元の検索結果の番号とDOIで資料を選んでください。');for(const [index,value]of task.choices.entries()){const doi=normalizeDOI(value),button=el('button',(index+1)+'. '+doi,'history-item');rememberAnswerText(button,(index+1)+'. '+doi);button.type='button';button.dataset.ask=(format==='bibtex'?'BibTeX:':'参考文献:')+doi;button.dataset.askLabel=(index+1)+'番の資料を'+(format==='bibtex'?'BibTeX':'参考文献')+'にして';body.append(button);}return;}
   const doi=normalizeDOI(task.doi),{response}=await load({kind:'doi',doi}),record=citationRecord(response.data,doi),text=formatCitation(record,format);body.append(el('h3',format==='bibtex'?'基本項目のBibTeX':'簡易参考文献'));const output=el('div',undefined,'local-generated citation-output');renderCitationOutput(output,text,format,el);body.append(output);const button=el('button','コピー用に表示','history-item');button.type='button';button.addEventListener('click',()=>copy(text,el));body.append(button);if(record.omitted)p(body,'登録著者の先頭20名を表示し、残り'+record.omitted+'名は省略しています。');if(record.invalid)p(body,'名前を確認できない著者'+record.invalid+'件は省略しています。');const missing=[!record.title?'タイトル':null,!record.authors.length?'著者':null,!record.year?'刊行年':null,!record.container?'掲載媒体':null].filter(Boolean);if(missing.length)p(body,'未登録：'+missing.join('・')+'。登録外の情報で補いません。');p(body,'登録情報を整えた基本形式です。巻・号・ページ・出版社は取得していません。提出先の指定に合わせて確認・編集してください。','sub');body.append(link('DOIの原情報を確認',record.url));source(body,'Crossref · 公開書誌API','https://www.crossref.org/documentation/retrieve-metadata/rest-api/',response);state.context={...state.context,intent:'citation',referenceDOI:record.doi,referenceFormat:format,lastDate:null};follows(body,[format==='bibtex'?'参考文献にして':'BibTeXにして','書誌情報に戻る']);
  };
  return{scholar:run,doi:run,citation};
@@ -2603,8 +2603,30 @@ function renderGeneratedAnswer(output,text,el){
   else output.append(el('p',block.text));
  }
 }
-// Keep the original fenced code and list markers when saving/exporting a turn.
-function generatedTranscriptText(body){const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated, details.result-notes')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');}
+function recordNode(node){
+ if(node.nodeType===3)return {text:node.nodeValue||'',block:false};
+ if(node.nodeType!==1)return {text:'',block:false};
+ const tag=node.tagName.toLowerCase(),classes=node.classList;
+ if(node.hidden||node.getAttribute('aria-hidden')==='true'||classes?.contains('followups'))return {text:'',block:false};
+ const original=generatedSources.get(node);if(original!==undefined)return {text:original,block:true};
+ if(['button','input','textarea','select','script','style','template','svg'].includes(tag))return {text:'',block:false};
+ if(tag==='br')return {text:'\n',block:false};
+ if(tag==='table'){
+  const lines=[];if(node.caption){const caption=recordNode(node.caption).text;if(caption)lines.push(caption);}
+  for(const row of Array.from(node.rows||[])){if(row.hidden||row.getAttribute('aria-hidden')==='true')continue;const cells=Array.from(row.cells||[]).map(cell=>recordNode(cell).text.replace(/\s+/g,' ').trim());if(cells.length)lines.push(cells.join(' | '));}
+  return {text:lines.join('\n'),block:true};
+ }
+ const parts=Array.from(node.childNodes||[]).map(recordNode).filter(part=>part.text!==''),source=classes?.contains('source');let text='',previousBlock=false;
+ for(const part of parts){if(text&&(source||previousBlock||part.block))text+=source?' · ':'\n\n';text+=part.text;previousBlock=part.block;}
+ if(tag==='li'){const parent=node.parentElement,ordered=parent?.tagName?.toLowerCase()==='ol',siblings=ordered?Array.from(parent.children).filter(child=>child.tagName.toLowerCase()==='li'):[],number=ordered?(Number(parent.getAttribute('start'))||1)+siblings.indexOf(node):null;text=(ordered?number+'. ':'- ')+text;}
+ return {text,block:/^(?:address|article|aside|blockquote|caption|dd|details|div|dl|dt|figcaption|figure|h[1-6]|hr|li|main|ol|p|pre|section|summary|table|ul)$/.test(tag)};
+}
+// Use DOM structure, not matching visible strings, so identical prose and control labels remain distinct.
+function generatedTranscriptText(body){
+ if(body.nodeType===1)return recordNode(body).text;
+ // Text-only adapters keep the original generated code and collapsed notes.
+ const text=body.innerText,parts=[];let cursor=0;for(const output of body.querySelectorAll('.local-generated, details.result-notes')){const original=generatedSources.get(output),visible=output.innerText;if(original===undefined||!visible)continue;const index=text.indexOf(visible,cursor);if(index<0)continue;parts.push(text.slice(cursor,index),original);cursor=index+visible.length;}parts.push(text.slice(cursor));return parts.join('');
+}
 
 function cloudGenerationInput(raw,history=[]){
  const explicit=explicitLocalPrompt(raw),prompt=explicit?.content||raw;
@@ -2882,8 +2904,7 @@ async function ask(raw,displayText){
   updateContext();
  }catch(e){loading.remove();p(body,'質問の処理中に問題が起きました。表現を短くして、もう一度試してください。','error');}
  finally{
-  const followupTexts=new Set([...body.querySelectorAll('.followups button')].map(b=>b.textContent));
-  const answerText=generatedTranscriptText(body).split('\n').filter(line=>!followupTexts.has(line.trim())).join('\n'),answerSources=transcriptSources([...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})));state.transcript.push({role:'ZERO',text:answerText,sources:answerSources});
+  const answerText=generatedTranscriptText(body),answerSources=transcriptSources([...body.querySelectorAll('a')].map(a=>({title:a.textContent,url:a.href})));state.transcript.push({role:'ZERO',text:answerText,sources:answerSources});
   if(cloud.available&&state.historyEnabled){const payload={conversationId:state.conversationId,requestId:crypto.randomUUID(),userText:shownText,assistantText:answerText,sources:answerSources,context:state.context};await saveTurn(payload,body);}
   state.busy=false;$('#send').disabled=false;$('#prompt').disabled=false;$('#prompt').focus({preventScroll:true});scrollConversationToEnd();
  }
