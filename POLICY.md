@@ -105,3 +105,7 @@ GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時�
 # USGSの過去の地震カタログ
 
 無認証の[FDSN EventカタログAPI](https://earthquake.usgs.gov/fdsnws/event/1/)を日付指定照会だけに使用し、最近の情報は既存フィードを維持します。USGSの記録への帰属と気象庁防災情報へのリンクを表示し、写真や詳細製品データは保持しません。[USGSの著作権方針](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits)に従い、第三者の写真等を一律にパブリックドメインとして扱いません。カタログはGAS共有リース・間隔・日次保護・5分キャッシュ・停止待機を適用し、期間と表示上限、網羅性の限界を結果に明示します。新規のAPI鍵・権限承認・有料契約はありません。
+
+# World Bank・ILOの失業率
+
+年次の各国推計系列`SL.UEM.TOTL.NE.ZS`のみを追加し、[当該指標の公式メタデータ](https://databank.worldbank.org/metadataglossary/world-development-indicators/series/SL.UEM.TOTL.NE.ZS)に記載されたCC BY 4.0と、[World Bankの無償利用・帰属条件](https://data.worldbank.org/summary-terms-of-use)に従います。World Bank WDIおよびILO Labour Force Statistics（LFS）を結果・CSVに帰属表示し、表示の丸め・日本語名への変更を明示します。国ごとの定義差、年次系列であること、他のモデル推計系列や月次値との違いを明示し、未収録を補完しません。新しいプロバイダ登録・API鍵・権限・有料契約は不要です。
