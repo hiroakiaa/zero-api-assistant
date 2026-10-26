@@ -1009,26 +1009,37 @@ function currencySeriesRange(from,to,now=new Date()){
  const start=validateCurrencyDate(from,now),end=validateCurrencyDate(to,now),days=(Date.parse(end)-Date.parse(start))/86400000+1;
  if(!Number.isInteger(days)||days<1||days>31)throw Error('為替の推移は開始日から終了日まで、今日以前の1〜31日間で指定してください。');return {from:start,to:end,days};
 }
-function parseCurrencySeries(raw,context={},recognize){
+function currencySeriesPeriod(value,now=new Date()){
+ const today=new Date(now.getTime()+9*3600000).toISOString().slice(0,10),end=Date.parse(today),match=value.match(/^(?:過去|直近)([0-9]+)日間$/);let from,to=today;
+ if(match){const days=Number(match[1]);if(!Number.isInteger(days)||days<1||days>31)throw Error('過去・直近の推移は1〜31日間で指定してください。');from=new Date(end-(days-1)*86400000).toISOString().slice(0,10);}
+ else if(value==='今月')from=today.slice(0,7)+'-01';
+ else if(value==='先月'){to=new Date(Date.parse(today.slice(0,7)+'-01')-86400000).toISOString().slice(0,10);from=to.slice(0,7)+'-01';}
+ else throw Error('相対期間は「過去7日間」「直近30日間」「今月」「先月」のように指定してください。');
+ return currencySeriesRange(from,to,now);
+}
+function parseCurrencySeries(raw,context={},recognize,now=new Date()){
  let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');
  if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|翻訳|文章|コード)[：:\s]|天気|祝日|地震|とは|について/.test(text))return null;
- const active=context.intent==='currency'&&context.currencySeriesFrom&&context.currencySeriesTo,explicit=/為替推移|推移|時系列|グラフ/.test(text);
- if(!/為替|ドル|ユーロ|ポンド|人民元|ウォン|豪ドル|カナダドル|スイスフラン|何円|ドル円|ユーロ円|\b(?:USD|EUR|JPY|GBP|CNY|KRW|AUD|CAD|CHF)\b/i.test(text)&&(!active||/人口|GDP|森林|物価|寿命|失業|気温|温度|株価|売上|円周|円面積/.test(text)))return null;
+ const relativePattern='(?:(?:過去|直近)\\d+日間|今月|先月)',hasRelative=new RegExp(relativePattern).test(text),active=context.intent==='currency'&&context.currencySeriesFrom&&context.currencySeriesTo,currencyContext=context.intent==='currency',explicit=/為替推移|推移|時系列|グラフ/.test(text)||hasRelative,reuse=currencyContext&&(active||explicit);
+ if(!/為替|ドル|ユーロ|ポンド|人民元|ウォン|豪ドル|カナダドル|スイスフラン|何円|ドル円|ユーロ円|\b(?:USD|EUR|JPY|GBP|CNY|KRW|AUD|CAD|CHF)\b/i.test(text)&&(!reuse||/人口|GDP|森林|物価|寿命|失業|気温|温度|株価|売上|円周|円面積/.test(text)))return null;
  if(!explicit&&!active)return null;
  if(!explicit&&active&&(/最新|今のレート|換算に戻る|比較を解除/.test(text)||new RegExp('^'+seriesDatePattern+'(?:なら|では|は)?$').test(text)))return null;
  if(!explicit&&active&&!/から|〜|～|推移|時系列|グラフ|同じ期間|^逆|反対|なら|では|にすると/.test(text))return null;
- if(/予測|予想|見通し|分足|時間足|リアルタイム|売買|損益|平均/.test(text))return [{kind:'currency',error:'日次参考値の推移に対応します。予測・時刻別・期間平均・売買損益へ読み替えません。'}];
+ if(/予測|予想|見通し|分足|時間足|リアルタイム|売買|損益|平均|営業日/.test(text))return [{kind:'currency',error:'暦日ごとの日次参考値の推移に対応します。営業日の推測・予測・時刻別・期間平均・売買損益へ読み替えません。'}];
  try{
-  text=text.replace(/^為替推移[：:\s]*/,'').replace(/(?:の)?(?:推移|時系列)(?:を見せて|を教えて|を表示して|にして|なら|では)?|(?:を)?グラフ(?:にして|を見せて|で)?/g,'').replace(/^同じ期間(?:で|の|なら|では)?\s*/,'').trim();
-  const range=text.match(new RegExp('^('+seriesDatePattern+')\\s*(?:から|[〜～~])\\s*('+seriesDatePattern+')(?:まで)?')),month=!range&&text.match(/^(\d{4})年(\d{1,2})月(?!\d)/);let from,to;
-  if(range){from=range[1];to=range[2];text=text.slice(range[0].length);}
-  else if(month){const y=Number(month[1]),m=Number(month[2]);if(m<1||m>12)throw Error('推移の月を確認してください。');from=`${y}-${String(m).padStart(2,'0')}-01`;to=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);text=text.slice(month[0].length);}
+  text=text.replace(/^為替(?:推移)?[：:\s]*/,'').replace(/(?:の)?(?:推移|時系列)(?:を見せて|を教えて|を表示して|にして|なら|では)?|(?:を)?グラフ(?:にして|を見せて|で)?/g,'').replace(/^同じ期間(?:で|の|なら|では)?\s*/,'').trim();
+  const ranges=[...text.matchAll(new RegExp('('+seriesDatePattern+')\\s*(?:から|[〜～~])\\s*('+seriesDatePattern+')(?:まで)?','g'))],relatives=[...text.matchAll(new RegExp(relativePattern,'g'))],months=ranges.length?[]:[...text.matchAll(/(\d{4})年(\d{1,2})月(?!\d)/g)];let from,to,matched;
+  if(ranges.length+relatives.length+months.length>1)throw Error('1回の推移では期間を1つだけ指定してください。');
+  if(ranges.length){matched=ranges[0];from=matched[1];to=matched[2];}
+  else if(months.length){matched=months[0];const y=Number(matched[1]),m=Number(matched[2]);if(m<1||m>12)throw Error('推移の月を確認してください。');from=String(y)+'-'+String(m).padStart(2,'0')+'-01';to=new Date(Date.UTC(y,m,0)).toISOString().slice(0,10);}
+  else if(relatives.length){matched=relatives[0];({from,to}=currencySeriesPeriod(matched[0],now));}
   else if(active){from=context.currencySeriesFrom;to=context.currencySeriesTo;}
-  else throw Error('推移の開始日と終了日を指定してください。例：「2025-01-01から2025-01-10の100ドルは何円の推移」。');
-  const selected=currencySeriesRange(from,to);text=text.replace(/^(?:の|で|なら|では|は)\s*/,'').replace(/(?:の|で)$/,'').trim();
+  else throw Error('推移の期間を指定してください。例：「過去7日間のドル円の推移」「2025年1月のドル円の推移」。');
+  if(matched)text=text.slice(0,matched.index)+text.slice(matched.index+matched[0].length);
+  const selected=currencySeriesRange(from,to,now);text=text.trim().replace(/^(?:の|で|なら|では|は)\s*/,'').replace(/(?:の|で)$/,'').trim();if(matched)text=text.replace(/(?:なら|では|は)$/,'').trim();
   text=text.replace(/^ドル円$/,'1ドルは何円').replace(/^ユーロ円$/,'1ユーロは何円').replace(/^([A-Z]{3})\s*\/\s*([A-Z]{3})$/i,'$1→$2');
-  const core=recognize(text,active?{intent:'currency',amount:context.amount,base:context.base,quote:context.quote}:{}),task=text?core[0]:active?{kind:'currency',amount:context.amount,base:context.base,quote:context.quote}:null;
-  if(!task||task.kind!=='currency'||task.error||task.date||task.compareDates)throw Error(task?.error||'推移を調べる金額と通貨ペアを指定してください。例：「2025年1月のドル円の推移」。');
+  const core=recognize(text,reuse?{intent:'currency',amount:context.amount,base:context.base,quote:context.quote}:{}),task=text?core[0]:reuse?{kind:'currency',amount:context.amount,base:context.base,quote:context.quote}:null;
+  if(!task||task.kind!=='currency'||task.error||task.date||task.compareDates)throw Error(task?.error||'推移を調べる金額と通貨ペアを指定してください。例：「過去7日間のドル円の推移」。');
   return [{...task,seriesFrom:selected.from,seriesTo:selected.to}];
  }catch(error){return [{kind:'currency',error:error.message}];}
 }
@@ -1052,14 +1063,14 @@ async function showCurrencySeries(task,body,{getJSON,el,p,source,state,follows,n
  const range=currencySeriesRange(task.seriesFrom,task.seriesTo,now());if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12||!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote)||task.base===task.quote)throw Error('推移は金額0〜1兆と、対応する異なる2通貨を指定してください。');
  const url='https://api.frankfurter.dev/v2/rates?'+new URLSearchParams({base:task.base,quotes:task.quote,from:range.from,to:range.to}),result=await getJSON(url,3600000),rows=currencySeriesRows(result.data,task.base,task.quote,range.from,range.to,now()),valid=rows.filter(r=>r.rate!==null),csv=currencySeriesCSV(rows,task,url,result.at),format=n=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:12}).format(n);
  const change=valid.length>1?(valid.at(-1).rate-valid[0].rate)/valid[0].rate*100:null;if(change!==null&&!Number.isFinite(change))throw Error('期間のレート変化を計算できませんでした。');
- body.append(el('h3',`${task.base} → ${task.quote} の推移`));p(body,`${range.from}〜${range.to} · ${format(task.amount)} ${task.base} の概算換算額`);
+ body.append(el('h3',`${task.base} → ${task.quote} の推移`));p(body,`${range.from}〜${range.to}（日本時間・両端を含む暦日） · ${format(task.amount)} ${task.base} の概算換算額`);
  if(valid.length){const minimum=Math.min(...valid.map(r=>r.rate)),maximum=Math.max(...valid.map(r=>r.rate));p(body,`グラフの縦軸：${format(minimum)}〜${format(maximum)} ${task.quote} / ${task.base}（取得値に合わせた目盛）。未収録の日では線を切ります。`,'sub');body.append(plot(rows,`${task.base}/${task.quote} ${range.from}〜${range.to}`));}
  else p(body,'この条件の日次値は未収録です。');
  const table=el('table',undefined,'trend-table'),thead=el('thead'),head=el('tr');for(const title of ['対象日',`1 ${task.base} の${task.quote}`,`${format(task.amount)} ${task.base} の概算額`])head.append(el('th',title));thead.append(head);table.append(thead);const tbody=el('tbody');for(const row of rows){const tr=el('tr');tr.append(el('th',row.date),el('td',row.rate===null?'未収録':format(row.rate)),el('td',row.rate===null?'未収録':format(task.amount*row.rate)+' '+task.quote));tbody.append(tr)}table.append(tbody);body.append(table);
  if(valid.length>1){const first=valid[0],last=valid.at(-1);p(body,`取得できた最初の日 ${first.date} → 最後の日 ${last.date}：レート変化率 ${change>0?'+':''}${format(change)}%`);}else p(body,'取得値が2日分に満たないため、期間の変化率は表示しません。');
  const save=el('button','為替推移をCSV保存','history-item trend-export');save.type='button';save.addEventListener('click',()=>{try{download(csv,`zero-currency-${task.base}-${task.quote}-${range.from}-${range.to}.csv`)}catch{p(body,'CSVを保存できませんでした。「CSVの内容を確認」からコピーできます。','error')}});const inspect=el('button','CSVの内容を確認','history-item trend-export');inspect.type='button';inspect.addEventListener('click',()=>preview(csv));body.append(save,inspect);
  p(body,'提供元の日次集計による参考値です。API返却日は個々の市場・銀行の公表日や取引時刻とは限りません。休日も提供元の返却値だけを表示し、アプリでは補間や前日値での埋め合わせをしません。実際の決済・両替レート、手数料、売買損益ではありません。表示は最大12桁、CSVは追加の丸めをせず出典・取得日時を含みます。','sub');source(body,'Frankfurter · 日次参考値の推移',url,result);
- state.context={...state.context,intent:'currency',pending:null,amount:task.amount,base:task.base,quote:task.quote,currencySeriesFrom:range.from,currencySeriesTo:range.to};delete state.context.currencyDate;delete state.context.currencyCompareDates;follows(body,['200なら？','逆にすると？','換算に戻る']);
+ state.context={...state.context,intent:'currency',pending:null,amount:task.amount,base:task.base,quote:task.quote,currencySeriesFrom:range.from,currencySeriesTo:range.to};delete state.context.currencyDate;delete state.context.currencyCompareDates;follows(body,['200なら？','逆にすると？','過去7日間なら？','先月なら？','換算に戻る']);
 }
 
 const currencyWords={米ドル:'USD',ドル:'USD',ユーロ:'EUR',日本円:'JPY',円:'JPY',英ポンド:'GBP',ポンド:'GBP',人民元:'CNY',元:'CNY',韓国ウォン:'KRW',ウォン:'KRW',豪ドル:'AUD',カナダドル:'CAD',スイスフラン:'CHF'};
@@ -1881,8 +1892,8 @@ function downloadTrendCSV(csv,filename){
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),anchor=document.createElement('a');anchor.href=url;anchor.download=filename;
  try{document.body.append(anchor);anchor.click();}finally{anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 }
-function showTrendCSV(csv){
- const dialog=document.createElement('dialog');dialog.setAttribute('aria-label','統計CSVの内容');const head=document.createElement('div');head.className='dialog-head';const title=document.createElement('h2');title.textContent='CSVの内容';const close=document.createElement('button');close.type='button';close.className='icon-button';close.textContent='×';close.setAttribute('aria-label','CSVを閉じる');close.addEventListener('click',()=>dialog.close());head.append(title,close);
+function showTrendCSV(csv,label='統計CSVの内容'){
+ const dialog=document.createElement('dialog');dialog.setAttribute('aria-label',label);const head=document.createElement('div');head.className='dialog-head';const title=document.createElement('h2');title.textContent='CSVの内容';const close=document.createElement('button');close.type='button';close.className='icon-button';close.textContent='×';close.setAttribute('aria-label','CSVを閉じる');close.addEventListener('click',()=>dialog.close());head.append(title,close);
  const note=document.createElement('p');note.textContent='CSV保存が使えない場合は、下の内容を選択してコピーできます。数値・未収録・出典は保存するCSVと同じです。';const content=document.createElement('pre');content.className='csv-preview-content';content.tabIndex=0;content.textContent=csv.replace(/^\uFEFF/,'');dialog.append(head,note,content);dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
 }
 function createCountryTrendHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date(),plot=renderTrendPlot,download=downloadTrendCSV,preview=showTrendCSV}){
@@ -2400,7 +2411,7 @@ const FEATURE_CATALOG=[
  {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
  {id:'distance',category:'tools',title:'2地点の距離',description:'登録都市や緯度・経度から球面上の最短距離を計算。道路距離・所要時間とは別。',query:'東京から大阪までの距離は？',tags:'距離 きょり 大円距離 地理 球面 座標 緯度 経度 km マイル 移動 都市',local:true},
  {id:'speciesSynonyms',category:'research',title:'学名の同義語を確認',description:'生物候補の分類を選んだ後に「同義語は？」。採用名との関係を確認。',query:'生物:Panthera leo',tags:'生物 学名 同義語 異名 採用名 別名 GBIF 分類'},
- {id:'currencySeries',category:'life',title:'為替の日次推移',description:'最大31日間の参考レートをグラフ・表・CSVで確認。',query:'2025-01-01から2025-01-10の100ドルは何円の推移',tags:'為替 推移 グラフ 時系列 CSV 日次 期間 ドル 円'},
+ {id:'currencySeries',category:'life',title:'為替の日次推移',description:'最大31日間の参考レートをグラフ・表・CSVで確認。',query:'過去7日間のドル円の推移',tags:'為替 推移 グラフ 時系列 CSV 日次 期間 ドル 円 過去 直近 今月 先月'},
  {id:'currencyCompare',category:'life',title:'2つの日付の為替比較',description:'金額と通貨を保ち、指定日ごとの返却レートと変化を確認。',query:'為替比較:2025-01-15と2025-01-18の100ドルは何円？',tags:'為替 比較 レート 差 変化率 過去 両替'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
@@ -2855,7 +2866,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={moon:createLunarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),quakeHistory:createQuakeHistoryHandler({getJSON,cloud,el,p,link,source,state,follows}),distance:createDistanceHandler({cities,el,p,source,state,follows}),elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows,download:downloadTrendCSV,preview:showTrendCSV}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={moon:createLunarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),quakeHistory:createQuakeHistoryHandler({getJSON,cloud,el,p,link,source,state,follows}),distance:createDistanceHandler({cities,el,p,source,state,follows}),elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows,download:downloadTrendCSV,preview:csv=>showTrendCSV(csv,'為替CSVの内容')}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
