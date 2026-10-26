@@ -107,7 +107,7 @@ function validateAPI_(url){
  }else if(host==='photon.komoot.io'&&path==='/api/'){
   provider='geocoding';allowed=['q','limit','osm_tag'];expected={limit:'5',osm_tag:'place'};
   if(typeof params.q!=='string'||params.q.length<2||params.q.length>60||!/[\p{L}]/u.test(params.q)||/[\u0000-\u001f\u007f]/.test(params.q)||/https?:\/\//i.test(params.q))throw Error('地名検索の条件が無効です。');
- }else if(host==='api.met.no'&&['/weatherapi/locationforecast/2.0/compact','/weatherapi/sunrise/3.0/sun'].includes(path)){
+ }else if(host==='api.met.no'&&['/weatherapi/locationforecast/2.0/compact','/weatherapi/sunrise/3.0/sun','/weatherapi/sunrise/3.0/moon'].includes(path)){
   provider='weather';allowed=path.includes('/sunrise/')?['lat','lon','date','offset']:['lat','lon'];
   if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
   if(path.includes('/sunrise/')){const day=new Date(params.date+'T00:00:00Z'),offset=params.offset||'',minutes=(Number(offset.slice(1,3))*60+Number(offset.slice(4,6)))*(offset[0]==='-'?-1:1);if(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==params.date||!/^[-+]\d{2}:[0-5]\d$/.test(offset)||!Number.isInteger(minutes)||minutes<-720||minutes>900||offset==='-00:00')throw Error('天文の検索条件が無効です。');}
