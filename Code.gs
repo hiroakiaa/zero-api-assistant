@@ -78,12 +78,24 @@ function saveTurn_(owner,payload){
  try{
   const conversations=rows_('Conversations'),row=conversations.findIndex(r=>r[0]===id);
   if(row>=0&&conversations[row][1]!==owner)throw Error('この会話に保存できません。');
-  const messages=rows_('Messages');if(messages.some(r=>r[0]===requestId+'-a'&&r[1]===owner))return {saved:true,duplicate:true};
+  const messages=rows_('Messages'),receipt=messages.filter(r=>r[1]===owner&&(r[0]===requestId+'-u'||r[0]===requestId+'-a'));
+  if(receipt.length){
+   const user=receipt.find(r=>r[0]===requestId+'-u'),assistant=receipt.find(r=>r[0]===requestId+'-a'),sameText=(stored,value)=>stored===value||stored===textCell_(value);
+   if(row<0||receipt.length!==2||!user||!assistant||user[2]!==id||assistant[2]!==id||user[3]!=='user'||assistant[3]!=='assistant'||user[5]!==assistant[5]||typeof user[5]!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(user[5])||!Number.isFinite(Date.parse(user[5]))||new Date(user[5]).toISOString()!==user[5]||messages.indexOf(assistant)!==messages.indexOf(user)+1)throw Error('送信IDの保存先または質問・回答の組を確認できません。同じIDを別の会話に再利用しないでください。');
+   if(!sameText(user[4],question)||!sameText(assistant[4],answer)||assistant[6]!==sources)throw Error('同じ送信IDで異なる内容は保存できません。元の回答の保存を再試行してください。');
+   const later=messages.slice(messages.indexOf(assistant)+1).some(r=>r[1]===owner&&r[2]===id),savedAt=assistant[5],currentAt=String(conversations[row][4]);let recovered=false;
+   if(!later&&currentAt<=savedAt&&(currentAt!==savedAt||conversations[row][5]!==context)){
+    if(archivedConversationIds_(owner).has(id))throw Error('保管中の会話の条件は更新できません。通常一覧へ戻してから保存を再試行してください。');
+    sheet_('Conversations').getRange(row+2,5,1,2).setNumberFormat('@').setValues([[savedAt,textCell_(context)]]);recovered=true;
+   }
+   return Object.assign({saved:true,duplicate:true,conversationId:id},recovered?{recovered:true}:{});
+  }
   const archived=archivedConversationIds_(owner);if(archived.has(id))throw Error('保管中の会話です。履歴から通常一覧へ戻してから続けてください。');
-  if(messages.filter(r=>r[2]===id).length>=100)throw Error('この会話の保存上限です。新しい会話を始めてください。');
+  if(messages.filter(r=>r[2]===id).length+2>100)throw Error('この会話の保存上限です。新しい会話を始めてください。');
+  const messageSheet=sheet_('Messages');if(messageSheet.getLastRow()+2>20000)throw Error('保存上限に達しました。');
   const now=new Date().toISOString(),sheet=sheet_('Conversations');
   if(row<0){const own=conversations.filter(r=>r[1]===owner);if(own.length>=250)throw Error('会話全体の保存保護上限（250件）です。既存の通常会話を開いて続けてください。');if(own.filter(r=>!archived.has(r[0])).length>=50)throw Error('通常一覧の保存保護上限（50件）です。履歴から会話を保管一覧へ移すと、新しい会話を保存できます。');append_(sheet,[[id,owner,question.slice(0,40),now,now,context]]);}
-  append_(sheet_('Messages'),[[requestId+'-u',owner,id,'user',question,now,'[]'],[requestId+'-a',owner,id,'assistant',answer,now,sources]]);
+  append_(messageSheet,[[requestId+'-u',owner,id,'user',question,now,'[]'],[requestId+'-a',owner,id,'assistant',answer,now,sources]]);
   if(row>=0)sheet.getRange(row+2,5,1,2).setNumberFormat('@').setValues([[now,textCell_(context)]]);
   return {saved:true,conversationId:id};
  }finally{lock.releaseLock();}
