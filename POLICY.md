@@ -157,3 +157,7 @@ PCのAI中継への手動接続確認は、既存の認証付き中継ホスト�
 未確認保存の画面保護は、送信ごとのID・状態・元のペイロードをブラウザのメモリ内だけで管理します。新たな永続ローカル保存・外部送信先・権限は増やしません。確認済みになった送信と、移動を明示した画面の管理情報は解放します。書き出しは既存の会話テキスト確認機能を使い、ファイル保存は利用者が選びます。失敗・停止・通信待ちを完全保存と表示せず、別画面へ移る操作の前に確認します。beforeunloadはブラウザ依存の補助であり、クラッシュ復元の保証には使いません。
 
 PC用の `--check` 診断モードはOllamaのローカルversion/tagsと、同じPCの認証付き中継healthだけへGETを送ります。新しい公開ルート・外部サービス・Google権限は追加しません。鍵は中継healthにのみ使い、レポートには含めません。対象の承認済みモデルの登録情報だけを抽出し、他のモデル名・ファイルパス・環境変数全体・生の例外を出力しません。診断で生成・取得・常駐起動・ネットワーク設定の変更は行いません。公式仕様確認：2026-10-26、https://docs.ollama.com/api/tags 、https://github.com/ollama/ollama/blob/main/docs/openapi.yaml 。
+ 
+## Operator one-request local measurement
+
+The optional `CloudServer.mjs --measure` command uses only the existing authenticated loopback bridge and Ollama's loopback `/api/ps`. It sends one fixed non-personal prompt with empty history through the existing generation slot; it does not send conversation data to Google or external APIs. Only approved general-model metadata, duration, Unicode character count and completion state appear in the report. Answer text, credentials, unrelated loaded models and raw upstream errors are omitted. No automatic measurement, download, permission change or network exposure is added. Model loading and existing five-minute retention can occur. A memory snapshot and one request do not certify GPU execution, service capacity, security or answer quality.
