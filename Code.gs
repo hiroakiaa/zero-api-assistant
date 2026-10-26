@@ -168,10 +168,34 @@ function validateAPI_(url){
  if(Object.keys(params).some(k=>!allowed.includes(k))||Object.keys(expected).some(k=>params[k]!==expected[k]))throw Error('許可されていない検索条件です。');
  return provider;
 }
+function readPublicFetchLeases_(raw){
+ let leases;try{leases=raw?JSON.parse(raw):{};}catch{throw Error('データ取得の保護設定を確認してください。');}
+ if(!leases||typeof leases!=='object'||Array.isArray(leases)||Object.keys(leases).length>20||Object.entries(leases).some(([key,value])=>! /^[a-f0-9]{64}$/.test(key)||!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||typeof value.token!=='string'||! /^[a-f0-9-]{36}$/i.test(value.token)||!Number.isSafeInteger(value.until)||value.until<=0))throw Error('データ取得の保護設定を確認してください。');
+ return leases;
+}
+function reservePublicFetch_(cacheKey){
+ const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('データ取得が混み合っています。少し待って送信してください。');
+ try{
+  // A prior request may have filled the cache between the first lookup and lock acquisition.
+  const hit=CacheService.getScriptCache().get(cacheKey);if(hit)return{hit};
+  const props=PropertiesService.getScriptProperties(),now=Date.now(),leases=readPublicFetchLeases_(props.getProperty('PUBLIC_FETCH_LEASES')),key=hash_(cacheKey);
+  for(const name of Object.keys(leases))if(leases[name].until<=now)delete leases[name];
+  if(leases[key])throw Error('同じ条件のデータを取得中です。先の照会が終わってから、もう一度送信してください。');
+  if(Object.keys(leases).length>=20)throw Error('データ取得が混み合っています。少し待って送信してください。');
+  const token=Utilities.getUuid();if(typeof token!=='string'||! /^[a-f0-9-]{36}$/i.test(token))throw Error('データ取得の保護設定を確認してください。');
+  leases[key]={token,until:now+360000};props.setProperties({PUBLIC_FETCH_LEASES:JSON.stringify(leases)});return{key,token};
+ }finally{lock.releaseLock();}
+}
+function releasePublicFetch_(flight){
+ const lock=LockService.getScriptLock();if(!lock.tryLock(5000))return;
+ try{const props=PropertiesService.getScriptProperties(),leases=readPublicFetchLeases_(props.getProperty('PUBLIC_FETCH_LEASES'));if(leases[flight.key]?.token===flight.token){delete leases[flight.key];props.setProperties({PUBLIC_FETCH_LEASES:JSON.stringify(leases)});}}
+ catch{}finally{lock.releaseLock();}
+}
 function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
  const quakeHistory=url.startsWith('https://earthquake.usgs.gov/fdsnws/event/1/query?'),rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?')?'unemployment-v73:':provider==='quakes'?(quakeHistory?'quakes-history-v71:':'quakes-v43:'):provider==='news'?'news-v49:':provider==='geocoding'?'geocoding-v60:':provider==='chemistry'?'chemistry-v65:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
  const providerProps=PropertiesService.getScriptProperties(),cooldown=Number(providerProps.getProperty('COOLDOWN_'+provider)||0);if(cooldown>Date.now())throw Object.assign(Error(cooldownMessage_(cooldown)),{retryAt:cooldown});
+ const publicFlight=reservePublicFetch_(key);if(publicFlight.hit){const stored=JSON.parse(publicFlight.hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}try{
  const quakeHistoryLease=quakeHistory?reserveQuakeHistory_():null,crossrefLease=provider==='crossref'?reserveCrossref_():null,geocodingLease=provider==='geocoding'?reserveGeocoding_():null,chemistryLease=provider==='chemistry'?reserveChemistry_():null;try{
  reserveFetchBudget_();
  if(provider==='books'){const serial=LockService.getScriptLock();if(!serial.tryLock(5000))throw Error('書籍検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),delay=1100-(Date.now()-Number(props.getProperty('LAST_BOOK_FETCH')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));props.setProperties({LAST_BOOK_FETCH:String(Date.now())});}finally{serial.releaseLock();}}
@@ -197,6 +221,7 @@ function fetchAPI_(url){
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result=Object.assign(rangeJSON?{dataJSON:text}:provider==='news'?{dataJSON:JSON.stringify(data)}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=provider==='geocoding'?21600:provider==='news'?600:provider==='quakes'?300:['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(quakeHistoryLease)releaseQuakeHistory_(quakeHistoryLease);if(crossrefLease)releaseCrossref_(crossrefLease);if(geocodingLease)releaseGeocoding_(geocodingLease);if(chemistryLease)releaseChemistry_(chemistryLease);}
+ }finally{releasePublicFetch_(publicFlight);}
 }
 function reserveGeocoding_(){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))throw Error('地名検索が混み合っています。');try{const props=PropertiesService.getScriptProperties(),now=Date.now();if(Number(props.getProperty('GEOCODING_BUSY_UNTIL')||0)>now)throw Error('地名検索は別の照会中です。少し待って送信してください。');const day=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyy-MM-dd'),count=props.getProperty('GEOCODING_DAY')===day?Number(props.getProperty('GEOCODING_COUNT')||0):0;if(!Number.isSafeInteger(count)||count<0||count>=100)throw Error('本日の地名検索の保護上限です。時間を置いてお試しください。');const delay=1100-(Date.now()-Number(props.getProperty('GEOCODING_LAST_END')||0));if(delay>0)Utilities.sleep(Math.min(delay,1100));const lease=Utilities.getUuid();props.setProperties({GEOCODING_BUSY_UNTIL:String(Date.now()+360000),GEOCODING_LEASE:lease,GEOCODING_DAY:day,GEOCODING_COUNT:String(count+1)});return lease;}finally{lock.releaseLock();}}
 function releaseGeocoding_(lease){const lock=LockService.getScriptLock();if(!lock.tryLock(5000))return;try{const props=PropertiesService.getScriptProperties();if(props.getProperty('GEOCODING_LEASE')===lease)props.setProperties({GEOCODING_BUSY_UNTIL:'0',GEOCODING_LEASE:'',GEOCODING_LAST_END:String(Date.now())});}finally{lock.releaseLock();}}
