@@ -577,6 +577,55 @@ function createElementsHandler({getJSON,cloud,el,p,source,state,follows}){return
  state.context={...state.context,intent:'elements',pending:null,elementNumber:rows.length===1?rows[0].number:null,elementNumbers:rows.map(row=>row.number),elementFocus:focus};follows(body,['原子番号は？','元素記号は？','原子質量は？']);
 };}
 
+const distanceRadiusKM=6371;
+const distanceUnits={km:1,m:1000,mi:1/1.609344},distanceAliases={km:'km',キロメートル:'km',m:'m',メートル:'m',mi:'mi',マイル:'mi'};
+function distanceUnit(value){if(typeof value!=='string'||!Object.hasOwn(distanceAliases,value.toLowerCase()))throw Error('距離の単位はkm・m・mi（マイル）で指定してください。');return distanceAliases[value.toLowerCase()];}
+function checkedDistanceCoordinates(point){if(!point||![point.latitude,point.longitude].every(v=>typeof v==='number'&&Number.isFinite(v))||Math.abs(point.latitude)>90||Math.abs(point.longitude)>180)throw Error('座標は緯度−90〜90、経度−180〜180の数値で指定してください。');return point;}
+function resolveDistancePoint(value,cities,slot='A'){
+ if(value&&typeof value==='object'){
+  if(value.type==='city'&&typeof value.name==='string')return resolveDistancePoint(value.name,cities,slot);
+  if(value.type==='coordinate'){checkedDistanceCoordinates(value);return{type:'coordinate',name:'座標'+slot,latitude:value.latitude,longitude:value.longitude};}
+  throw Error('保存された地点を確認できません。2地点をもう一度指定してください。');
+ }
+ if(typeof value!=='string'||value.length>90)throw Error('都市名か緯度・経度の組を指定してください。');
+ const text=value.normalize('NFKC').trim(),city=cities.find(city=>city.name===text||city.query.toLowerCase()===text.toLowerCase());
+ if(city){checkedDistanceCoordinates(city);return{type:'city',name:city.name,latitude:city.latitude,longitude:city.longitude};}
+ const match=text.replaceAll('−','-').match(/^\(?\s*([+-]?(?:\d+(?:\.\d{1,8})?|\.\d{1,8}))\s*,\s*([+-]?(?:\d+(?:\.\d{1,8})?|\.\d{1,8}))\s*\)?$/);
+ if(match){if(text.startsWith('(')!==text.endsWith(')'))throw Error('座標の括弧を確認してください。');const point={type:'coordinate',name:'座標'+slot,latitude:Number(match[1]),longitude:Number(match[2])};return checkedDistanceCoordinates(point);}
+ throw Error('「'+text+'」は座標付きの登録都市ではありません。登録都市名か、緯度,経度を指定してください。例：距離:東京 → 大阪 ／ 距離:(0,0) → (0,90)');
+}
+function sphericalDistance(from,to,unit='km'){
+ checkedDistanceCoordinates(from);checkedDistanceCoordinates(to);const selected=distanceUnit(unit),radians=Math.PI/180,delta=((to.longitude-from.longitude+540)%360-180)*radians;
+ if(from.latitude===to.latitude&&(delta===0||Math.abs(from.latitude)===90))return{km:0,value:0,unit:selected};
+ const a=from.latitude*radians,b=to.latitude*radians,x=Math.cos(b)*Math.sin(delta),y=Math.cos(a)*Math.sin(b)-Math.sin(a)*Math.cos(b)*Math.cos(delta),dot=Math.sin(a)*Math.sin(b)+Math.cos(a)*Math.cos(b)*Math.cos(delta),km=distanceRadiusKM*Math.atan2(Math.hypot(x,y),dot);
+ return{km,value:km*distanceUnits[selected],unit:selected};
+}
+function savedDistancePoint(point){return point.type==='city'?{type:'city',name:point.name}:{type:'coordinate',latitude:point.latitude,longitude:point.longitude};}
+function parseDistance(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。?？]$/,'');const namedPrefix=text.match(/^([^:：]{1,30})[：:]/);if(namedPrefix&&!['距離','大円距離'].includes(namedPrefix[1])||/^(?:本|書籍|ブック|論文|文献|学術|学術検索|検索|知識|辞書|翻訳|文章|コード)\s/.test(text))return[];
+ const explicit=text.match(/^(?:距離|大円距離)[：:]\s*(.*)$/);let from,to,unit='km';
+ try{
+  if(/から.+まで/.test(text)&&/道路|徒歩|自転車|車で|電車|鉄道|高速|ルート|所要時間/.test(text)&&/距離|何(?:km|キロメートル|時間)|所要時間/i.test(text))throw Error('この機能で計算できるのは球モデルの距離です。道路・鉄道の距離や所要時間は取得できません。');
+  if(explicit){const parts=explicit[1].split(/\s*\|\s*/);if(parts.length>2)throw Error('距離:出発地 → 到着地 | 単位:km の形式で指定してください。');if(parts[1]){const choice=parts[1].match(/^単位:\s*(.+)$/);if(!choice)throw Error('単位は「| 単位:mi」の形式で指定してください。');unit=distanceUnit(choice[1]);}const pair=parts[0].split(/\s*(?:→|->)\s*/);if(pair.length!==2||pair.some(item=>!item.trim()))throw Error('2地点を → で区切って指定してください。例：距離:東京 → 大阪');[from,to]=pair.map(v=>v.trim());}
+  else{
+   const ending='(?:は(?:何(km|m|mi|キロメートル|メートル|マイル))?(?:ですか)?|を教えて(?:ください)?)?';
+   const named=text.match(new RegExp('^(.{1,90}?)から(.{1,90}?)まで(?:の)?(?:距離|大円距離)'+ending+'$','i'))||text.match(new RegExp('^(.{1,90}?)と(.{1,90}?)の(?:距離|大円距離)'+ending+'$','i'));
+   const measured=text.match(/^(.{1,90}?)から(.{1,90}?)まで(?:は)?何(km|m|mi|キロメートル|メートル|マイル)(?:ですか)?$/i);
+   if(named||measured){const match=named||measured;from=match[1].trim();to=match[2].trim();if(match[3])unit=distanceUnit(match[3]);}
+  }
+  if(from!==undefined){if(/道路|徒歩|自転車|車で|電車|鉄道|高速|ルート|所要時間/.test(from+' '+to))throw Error('この機能で計算できるのは球モデルの距離です。道路・鉄道の距離や所要時間は取得できません。');return[{kind:'distance',from,to,unit}];}
+  if(context.intent!=='distance')return[];
+  const follow=text.match(/^(km|m|mi|キロメートル|メートル|マイル)(?:なら|では|で|にして|に換算して)?$/i),change=text.match(/^(出発地|到着地)を(.{1,90}?)に(?:して|変更して)$/),reverse=/^(?:逆|逆にして|逆にすると)$/.test(text);
+  if(follow||change||reverse){from=context.distanceFrom;to=context.distanceTo;if(!from||!to)throw Error('先に2地点の距離を調べてください。');unit=follow?distanceUnit(follow[1].toLowerCase()):distanceUnit(context.distanceUnit||'km');if(change){if(change[1]==='出発地')from=change[2];else to=change[2];}if(reverse)[from,to]=[to,from];return[{kind:'distance',from,to,unit}];}
+ }catch(error){return[{kind:'distance',error:error.message}];}return[];
+}
+function createDistanceHandler({cities,el,p,source,state,follows}){return async(task,body)=>{
+ if(task.error)throw Error(task.error);const from=resolveDistancePoint(task.from,cities,'A'),to=resolveDistancePoint(task.to,cities,'B'),result=sphericalDistance(from,to,task.unit||'km'),format=value=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:4}).format(value);
+ body.append(el('h3',from.name+' → '+to.name));const card=el('div',undefined,'result-card');card.append(el('div','球モデルでの最短距離','city'),el('div',(result.value===0?'':'約 ')+format(result.value)+' '+result.unit,'big'));p(card,'出発：'+from.name+'（緯度 '+from.latitude+'、経度 '+from.longitude+'）');p(card,'到着：'+to.name+'（緯度 '+to.latitude+'、経度 '+to.longitude+'）');body.append(card);
+ p(body,'半径6,371 kmの球面に沿う大円距離です。都市はアプリ登録の代表座標を使用します。道路距離・移動時間・楕円体上の測地線距離とは異なります。計算は端末内で行い、結果は有効数字4桁までに丸めています。','sub');source(body,'NASA · 地球の体積平均半径','https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html');
+ state.context={...state.context,intent:'distance',pending:null,distanceFrom:savedDistancePoint(from),distanceTo:savedDistancePoint(to),distanceUnit:result.unit};follows(body,['kmなら？','マイルなら？','逆にして']);
+};}
+
 const cities = [
  ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
@@ -584,6 +633,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const distance=parseDistance(text,context);if(distance.length)return distance;
  const elements=parseElements(text,context);if(elements.length)return elements;
  const chemistry=parseChemistry(text,context);if(chemistry.length)return chemistry;
  const species=parseSpecies(text,context);if(species.length)return species;
@@ -1882,6 +1932,7 @@ const FEATURE_CATALOG=[
  {id:'weatherPlace',category:'life',title:'地名から天気の地点を選ぶ',description:'未登録の都市・町・村を検索して地点を確認。現地時間帯が未特定ならUTC基準。GAS版で利用。',query:'鹿児島の明日の天気',tags:'地名 ちめい 地点 住所 都市 鹿児島 北九州 町 村 天気 候補 Photon OpenStreetMap'},
  {id:'weatherDetails',category:'life',title:'風速・湿度の予報',description:'予報時点の最大風速と相対湿度の範囲。日付・都市を引き継げます。',query:'東京の明日の風速は？',tags:'風 ふうそく しつど 湿度 屋外 天気 予報 相対湿度'},
  {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
+ {id:'distance',category:'tools',title:'2地点の距離',description:'登録都市や緯度・経度から球面上の最短距離を計算。道路距離・所要時間とは別。',query:'東京から大阪までの距離は？',tags:'距離 きょり 大円距離 地理 球面 座標 緯度 経度 km マイル 移動 都市',local:true},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
  {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
@@ -2185,7 +2236,7 @@ const providerCooldowns=new ProviderCooldowns();
 const directLibraryGap=new MinimumRequestGap();
 let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true,cloudAIEnabled:false};
-const names={elements:'元素の基礎データ',chemistry:'化合物の基礎データ',species:'生物の分類',countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+const names={distance:'2地点の距離',elements:'元素の基礎データ',chemistry:'化合物の基礎データ',species:'生物の分類',countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.cloudAI='クラウドAI';
 names.eraYear='和暦・西暦';
@@ -2263,7 +2314,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={distance:createDistanceHandler({cities,el,p,source,state,follows}),elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
