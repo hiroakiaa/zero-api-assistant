@@ -95,3 +95,5 @@ GBIF Backbone Taxonomy（GBIF Secretariat, 2023、DOI: 10.15468/39omei）のCC B
 PubChem PUG RESTの無認証GETを使い、完全名検索の候補IDと、MolecularFormula・MolecularWeight・IUPACNameの3項目だけを取得します。候補は最大5件で、基礎的な式・数値・系統名だけを抜粋表示します。第三者の説明文・画像・ラベル等は転載せず、PubChem全データを一律にパブリックドメインとして扱いません。結果にPubChem / NCBIと[利用・免責・著作権方針](https://www.ncbi.nlm.nih.gov/home/about/policies/)へのリンクを表示します。
 
 GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時間1日100回・共有キャッシュを適用し、失敗も試行に含めます。名前と物性を別に数え、429/503では共有の待機を守ります。プレビューから直接取得しません。参照：[PUG REST仕様](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest)、[負荷制限](https://pubchem.ncbi.nlm.nih.gov/docs/dynamic-request-throttling)。APIキーやカード、有料APIへの切替はありません。
+
+周期表の固定エンドポイント`/rest/pug/periodictable/JSON`も利用し、AtomicNumber・Symbol・Name・AtomicMassの4項目だけを抜粋します。第三者の説明文や画像は保持しません。既存のPubChem負荷制御とキャッシュを共有し、利用・免責・著作権方針のリンクを表示します。AtomicMassを標準原子量と同一視せず、欠測を推測で埋めません。
