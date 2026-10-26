@@ -66,8 +66,8 @@ function validateAPI_(url){
  const host=m[1].toLowerCase(),path=m[2],params=Object.create(null);String(m[3]||'').split('&').filter(Boolean).forEach(pair=>{const n=pair.indexOf('='),k=decodeURIComponent(n<0?pair:pair.slice(0,n)),v=decodeURIComponent((n<0?'':pair.slice(n+1)).replace(/\+/g,' '));if(Object.prototype.hasOwnProperty.call(params,k))throw Error('重複した検索条件です。');params[k]=v;});
  let provider,allowed,expected={};
  if(host==='api.gbif.org'&&path==='/v1/species/search'){
-  provider='species';allowed=['q','limit','offset','datasetKey'];expected={limit:'5',datasetKey:'d7dddbf4-2cf0-4f39-9b2a-bb099caae36c'};
-  if(typeof params.q!=='string'||params.q.length<2||params.q.length>80||!/[\p{L}]/u.test(params.q)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(params.q)||! /^(0|5|10|15|20)$/.test(params.offset||''))throw Error('生物検索の条件が無効です。');
+  provider='species';allowed=['q','limit','offset','datasetKey','rank'];expected={limit:'5',datasetKey:'d7dddbf4-2cf0-4f39-9b2a-bb099caae36c'};
+  if(typeof params.q!=='string'||params.q.length<1||params.q.length>80||!/[\p{L}]/u.test(params.q)||! /^[\p{L}\p{M}\p{N} .()'×-]+$/u.test(params.q)||! /^(0|5|10|15|20)$/.test(params.offset||'')||Object.prototype.hasOwnProperty.call(params,'rank')&&!['SPECIES','SUBSPECIES','GENUS','FAMILY'].includes(params.rank))throw Error('生物検索の条件が無効です。');
  }else if(host==='api.gbif.org'&&/^\/v1\/species\/[1-9]\d{0,11}$/.test(path)){
   provider='species';allowed=[];
  }else if(host==='photon.komoot.io'&&path==='/api/'){
@@ -136,7 +136,7 @@ function fetchAPI_(url){
  }
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  if(provider==='geocoding')data=leanGeocoding_(data);
- if(provider==='species')data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));
+ if(provider==='species'){data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
  const expires=responseHeaders.Expires||responseHeaders.expires;
  const result=Object.assign(rangeJSON?{dataJSON:text}:provider==='news'?{dataJSON:JSON.stringify(data)}:{data:data},{at:new Date().toISOString(),cache:false,expires:expires||null}),serialized=JSON.stringify(result),ttl=provider==='geocoding'?21600:provider==='news'?600:provider==='quakes'?300:['isbn','postal','ukHoliday'].includes(provider)?3600:Math.min(21600,Math.max(provider==='quakes'?300:provider==='weather'?1800:3600,Math.ceil((Date.parse(expires)-Date.now())/1000)||0));if(serialized.length<75000)cache.put(key,serialized,ttl);return result;
  }finally{if(crossrefLease)releaseCrossref_(crossrefLease);if(geocodingLease)releaseGeocoding_(geocodingLease);}
