@@ -171,3 +171,7 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 既存の許可済み公開APIに対する同一キャッシュキーの重複取得を、GASのScriptLockとScript Propertiesで抑止します。URL本文・検索語・ユーザー情報を新しい管理項目へ保存せず、SHA-256ハッシュ・ランダムID・期限だけを最大20件保持します。正常終了・例外時に自分の項目だけを解除し、異常終了時の残存は6分で期限切れとします。外部通信中に全体ロックを持ち続けず、提供元別制限・取得予算・HTTP429/503待機・応答検証・キャッシュを維持します。新しいAPI契約・認証・公開経路・Googleスコープ・有料サービスは導入しません。自動再送も行いません。
 
 2026-10-26に[Googleの実行時間・Properties上限](https://developers.google.com/apps-script/guides/services/quotas)と[Cacheの仕様](https://developers.google.com/apps-script/reference/cache/cache)を確認。キャッシュの早期消失を排他制御の解除と同一視せず、管理項目は別に保持します。上限や提供元の応答時間はこの保護で解消されません。
+
+## 質問を入力欄へ戻す操作
+
+質問の再利用は端末内で、利用者がボタンを押した場合だけ入力欄へ原文を戻す操作です。自動送信・自動照会・履歴の再書き込み・会話条件の書き換え・クリップボード権限・追加の永続保存は行いません。現在の未送信内容を上書きせず、処理中や保管中は案内します。通常の送信を別途選ぶまではGoogle・API・PCのAIへ新たな質問を送りません。
