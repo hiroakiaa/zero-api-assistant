@@ -44,6 +44,8 @@
 .lunar-time{font-size:18px;line-height:1.8;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 
 .hourly-weather-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}.hourly-weather-table th,.hourly-weather-table td{padding:8px 4px;border-bottom:1px solid #363640;overflow-wrap:anywhere;white-space:pre-line;vertical-align:top}.hourly-weather-table th{font-weight:500;text-align:left}.hourly-weather-table td{text-align:right}
+
+.citation-output{user-select:text}.citation-copy-text{display:block;width:100%;min-height:38dvh;max-height:55dvh;overflow:auto;resize:vertical;background:#141418;border:1px solid #454550;border-radius:10px;padding:12px;font-size:16px;color:#eee;white-space:pre-wrap}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -1869,6 +1871,7 @@ function normalizeDOI(raw){
  return value;
 }
 function parseCrossrefTasks(raw,context={}){
+ const citation=parseCitationTasks(raw,context);if(citation.length)return citation;
  const text=raw.trim(),query=text.match(/^(?:学術検索|学術|Crossref)[：:]\s*([\s\S]*)$/i);
  if(query)return[{kind:'scholar',query:query[1].trim(),page:0}];
  if(/^(?:学術検索の続き|学術の続き|次の学術資料)[。？?]?$/.test(text)||/^(?:続き|ほかには|他には)[。？?]?$/.test(text)&&context.intent==='scholar')return[{kind:'scholar',query:context.scholarQuery||'',page:Number.isInteger(context.scholarPage)?context.scholarPage+1:0}];
@@ -1898,22 +1901,56 @@ function crossrefResults(data,task){
  if(!Number.isInteger(data.message.query?.['start-index'])||data.message.query['start-index']!==offset)throw Error('検索ページの応答が要求と一致しません。');
  return{records,skipped,hasMore:task.kind!=='doi'&&Number.isFinite(total)&&total>offset+data.message.items.length&&data.message.items.length===3};
 }
+function parseCitationTasks(raw,context={}){
+ const text=raw.trim(),follow=text.normalize('NFKC').replace(/[。？?]+$/,''),direct=text.match(/^(参考文献|引用形式|BibTeX)[：:]\s*(.+)$/i);
+ if(direct)return[{kind:'citation',doi:direct[2],format:/bibtex/i.test(direct[1])?'bibtex':'simple'}];
+ if(context.intent==='citation'&&/^(?:書誌情報に戻る|元の書誌に戻る)$/.test(follow))return context.referenceDOI?[{kind:'doi',doi:context.referenceDOI}]:[{kind:'citation',error:'先にDOIの書誌情報を確認してください。'}];
+ const number=follow.match(/^(\d{1,2})番(?:目)?(?:の資料)?を(参考文献|BibTeX)にして$/i),simple=/^(?:参考文献にして|参考文献の形にして|引用形式にして)$/.test(follow),bib=/^BibTeX(?:にして|で|は)?$/i.test(follow);if(!number&&!simple&&!bib)return[];
+ const format=bib||number&&/bibtex/i.test(number[2])?'bibtex':'simple';
+ if(context.intent==='scholar'){
+  const choices=context.referenceDOIs;if(!Array.isArray(choices)||!choices.length||choices.length>3)return[{kind:'citation',error:'この履歴には資料の識別子がありません。学術検索かDOI照会をもう一度行ってください。'}];
+  if(number){const doi=choices[Number(number[1])-1];return doi?[{kind:'citation',doi,format}]:[{kind:'citation',error:'表示中の1〜'+choices.length+'番の資料から選んでください。'}];}return choices.length===1?[{kind:'citation',doi:choices[0],format}]:[{kind:'citation',choices:[...choices],format}];
+ }
+ if(['doi','citation'].includes(context.intent)&&context.referenceDOI&&!number)return[{kind:'citation',doi:context.referenceDOI,format}];
+ return[{kind:'citation',error:'先にCrossrefの学術検索や「DOI:10.1038/nphys1170」で資料を確認してください。'}];
+}
+function citationPlainText(value){
+ if(typeof value!=='string')return'';const entities={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' '};return value.replace(/<[^>]*>/g,'').replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,(all,key)=>{if(key[0]!=='#')return entities[key.toLowerCase()];const number=/^#x/i.test(key)?parseInt(key.slice(2),16):Number(key.slice(1));return Number.isInteger(number)&&number>0&&number<=0x10ffff&&!(number>=0xd800&&number<=0xdfff)?String.fromCodePoint(number):all;}).replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim();
+}
+function bibtexText(value){const escaped={'\\':'\\textbackslash{}','{':'\\textbraceleft{}','}':'\\textbraceright{}','$':'\\$','%':'\\%','&':'\\&','#':'\\#','_':'\\_','~':'\\textasciitilde{}','^':'\\textasciicircum{}'};return String(value).replace(/[\\{}$%&#_~^]/g,char=>escaped[char]);}
+function citationRecord(data,expectedDOI){
+ const task={kind:'doi',doi:normalizeDOI(expectedDOI)},result=crossrefResults(data,task);if(data.message.items.length!==1||result.records.length!==1)throw Error('指定DOIの書誌情報を一意に確認できませんでした。');const item=data.message.items[0],registered=result.records[0],title=citationPlainText(Array.isArray(item.title)?item.title[0]:null),container=citationPlainText(Array.isArray(item['container-title'])?item['container-title'][0]:null),year=/^\d{4}(?:-|$)/.test(registered.published)?registered.published.slice(0,4):null,raw=Array.isArray(item.author)?item.author:[];
+ if(title.length>4000||container.length>1000||raw.length>5000)throw Error('書誌情報が長すぎます。DOIリンク先でご確認ください。');
+ const authors=[];let invalid=0;for(const author of raw){const name=citationPlainText(author?.name),given=citationPlainText(author?.given),family=citationPlainText(author?.family),display=name||[given,family].filter(Boolean).join(' ');if(!display||display.length>400){invalid++;continue;}authors.push({display,bib:name||!family?'{'+bibtexText(display)+'}':'{'+bibtexText(family)+'}'+(given?', {'+bibtexText(given)+'}':'')});}
+ return{doi:registered.doi,url:registered.url,title,container,year,type:item.type,authors:authors.slice(0,20),omitted:Math.max(0,authors.length-20),invalid};
+}
+function formatCitation(record,format='simple'){
+ if(!['simple','bibtex'].includes(format))throw Error('参考文献は簡易形式かBibTeXで指定してください。');let text;
+ if(format==='simple')text=(record.authors.length?record.authors.map(author=>author.display).join('; '):'[著者未登録]')+(record.omitted?' [ほか'+record.omitted+'名省略]':'')+' ('+(record.year||'刊行年未登録')+'). '+(record.title||'[タイトル未登録]')+'. '+(record.container||'[掲載媒体未登録]')+'. '+record.url;
+ else {let hash=2166136261;for(const char of record.doi.toLowerCase())hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;const key='zero_'+record.doi.toLowerCase().replace(/[^a-z0-9]/g,'_').slice(0,50)+'_'+hash.toString(16),article=record.type==='journal-article'&&record.authors.length&&record.year&&record.container&&record.title,fields=[];if(record.title)fields.push('title = {{'+bibtexText(record.title)+'}}');if(record.authors.length)fields.push('author = {'+record.authors.map(author=>author.bib).join(' and ')+(record.omitted?' and others':'')+'}');if(record.year)fields.push('year = {'+record.year+'}');if(record.container)fields.push((article?'journal':'howpublished')+' = {'+bibtexText(record.container)+'}');fields.push('doi = {'+normalizeDOI(record.doi)+'}','url = {'+record.url+'}');text='@'+(article?'article':'misc')+'{'+key+',\n  '+fields.join(',\n  ')+'\n}';}
+ if(text.length>12000)throw Error('整形後の参考文献が長すぎます。DOIリンク先でご確認ください。');return text;
+}
+function renderCitationOutput(output,text,format,el){renderGeneratedAnswer(output,format==='bibtex'?'```bibtex\n'+text+'\n```':text,el);}
+function showCitationCopy(text,el){
+ const dialog=el('dialog');dialog.setAttribute('aria-label','参考文献の内容');const head=el('div',undefined,'dialog-head'),heading=el('h2','参考文献をコピー'),close=el('button','×','icon-button'),field=el('textarea');close.type='button';close.setAttribute('aria-label','参考文献のコピーを閉じる');close.addEventListener('click',()=>dialog.close());head.append(heading,close);field.readOnly=true;field.value=text;field.className='citation-copy-text';field.setAttribute('aria-label','コピーする参考文献');dialog.append(head,el('p','内容を選択してコピーできます。'),field);dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();field.focus();field.select();
+}
 let crossrefFinished=0;
-function createCrossrefHandlers({getJSON,el,p,link,source,state,follows}){
+function createCrossrefHandlers({getJSON,el,p,link,source,state,follows,now=Date.now,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms)),copy=showCitationCopy}){
+ const load=async task=>{const url=crossrefURL(task),delay=Math.min(1100,1100-(now()-crossrefFinished));if(delay>0)await wait(delay);let response;try{response=await getJSON(url,3600000);}finally{crossrefFinished=now();}return{url,response};};
  const run=async(task,body)=>{
   if(task.kind==='scholar'&&task.page>4){p(body,'学術検索は先頭から5ページまでです。検索語を絞ってください。');return;}
-  const url=crossrefURL(task),delay=Math.min(1100,1100-(Date.now()-crossrefFinished));if(delay>0)await new Promise(resolve=>setTimeout(resolve,delay));
-  let response;try{response=await getJSON(url,3600000);}finally{crossrefFinished=Date.now();}
-  const result=crossrefResults(response.data,task);body.append(el('h3',task.kind==='doi'?'DOIから書誌情報を確認':'学術資料を検索'));
+  const {response}=await load(task),result=crossrefResults(response.data,task);body.append(el('h3',task.kind==='doi'?'DOIから書誌情報を確認':'学術資料を検索'));
   if(!result.records.length)p(body,result.skipped?'返された資料のDOIや書誌形式を確認できませんでした。':'Crossrefの登録情報に該当する資料がありません。他の登録機関のDOIは見つからない場合があります。');
-  for(const item of result.records){const card=el('div',undefined,'wiki-result');card.append(link(item.title,item.url));p(card,item.type+' ／ '+item.published+(item.container?' ／ '+item.container:''),'details');if(item.authors)p(card,item.authors);p(card,'DOI: '+item.doi,'sub');body.append(card);}
-  if(result.skipped)p(body,`${result.skipped}件はDOIや書誌形式を確認できないため表示していません。`);
-  p(body,'出版社等が登録した書誌情報です。抄録・本文は表示しません。本文の公開条件はDOIリンク先で確認できます。','sub');
-  source(body,'Crossref · 公開書誌API','https://www.crossref.org/documentation/retrieve-metadata/rest-api/',response);
-  state.context={...state.context,intent:task.kind,...(task.kind==='scholar'?{scholarQuery:task.query,scholarPage:task.page}:{})};
-  if(result.hasMore&&task.page<4)follows(body,['学術検索の続き']);
+  for(const [index,item]of result.records.entries()){const card=el('div',undefined,'wiki-result');card.append(link((task.kind==='scholar'?(index+1)+'. ':'')+item.title,item.url));p(card,item.type+' ／ '+item.published+(item.container?' ／ '+item.container:''),'details');if(item.authors)p(card,item.authors);p(card,'DOI: '+item.doi,'sub');const button=el('button','参考文献にする','history-item');button.type='button';button.dataset.ask='参考文献:'+item.doi;button.dataset.askLabel=item.title+'を参考文献にして';card.append(button);body.append(card);}
+  if(result.skipped)p(body,result.skipped+'件はDOIや書誌形式を確認できないため表示していません。');p(body,'出版社等が登録した書誌情報です。抄録・本文は表示しません。本文の公開条件はDOIリンク先で確認できます。','sub');source(body,'Crossref · 公開書誌API','https://www.crossref.org/documentation/retrieve-metadata/rest-api/',response);
+  state.context={...state.context,intent:task.kind,referenceDOI:task.kind==='doi'?result.records[0]?.doi||null:null,referenceDOIs:task.kind==='scholar'?result.records.map(item=>item.doi):[],...(task.kind==='scholar'?{scholarQuery:task.query,scholarPage:task.page}:{})};const next=[];if(result.hasMore&&task.page<4)next.push('学術検索の続き');if(result.records.length)next.push('参考文献にして',...(task.kind==='doi'?['BibTeXにして']:[]));if(next.length)follows(body,next);
  };
- return{scholar:run,doi:run};
+ const citation=async(task,body)=>{
+  if(task.error)throw Error(task.error);const format=task.format||'simple';if(!['simple','bibtex'].includes(format))throw Error('参考文献は簡易形式かBibTeXで指定してください。');
+  if(task.choices){if(!Array.isArray(task.choices)||task.choices.length<2||task.choices.length>3)throw Error('参考文献の候補を確認できません。');body.append(el('h3','参考文献にする資料を選択'));p(body,'候補が複数あります。元の検索結果の番号とDOIで資料を選んでください。');for(const [index,value]of task.choices.entries()){const doi=normalizeDOI(value),button=el('button',(index+1)+'. '+doi,'history-item');button.type='button';button.dataset.ask=(format==='bibtex'?'BibTeX:':'参考文献:')+doi;button.dataset.askLabel=(index+1)+'番の資料を'+(format==='bibtex'?'BibTeX':'参考文献')+'にして';body.append(button);}return;}
+  const doi=normalizeDOI(task.doi),{response}=await load({kind:'doi',doi}),record=citationRecord(response.data,doi),text=formatCitation(record,format);body.append(el('h3',format==='bibtex'?'基本項目のBibTeX':'簡易参考文献'));const output=el('div',undefined,'local-generated citation-output');renderCitationOutput(output,text,format,el);body.append(output);const button=el('button','コピー用に表示','history-item');button.type='button';button.addEventListener('click',()=>copy(text,el));body.append(button);if(record.omitted)p(body,'登録著者の先頭20名を表示し、残り'+record.omitted+'名は省略しています。');if(record.invalid)p(body,'名前を確認できない著者'+record.invalid+'件は省略しています。');const missing=[!record.title?'タイトル':null,!record.authors.length?'著者':null,!record.year?'刊行年':null,!record.container?'掲載媒体':null].filter(Boolean);if(missing.length)p(body,'未登録：'+missing.join('・')+'。登録外の情報で補いません。');p(body,'登録情報を整えた基本形式です。巻・号・ページ・出版社は取得していません。提出先の指定に合わせて確認・編集してください。','sub');body.append(link('DOIの原情報を確認',record.url));source(body,'Crossref · 公開書誌API','https://www.crossref.org/documentation/retrieve-metadata/rest-api/',response);state.context={...state.context,intent:'citation',referenceDOI:record.doi,referenceFormat:format,lastDate:null};follows(body,[format==='bibtex'?'参考文献にして':'BibTeXにして','書誌情報に戻る']);
+ };
+ return{scholar:run,doi:run,citation};
 }
 
 function isbn13(raw){
@@ -2062,7 +2099,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|次の6時点|前の6時点|時間別の続き|(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|参考文献にして|参考文献の形にして|引用形式にして|BibTeXにして|書誌情報に戻る|次の6時点|前の6時点|時間別の続き|(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
  const articleChoice=/^(?:ニュースの)?\d+(?:番(?:目)?|件目)(?:の記事)?(?:を|の)?(?:詳しく|詳細)[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||(follow.test(part)||articleChoice.test(part))&&(index>0||recognize(part,context).length)))return parts;
  return [text];
@@ -2097,6 +2134,7 @@ const FEATURE_CATALOG=[
  {id:'papers',category:'research',title:'生命科学の文献',description:'出版年・OA条件で書誌を検索。本文は元記事へ。',query:'論文: sleep | 年:2024 | OAのみ',tags:'ろんぶん 研究 論文 文献 EuropePMC オープンアクセス OA 出版年'},
  {id:'scholar',category:'research',title:'分野をまたぐ学術検索',description:'Crossrefの書誌から論文・書籍章等を検索。',query:'学術検索: quantum computing',tags:'研究 学術 論文 文献 工学 物理 人文 Crossref DOI'},
  {id:'doi',category:'research',title:'DOIから資料を確認',description:'Crossref登録のタイトル・著者・刊行日。',query:'DOI: 10.1038/nphys1170',tags:'研究 論文 引用 書誌 DOI Crossref'},
+ {id:'citation',category:'research',title:'DOIから参考文献・BibTeX',description:'Crossrefの基本書誌を整形。未登録項目を補わずコピー用に表示します。',query:'参考文献:10.1038/nphys1170',tags:'参考文献 引用 DOI 書誌 BibTeX 文献リスト'},
  {id:'hourlyWeather',category:'life',title:'時間別の天気',description:'気温・直後1時間の降水量・平均風速を予報時点ごとに6件ずつ確認。',query:'東京の明日の時間別の天気',tags:'時間別 時間ごと 天気 気温 風速 降水量 予報 1時間'},
  {id:'moon',category:'research',title:'月の出・月の入り・月相角',description:'地点と年月日を指定。実際のイベント日と提供元の月相角を表示します。',query:'東京の2026-10-26の月の出',tags:'月 つき 月の出 月の入り 月没 月相 天文 月の満ち欠け'},
  {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
@@ -2439,6 +2477,7 @@ const directLibraryGap=new MinimumRequestGap();
 let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},archivedConversation:false,busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true,cloudAIEnabled:false};
 const names={moon:'月の出・月の入り',quakeHistory:'日付指定の地震記録',distance:'2地点の距離',elements:'元素の基礎データ',chemistry:'化合物の基礎データ',species:'生物の分類',countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+names.citation='参考文献';
 names.localAI='端末内AI';
 names.cloudAI='クラウドAI';
 names.eraYear='和暦・西暦';
