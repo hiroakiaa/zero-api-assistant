@@ -9,7 +9,7 @@ const SCHEMA = {
 function doGet(){return HtmlService.createHtmlOutputFromFile('App').setTitle('ZERO').addMetaTag('viewport','width=device-width,initial-scale=1,viewport-fit=cover').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);}
 function api(request){
  try{
-  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','renameConversation','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
+  if(!request||!['bootstrap','fetch','saveTurn','listConversations','listConversationLibrary','moveConversation','renameConversation','searchConversationBody','getConversation','generate'].includes(request.action))throw Error('対応していない操作です。');
   if(!/^[a-f0-9]{64}$/.test(request.token||''))throw Error('ブラウザの識別情報が無効です。');
   const owner=hash_(request.token),payload=request.payload||{};rateLimit_(owner);
   let data;
@@ -22,6 +22,7 @@ function api(request){
    case 'listConversationLibrary':data=listConversationLibrary_(owner);break;
    case 'moveConversation':data=moveConversation_(owner,payload);break;
    case 'renameConversation':data=renameConversation_(owner,payload);break;
+   case 'searchConversationBody':data=searchConversationBody_(owner,payload);break;
    case 'getConversation':data=getConversation_(owner,payload.id);break;
   }
   return {ok:true,data:data};
@@ -49,6 +50,15 @@ function moveConversation_(owner,payload){
 function renameConversation_(owner,payload){
  if(!/^[A-Za-z0-9-]{20,60}$/.test(payload.id||'')||typeof payload.title!=='string'||/[\u0000-\u001f\u007f\u2028\u2029]/.test(payload.title)||!payload.title.trim()||payload.title.trim().length>80)throw Error('会話名は改行なしの1〜80文字で指定してください。');
  const title=payload.title.trim(),lock=LockService.getScriptLock();if(!lock.tryLock(8000))throw Error('名前の変更が混み合っています。少し待って試してください。');try{const records=rows_('Conversations'),index=records.findIndex(row=>row[0]===payload.id&&row[1]===owner);if(index<0)throw Error('この会話は見つかりません。');if(records[index][2]!==title){const range=sheet_('Conversations').getRange(index+2,3,1,1);range.setNumberFormat('@').setRichTextValue(SpreadsheetApp.newRichTextValue().setText(title).build());if(range.getFormula())throw Error('会話名の文字列保存を確認できませんでした。');}return listConversationLibrary_(owner);}finally{lock.releaseLock();}
+}
+function searchConversationBody_(owner,payload){
+ const query=payload.query;if(typeof query!=='string'||/[\u0000-\u001f\u007f\u2028\u2029]/.test(query)||query.trim().length<2||query.trim().length>80)throw Error('本文の検索語は改行なしの2〜80文字で指定してください。');
+ const phrase=query.trim(),library=listConversationLibrary_(owner),ids=new Set(library.items.map(item=>item.id));if(!ids.size)return{query:phrase,matches:[]};
+ const sheet=sheet_('Messages'),last=sheet.getLastRow();if(last>20000)throw Error('データベースの行数上限に達しました。管理者による整理が必要です。');if(last<2)return{query:phrase,matches:[]};
+ const owners=sheet.getRange(2,2,last-1,2).getValues(),found=sheet.getRange(2,5,last-1,1).createTextFinder(phrase).matchCase(false).matchEntireCell(false).matchFormulaText(false).useRegularExpression(false).ignoreDiacritics(false).findAll(),byId=new Map();
+ for(const cell of found){const row=cell.getRow(),metadata=owners[row-2];if(!Number.isInteger(row)||row<2||row>last||!metadata||metadata[0]!==owner||!ids.has(metadata[1]))continue;const previous=byId.get(metadata[1]);if(!previous||row>previous.row)byId.set(metadata[1],{row,cell});}
+ const matches=[];for(const item of library.items){const match=byId.get(item.id);if(!match)continue;const value=match.cell.getValue();if(typeof value!=='string')continue;const index=value.toLowerCase().indexOf(phrase.toLowerCase());if(index<0)continue;const start=Math.max(0,index-45),end=Math.min(value.length,index+phrase.length+70),excerpt=(start?'…':'')+value.slice(start,end).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g,' ').replace(/\s+/g,' ')+(end<value.length?'…':'');matches.push({id:item.id,excerpt});}
+ return{query:phrase,matches};
 }
 function getConversation_(owner,id){if(!/^[a-zA-Z0-9-]{20,60}$/.test(id||''))throw Error('会話IDが無効です。');const conversation=rows_('Conversations').find(r=>r[0]===id&&r[1]===owner);if(!conversation)throw Error('この会話は見つかりません。');const messages=rows_('Messages').filter(r=>r[1]===owner&&r[2]===id).slice(-100).map(r=>({role:r[3],text:r[4],sources:JSON.parse(r[6]||'[]')}));return {id:id,title:conversation[2],context:JSON.parse(conversation[5]||'{}'),messages:messages,archived:archivedConversationIds_(owner).has(id)};}
 function cleanSources_(raw){
