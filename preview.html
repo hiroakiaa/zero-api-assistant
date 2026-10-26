@@ -24,6 +24,8 @@
 .result-notes{margin:12px 0;border:1px solid var(--line);border-radius:10px;padding:0 12px;color:#b9b9c2}.result-notes summary{cursor:pointer;padding:12px 0;min-height:44px;font-size:12px}.result-notes summary:focus-visible{outline:2px solid #b9b9c7;outline-offset:2px}.result-notes[open] summary{border-bottom:1px solid var(--line)}.result-notes p{margin:10px 0;line-height:1.8}
 
 .connection-retry{min-height:44px;flex-shrink:0;white-space:nowrap;border:1px solid #383840;border-radius:9px;background:#25252d;padding:6px 9px;font-size:11px}
+
+.element-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;margin:10px 0 14px}.element-table caption{text-align:left;color:#a1a1b0;font-size:10px;margin-bottom:7px}.element-table th,.element-table td{padding:9px 6px;border-bottom:1px solid #363640;overflow-wrap:anywhere;vertical-align:top}.element-table th{font-weight:500;text-align:left}.element-table th:first-child{width:44%}.element-table td{text-align:right}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -535,16 +537,19 @@ function createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows,no
 const elementsURL='https://pubchem.ncbi.nlm.nih.gov/rest/pug/periodictable/JSON';
 const elementJapanese={水素:1,ヘリウム:2,リチウム:3,ベリリウム:4,ホウ素:5,炭素:6,窒素:7,酸素:8,フッ素:9,ネオン:10,ナトリウム:11,マグネシウム:12,アルミニウム:13,ケイ素:14,リン:15,硫黄:16,塩素:17,アルゴン:18,カリウム:19,カルシウム:20,鉄:26,コバルト:27,ニッケル:28,銅:29,亜鉛:30,銀:47,白金:78,金:79,水銀:80,鉛:82,ニホニウム:113,オガネソン:118};
 function elementQuery(value){const text=typeof value==='string'?value.normalize('NFKC').trim():'';if(!text||text.length>40||! /^(?:[A-Za-z]+|[\p{Script=Han}\p{Script=Katakana}ー]+|\d{1,3})$/u.test(text))throw Error('元素記号・英語名・登録済み日本語名・原子番号で指定してください。例：元素:Au');if(/^\d+$/.test(text)&&(Number(text)<1||Number(text)>118))throw Error('原子番号は1〜118で指定してください。');return text;}
+function elementQueries(value){const items=Array.isArray(value)?value:typeof value==='string'?value.normalize('NFKC').split(/\s+and\s+|と|[、,]/i):[];if(!items.length||items.length>3)throw Error('比較する元素は1〜3件で指定してください。例：元素:Au,Ag,Cu');return items.map(elementQuery);}
+function elementContextQueries(context){const numbers=context.elementNumbers??[context.elementNumber];if(!Array.isArray(numbers)||!numbers.length||numbers.length>3||!numbers.every(n=>Number.isSafeInteger(n)&&n>=1&&n<=118)||new Set(numbers).size!==numbers.length)throw Error('比較中の元素を確認できません。元素名をもう一度指定してください。');return numbers.map(String);}
 function parseElements(raw,context={}){
  const text=raw.normalize('NFKC').trim().replace(/[。?？]$/,'');
  if(/^(?:本|書籍|ブック|論文|文献|学術|学術検索|検索|知識|辞書|翻訳|文章|コード)[：:\s]/.test(text))return[];
- const prefix=text.match(/^元素[：:]\s*(.*)$/),number=text.match(/^原子番号\s*(\d{1,3})\s*の元素(?:は|を教えて)?$/),natural=text.match(/^(.{1,40}?)の(原子番号|元素記号|原子質量|原子量)(?:は(?:何)?(?:ですか)?|を教えて(?:ください)?)?$/);
+ const prefix=text.match(/^元素[：:]\s*(.*)$/),number=text.match(/^原子番号\s*(\d{1,3})\s*の元素(?:は|を教えて)?$/),natural=text.match(/^(.{1,124}?)の(原子番号|元素記号|原子質量|原子量)(?:は(?:何)?(?:ですか)?|を教えて(?:ください)?)?$/);
  let query=prefix?.[1]??number?.[1]??natural?.[1],focus=natural?(natural[2]==='原子番号'?'number':natural[2]==='元素記号'?'symbol':'mass'):'all';
+ try{
  if(query===undefined&&context.intent==='elements'){
-  const follow=text.match(/^(原子番号|元素記号|原子質量|原子量)(?:は|も)?$/);if(follow){query=String(context.elementNumber);focus=follow[1]==='原子番号'?'number':follow[1]==='元素記号'?'symbol':'mass';}
-  const other=text.match(/^(.{1,40}?)(?:なら|は)$/);if(!follow&&other&&(Object.hasOwn(elementJapanese,other[1])||/^(?:[A-Z][a-z]?|[a-z]{1,2}|\d{1,3})$/.test(other[1]))){query=other[1];focus=context.elementFocus||'all';}
+  const follow=text.match(/^(原子番号|元素記号|原子質量|原子量)(?:は|も)?$/);if(follow){query=elementContextQueries(context);focus=follow[1]==='原子番号'?'number':follow[1]==='元素記号'?'symbol':'mass';}
+  const other=text.match(/^(.{1,124}?)(?:なら|は)$/);if(!follow&&other){const candidates=other[1].split(/\s+and\s+|と|[、,]/i).map(item=>item.trim());if(candidates.every(item=>Object.hasOwn(elementJapanese,item)||/^(?:[A-Z][a-z]?|[a-z]{1,2}|\d{1,3})$/.test(item))){query=candidates;focus=context.elementFocus||'all';}}
  }
- if(query===undefined)return[];try{return[{kind:'elements',query:elementQuery(query),focus}];}catch(error){return[{kind:'elements',error:error.message}];}
+ if(query===undefined)return[];const queries=elementQueries(query);return[{kind:'elements',...(queries.length===1?{query:queries[0]}:{queries}),focus}];}catch(error){return[{kind:'elements',error:error.message}];}
 }
 function elementRows(raw){
  const columns=raw?.Table?.Columns?.Column,rows=raw?.Table?.Row,required=['AtomicNumber','Symbol','Name','AtomicMass'];
@@ -558,12 +563,18 @@ function elementRows(raw){
 }
 function findElement(rows,input){const query=elementQuery(input);if(/^\d+$/.test(query))return rows.find(row=>row.number===Number(query));if(Object.hasOwn(elementJapanese,query))return rows.find(row=>row.number===elementJapanese[query]);return rows.find(row=>row.symbol===query||/^[a-z]{1,2}$/.test(query)&&row.symbol.toLowerCase()===query||row.name.toLowerCase()===query.toLowerCase());}
 function createElementsHandler({getJSON,cloud,el,p,source,state,follows}){return async(task,body)=>{
- if(task.error)throw Error(task.error);const query=elementQuery(task.query);if(!cloud.available)throw Error('元素検索は共有の照会間隔を守るため、GAS接続版で利用できます。');
- const result=await getJSON(elementsURL,21600000),row=findElement(elementRows(result.data),query);if(!row){p(body,'一致する元素がありません。元素記号か英語名で指定してください。例：元素:Au');return;}
+ if(task.error)throw Error(task.error);const queries=elementQueries(task.queries??task.query);if(!cloud.available)throw Error('元素検索は共有の照会間隔を守るため、GAS接続版で利用できます。');
  const focus=task.focus||'all';if(!['all','number','symbol','mass'].includes(focus))throw Error('元素の表示項目を確認してください。');
- body.append(el('h3',row.symbol+' · '+row.name));const card=el('div',undefined,'result-card');if(focus==='all'||focus==='number')p(card,'原子番号：'+row.number);if(focus==='all'||focus==='symbol')p(card,'元素記号：'+row.symbol);if(focus==='all'||focus==='mass'){p(card,'掲載原子質量（PubChem）：'+(row.mass?row.mass+' u':'未収録'));p(card,'PubChemのAtomicMass欄です。標準原子量や特定の同位体の精密質量と同一とは限りません。','sub');}body.append(card);
+ const result=await getJSON(elementsURL,21600000),tableRows=elementRows(result.data),matches=queries.map(query=>findElement(tableRows,query)),missing=queries.filter((_,i)=>!matches[i]);if(missing.length){p(body,'「'+missing.join('」「')+'」に一致する元素がありません。元素記号か英語名で指定してください。例：元素:Au');return;}
+ const rows=matches.filter((row,i)=>matches.findIndex(other=>other.number===row.number)===i),massNote='PubChemのAtomicMass欄です。標準原子量や特定の同位体の精密質量と同一とは限りません。';
+ if(rows.length===1){const row=rows[0];body.append(el('h3',row.symbol+' · '+row.name));const card=el('div',undefined,'result-card');if(focus==='all'||focus==='number')p(card,'原子番号：'+row.number);if(focus==='all'||focus==='symbol')p(card,'元素記号：'+row.symbol);if(focus==='all'||focus==='mass'){p(card,'掲載原子質量（PubChem）：'+(row.mass?row.mass+' u':'未収録'));p(card,massNote,'sub');}body.append(card);}
+ else{
+  body.append(el('h3','元素の比較'));const table=el('table',undefined,'element-table'),caption=el('caption','指定した'+rows.length+'元素（入力順）'),head=el('thead'),heading=el('tr'),labels=['元素（記号・英語名）',...(focus==='all'||focus==='number'?['原子番号']:[]),...(focus==='symbol'?['元素記号']:[]),...(focus==='all'||focus==='mass'?['掲載原子質量（u）']:[])];
+  for(const label of labels){const th=el('th',label);th.scope='col';heading.append(th);}head.append(heading);table.append(caption,head);const tbody=el('tbody');for(const row of rows){const tr=el('tr'),identity=el('th',row.symbol+' · '+row.name);identity.scope='row';tr.append(identity);if(focus==='all'||focus==='number')tr.append(el('td',String(row.number)));if(focus==='symbol')tr.append(el('td',row.symbol));if(focus==='all'||focus==='mass')tr.append(el('td',row.mass||'未収録'));tbody.append(tr);}table.append(tbody);body.append(table);if(focus==='all'||focus==='mass')p(body,massNote,'sub');
+ }
+ if(rows.length<queries.length)p(body,'同じ元素の別表記は1件にまとめています。','sub');
  source(body,'PubChem · 周期表',elementsURL,result);source(body,'NCBI · 利用方針・免責・著作権','https://www.ncbi.nlm.nih.gov/home/about/policies/');
- state.context={...state.context,intent:'elements',pending:null,elementNumber:row.number,elementFocus:focus};follows(body,['原子番号は？','元素記号は？','原子質量は？']);
+ state.context={...state.context,intent:'elements',pending:null,elementNumber:rows.length===1?rows[0].number:null,elementNumbers:rows.map(row=>row.number),elementFocus:focus};follows(body,['原子番号は？','元素記号は？','原子質量は？']);
 };}
 
 const cities = [
@@ -1859,7 +1870,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
  const articleChoice=/^(?:ニュースの)?\d+(?:番(?:目)?|件目)(?:の記事)?(?:を|の)?(?:詳しく|詳細)[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||(follow.test(part)||articleChoice.test(part))&&(index>0||recognize(part,context).length)))return parts;
  return [text];
@@ -1881,7 +1892,7 @@ const FEATURE_CATALOG=[
  {id:'quakes',category:'life',title:'地震の公開記録',description:'重要地震の期間指定と、過去24時間のM4.5以上の記録。',query:'日本周辺の過去24時間のM4.5以上の地震',tags:'じしん 防災 揺れ USGS マグニチュード 重要地震 過去7日 過去30日'},
  {id:'knowledge',category:'research',title:'百科事典',description:'候補から記事を選び、Wikipediaの冒頭原文を確認。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア 候補 選択 番号 詳しく',popular:true},
  {id:'species',category:'research',title:'生物の学名・分類',description:'日本語名や学名から候補を選び分類を確認。種・亜種・属・科で絞り込めます。',query:'猫の学名は？',tags:'生き物 いきもの 動物 植物 生物 学名 分類 ネコ GBIF 科 属 種 異名'},
- {id:'elements',category:'research',title:'元素の原子番号・記号',description:'118元素を記号・英語名・番号で照合。登録済み日本語名にも対応。',query:'金の原子番号は？',tags:'元素 周期表 原子番号 元素記号 原子質量 原子量 金 水素 Au PubChem'},
+ {id:'elements',category:'research',title:'元素の検索・比較',description:'118元素を記号・英語名・番号で照合し、3元素まで比較。',query:'金と銀と銅の原子番号は？',tags:'元素 周期表 原子番号 元素記号 原子質量 原子量 金 水素 Au PubChem'},
  {id:'chemistry',category:'research',title:'化合物の分子式・モル質量',description:'PubChemの名前検索から基礎データを確認。GAS版で利用。',query:'カフェインの分子式は？',tags:'化学 かがく 化合物 分子式 化学式 分子量 モル質量 カフェイン 水 PubChem IUPAC'},
  {id:'molarConversion',category:'tools',title:'質量とモルを換算',description:'化合物のモル質量を確認してg・mg・molなどを換算。複数候補は選択。',query:'カフェインの分子式は？。10gは何モル？',tags:'化学 物質量 質量 モル mol mmol マイクロモル グラム g mg kg 計算 換算 PubChem'},
  {id:'nearby',category:'life',title:'地点の周辺の記事を探す',description:'座標付きの百科事典記事を距離順に表示。施設・営業情報の一覧ではありません。',query:'周辺記事: 京都駅',tags:'周辺 地理 散策 場所 地点 近く 京都 駅 半径 距離 Wikipedia'},
