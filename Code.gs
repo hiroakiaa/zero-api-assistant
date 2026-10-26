@@ -138,7 +138,7 @@ function validateAPI_(url){
  }else if(host==='earthquake.usgs.gov'&&/^\/earthquakes\/feed\/v1\.0\/summary\/(?:significant_(?:hour|day|week|month)|4\.5_day)\.geojson$/.test(path)){provider='quakes';allowed=[];
  }else if(host==='earthquake.usgs.gov'&&path==='/fdsnws/event/1/query'){provider='quakes';allowed=['format','starttime','endtime','minmagnitude','eventtype','orderby','limit','minlatitude','maxlatitude','minlongitude','maxlongitude'];expected={format:'geojson',eventtype:'earthquake',orderby:'time',limit:'26'};validateQuakeHistoryParams_(params);
  }else if(host==='api.worldbank.org'&&path==='/v2/country'){provider='country';allowed=['format','per_page'];expected={format:'json',per_page:'400'};
- }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|SP\.DYN\.LE00\.IN|SL\.UEM\.TOTL\.NE\.ZS))?$/.test(path)){
+ }else if(host==='api.worldbank.org'&&/^\/v2\/country\/[A-Z]{3}(\/indicator\/(SP\.POP\.TOTL|NY\.GDP\.MKTP\.CD|NY\.GDP\.PCAP\.CD|NY\.GDP\.MKTP\.KD\.ZG|SP\.DYN\.LE00\.IN|SL\.UEM\.TOTL\.NE\.ZS))?$/.test(path)){
   provider='country';
   if(!path.includes('/indicator/')){allowed=['format'];expected={format:'json'};}
   else if(path.endsWith('/SP.POP.TOTL')&&params.mrv==='1'&&!params.source){allowed=['format','mrv','per_page'];expected={format:'json',mrv:'1',per_page:'1'};}
@@ -173,6 +173,7 @@ function fetchAPI_(url){
  if(provider==='country'&&/^https:\/\/api\.worldbank\.org\/v2\/country\?/i.test(url)){if(!Array.isArray(data)||data.length!==2||!Array.isArray(data[1])||data[1].length>400)throw Error('国一覧の応答形式が正しくありません。');data=[data[0],data[1].map(row=>({id:row?.id,iso2Code:row?.iso2Code,name:row?.name,region:{id:row?.region?.id}}))];}
  if(quakeHistory)data=leanQuakeHistory_(data,url,status===204);
  if(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?'))validateUnemployment_(data,url);
+ if(provider==='country'&&url.includes('/NY.GDP.MKTP.KD.ZG?'))validateGDPGrowth_(data,url);
  if(provider==='geocoding')data=leanGeocoding_(data);
  if(provider==='chemistry')data=url.endsWith('/periodictable/JSON')?leanElements_(data):leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
  if(provider==='species'){data=leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
@@ -241,4 +242,11 @@ function validateUnemployment_(data,url){
  const code=url.match(/\/country\/([A-Z]{3})\//)[1],date=url.match(/[?&]date=([^&]+)/),years=date?decodeURIComponent(date[1]).split(':').map(Number):[1960,new Date(Date.now()+9*3600000).getUTCFullYear()],from=years[0],to=years[1]??years[0],limit=/[?&]per_page=20(?:&|$)/.test(url)?20:1;
  if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Array.isArray(data[1])||data[1].length>limit||data[0].total!==data[1].length)throw Error('失業率の応答件数・形式を確認できませんでした。');
  const seen=new Set();for(const row of data[1]){const year=Number(row?.date);if(row?.countryiso3code!==code||row?.indicator?.id!=='SL.UEM.TOTL.NE.ZS'||!/^\d{4}$/.test(row.date)||year<from||year>to||seen.has(year)||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0||row.value>100))throw Error('失業率の国・系列・年・百分率が指定条件と一致しません。');seen.add(year);}
+}
+
+function validateGDPGrowth_(data,url){
+ if(Array.isArray(data)&&data.length===2&&data[0]?.total===0&&data[0]?.pages===0&&data[1]===null)return;
+ const code=url.match(/\/country\/([A-Z]{3})\//)[1],date=url.match(/[?&]date=([^&]+)/),years=date?decodeURIComponent(date[1]).split(':').map(Number):[1960,new Date(Date.now()+9*3600000).getUTCFullYear()],from=years[0],to=years[1]??years[0],limit=/[?&]per_page=20(?:&|$)/.test(url)?20:1;
+ if(!Array.isArray(data)||data.length!==2||data[0]?.page!==1||data[0]?.pages!==1||!Array.isArray(data[1])||data[1].length>limit||data[0].total!==data[1].length)throw Error('GDP成長率の応答件数・形式を確認できませんでした。');
+ const seen=new Set();for(const row of data[1]){const year=Number(row?.date);if(row?.countryiso3code!==code||row?.indicator?.id!=='NY.GDP.MKTP.KD.ZG'||!/^\d{4}$/.test(row.date)||year<from||year>to||seen.has(year)||row.value!==null&&(typeof row.value!=='number'||!Number.isFinite(row.value)))throw Error('GDP成長率の国・系列・年・百分率が指定条件と一致しません。');seen.add(year);}
 }
