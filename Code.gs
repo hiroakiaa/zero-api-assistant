@@ -126,6 +126,7 @@ function validateAPI_(url){
   provider='weather';allowed=path.includes('/sunrise/')?['lat','lon','date','offset']:['lat','lon'];
   if(!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lat||'')||Math.abs(Number(params.lat))>90||!Number.isFinite(Number(params.lon))||Math.abs(Number(params.lon))>180||!/^-?\d{1,3}(\.\d{1,4})?$/.test(params.lon||''))throw Error('天気の座標が無効です。');
   if(path.includes('/sunrise/')){const day=new Date(params.date+'T00:00:00Z'),offset=params.offset||'',minutes=(Number(offset.slice(1,3))*60+Number(offset.slice(4,6)))*(offset[0]==='-'?-1:1);if(!/^20\d{2}-\d{2}-\d{2}$/.test(params.date||'')||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==params.date||!/^[-+]\d{2}:[0-5]\d$/.test(offset)||!Number.isInteger(minutes)||minutes<-720||minutes>900||offset==='-00:00')throw Error('天文の検索条件が無効です。');}
+ }else if(host==='api.frankfurter.dev'&&path==='/v2/rates'){provider='currency';allowed=['base','quotes','from','to'];currencySeriesParams_(params);
  }else if(host==='api.frankfurter.dev'&&/^\/v2\/rate\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)\/(usd|eur|jpy|gbp|cny|krw|aud|cad|chf)$/.test(path)){provider='currency';allowed=['date'];
   if(Object.prototype.hasOwnProperty.call(params,'date')){const value=params.date,date=new Date(value+'T00:00:00Z'),today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==value||value<'1948-01-01'||value>today)throw Error('為替の日付が無効です。');}
  }else if(host==='ja.wikipedia.org'&&path==='/w/api.php'&&params.list==='geosearch'){
@@ -204,6 +205,17 @@ function releasePublicFetch_(flight){
  try{const props=PropertiesService.getScriptProperties(),leases=readPublicFetchLeases_(props.getProperty('PUBLIC_FETCH_LEASES'));if(leases[flight.key]?.token===flight.token){delete leases[flight.key];props.setProperties({PUBLIC_FETCH_LEASES:JSON.stringify(leases)});}}
  catch{}finally{lock.releaseLock();}
 }
+function currencySeriesParams_(params){
+ const codes=['USD','EUR','JPY','GBP','CNY','KRW','AUD','CAD','CHF'],today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);
+ if(!codes.includes(params.base)||!codes.includes(params.quotes)||params.base===params.quotes)throw Error('為替推移の通貨ペアが無効です。');
+ for(const key of ['from','to']){const value=params[key],d=new Date(value+'T00:00:00Z');if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==value||value<'1948-01-01'||value>today)throw Error('為替推移の日付が無効です。');}
+ const days=(Date.parse(params.to)-Date.parse(params.from))/86400000+1;if(!Number.isInteger(days)||days<1||days>31)throw Error('為替推移は1〜31日間で指定してください。');return days;
+}
+function leanCurrencySeries_(data,url){
+ const params={};url.slice(url.indexOf('?')+1).split('&').forEach(pair=>{const i=pair.indexOf('=');params[decodeURIComponent(pair.slice(0,i))]=decodeURIComponent(pair.slice(i+1));});const days=currencySeriesParams_(params);
+ if(!Array.isArray(data)||data.length>days)throw Error('為替推移の応答件数が無効です。');const seen=new Set();
+ return data.map(row=>{const date=row?.date,d=new Date(date+'T00:00:00Z');if(row?.base!==params.base||row?.quote!==params.quotes||typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==date||date<params.from||date>params.to||seen.has(date)||typeof row.rate!=='number'||!Number.isFinite(row.rate)||row.rate<=0)throw Error('為替推移の通貨・日付・重複・レートが不正です。');seen.add(date);return {date,base:row.base,quote:row.quote,rate:row.rate};});
+}
 function fetchAPI_(url){
  const provider=validateAPI_(url);const enabled=rows_('Providers').find(r=>r[0]===provider);if(!enabled||String(enabled[2]).toLowerCase()==='false')throw Error('このAPIは管理者が停止しています。');
  const quakeHistory=url.startsWith('https://earthquake.usgs.gov/fdsnws/event/1/query?'),rangeJSON=provider==='country'&&/[?&]per_page=20(?:&|$)/.test(url),cache=CacheService.getScriptCache(),key='api:'+(provider==='country'&&url.includes('/SL.UEM.TOTL.NE.ZS?')?'unemployment-v73:':provider==='quakes'?(quakeHistory?'quakes-history-v71:':'quakes-v43:'):provider==='news'?'news-v49:':provider==='geocoding'?'geocoding-v60:':provider==='chemistry'?'chemistry-v65:':'')+hash_(url),hit=cache.get(key);if(hit){const stored=JSON.parse(hit);if(rangeJSON&&stored.dataJSON===undefined){stored.dataJSON=JSON.stringify(stored.data);delete stored.data;}return Object.assign(stored,{cache:true});}
@@ -229,6 +241,7 @@ function fetchAPI_(url){
  if(provider==='country'&&url.includes('/NY.GDP.MKTP.KD.ZG?'))validateGDPGrowth_(data,url);
  if(provider==='country'&&url.includes('/FP.CPI.TOTL.ZG?'))validateInflation_(data,url);
  if(provider==='country'&&url.includes('/AG.LND.FRST.ZS?'))validateForest_(data,url);
+ if(provider==='currency'&&url.startsWith('https://api.frankfurter.dev/v2/rates?'))data=leanCurrencySeries_(data,url);
  if(provider==='geocoding')data=leanGeocoding_(data);
  if(provider==='chemistry')data=url.endsWith('/periodictable/JSON')?leanElements_(data):leanChemistry_(data,/\/name\//.test(url)?null:url.match(/\/cid\/([^/]+)\/property\//)[1].split(',').map(Number));
  if(provider==='species'){data=/\/synonyms\?/.test(url)?leanSpeciesSynonyms_(data,Number(url.match(/\/species\/(\d+)/)[1]),Number(url.match(/[?&]offset=(\d+)/)[1])):leanSpecies_(data,/\/species\/search\?/.test(url)?null:Number(url.match(/\/species\/(\d+)/)[1]));const rank=url.match(/[?&]rank=([^&]*)/);if(rank&&data.results.some(row=>row.rank!==decodeURIComponent(rank[1])))throw Error('指定した階級と検索結果が一致しません。');}
