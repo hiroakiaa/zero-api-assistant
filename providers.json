@@ -103,5 +103,12 @@
     "enabled": true,
     "license": "無償公開・公平利用・OSM ODbL・共有照会間隔とキャッシュ",
     "source_url": "https://photon.komoot.io/"
+  },
+  {
+    "id": "species",
+    "name": "GBIF Backbone Taxonomy",
+    "enabled": true,
+    "license": "無認証の公開API・GBIF Secretariat (2023)・CC BY 4.0・分類の項目のみ抜粋",
+    "source_url": "https://doi.org/10.15468/39omei"
   }
 ]
