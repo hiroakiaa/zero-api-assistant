@@ -161,3 +161,7 @@ PC用の `--check` 診断モードはOllamaのローカルversion/tagsと、同�
 ## Operator one-request local measurement
 
 The optional `CloudServer.mjs --measure` command uses only the existing authenticated loopback bridge and Ollama's loopback `/api/ps`. It sends one fixed non-personal prompt with empty history through the existing generation slot; it does not send conversation data to Google or external APIs. Only approved general-model metadata, duration, Unicode character count and completion state appear in the report. Answer text, credentials, unrelated loaded models and raw upstream errors are omitted. No automatic measurement, download, permission change or network exposure is added. Model loading and existing five-minute retention can occur. A memory snapshot and one request do not certify GPU execution, service capacity, security or answer quality.
+
+## World Bank / FAOの森林率
+
+2026-10-26に公式メタデータで定義・FAO FAOSTAT由来・CC BY 4.0を確認しました。`AG.LND.FRST.ZS`だけを既存World Bank API許可リストへ加え、source=2、最大3か国、単年または20年以内、既存24時間キャッシュと取得保護上限を使います。APIキー・アカウント・課金・Google権限の追加はありません。国・系列・年・件数・重複と0〜100%をキャッシュ前と表示時に検証します。森林率を面積や伐採量へ換算せず、未収録は補間しません。UIとCSVにFAO / World Bankの出典・定義・CC BY 4.0を表示します。公式資料：https://api.worldbank.org/v2/indicator/AG.LND.FRST.ZS?format=json 、https://databank.worldbank.org/metadataglossary/world-development-indicators/series/AG.LND.FRST.ZS 。
