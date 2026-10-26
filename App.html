@@ -50,6 +50,8 @@
 .unsaved-actions button{min-height:44px}
 
 .message.user{flex-direction:column;align-items:flex-end}.question-return{max-width:85%;display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-top:5px}.question-return-button{min-height:44px;border:1px solid #383840;border-radius:10px;background:#19191e;color:#b5b5c1;padding:8px 12px;font-size:11px}.question-return-note{font-size:10px;line-height:1.7;color:#aaaab6;text-align:right;overflow-wrap:anywhere}.question-return-note:empty{display:none}
+
+.book-subject-actions button{min-height:44px;max-width:100%;text-align:left;overflow-wrap:anywhere}
 </style></head><body>
 <header class="app-header"><a class="brand" href="./">ZERO<span>無料API＋端末内AI</span></a><div class="header-tools"><span id="cloud-status" role="status">接続を確認中</span><button id="discover-open" class="icon-button" aria-label="できること" title="できること">▤</button><button id="history-open" class="icon-button" aria-label="会話履歴" title="会話履歴">◷</button><button id="about-top" class="icon-button" aria-label="設定と仕組み">☷</button></div></header>
 <div class="workspace"><aside class="sidebar"><div class="side-heading"><small>Talk 相談する</small><h1>何を調べますか？</h1></div><button id="reset" class="new-chat">＋ 新しい会話</button><div class="side-label">試してみる</div><div class="side-examples"><button data-ask="東京と大阪の明日の天気を比較して">明日の天気を比べる ↗</button><button data-ask="100ユーロは何円？">旅先のお金を換算する ↗</button><button data-ask="オーロラとは？">気になることを調べる ↗</button><button data-ask="次の祝日は？">次の祝日を調べる ↗</button><button data-ask="計算: (1280 + 980) × 1.1">計算してみる ↗</button><button data-ask="パリと東京は今何時？">世界の時刻を調べる ↗</button></div><div class="sidebar-bottom"><p>有料APIの接続 <strong>0件</strong></p><small>必要なデータをAPIから取得。<br>計算と条件整理で答えをつくります。</small><button id="export" class="text-button">会話をテキスト保存 ↓</button><button id="about" class="text-button">接続先と仕組み</button></div></aside>
@@ -256,7 +258,35 @@ function showTranscriptExport(messages,{busy=false,doc=document,download=downloa
  choose.addEventListener('click',()=>{if(!content)return;try{select(preview);status.textContent='文章を選択しました。コピー操作（Ctrl+C / ⌘C）でコピーできます。';}catch{status.textContent='文章を長押し・ドラッグして選択し、コピーしてください。';}});actions.append(save,choose);dialog.append(actions,status,preview);dialog.addEventListener('close',()=>dialog.remove(),{once:true});doc.body.append(dialog);dialog.showModal();return dialog;
 }
 
-const bookFields={q:'キーワード',title:'書名',author:'著者名'};
+const bookSubjectLimits={subjects:12,subject_places:8,subject_people:8,subject_times:8};
+function bookSubjectRecord(data,id){
+ if(!/^OL[1-9]\d{0,11}W$/.test(id)||data?.key!=='/works/'+id||typeof data.title!=='string'||!data.title.trim()||data.title.length>500)throw Error('選んだ作品と主題データのID・書名が一致しません。');
+ if(data.counts!==undefined&&(!data.counts||typeof data.counts!=='object'||Array.isArray(data.counts)||Object.keys(data.counts).length!==4||Object.keys(data.counts).some(field=>!Object.hasOwn(bookSubjectLimits,field))))throw Error('作品の主題件数を確認できませんでした。');
+ const result={key:data.key,title:data.title,counts:{}};
+ for(const [field,limit] of Object.entries(bookSubjectLimits)){
+  const raw=data[field]??[];if(!Array.isArray(raw)||raw.length>2000||raw.some(v=>typeof v!=='string'||!v.trim()||v.length>300||/[\u0000-\u001f\u007f]/.test(v)))throw Error('作品の主題項目の形式を確認できませんでした。');
+  const values=[...new Set(raw.map(v=>v.trim()))],total=data.counts?.[field]??values.length;
+  if(!Number.isInteger(total)||total<values.length||total>2000||data.counts&&raw.length>limit)throw Error('作品の主題件数を確認できませんでした。');
+  result[field]=values.slice(0,limit);result.counts[field]=total;
+ }
+ return result;
+}
+async function showBookSubjects(task,body,{getJSON,el,p,link,source,state,follows}){
+ const url='https://openlibrary.org/works/'+task.workId+'.json',result=await getJSON(url,86400000),work=bookSubjectRecord(result.data,task.workId);
+ body.append(el('h3',task.number+'冊目の主題・分野'),el('h3',work.title));
+ const labels={subjects:'主題・分野',subject_places:'関連する場所',subject_people:'関連する人物・登場人物',subject_times:'関連する時代'};
+ for(const [field,label] of Object.entries(labels)){
+  body.append(el('h4',label));if(!work[field].length){p(body,'未収録');continue;}
+  const list=el('ul');for(const value of work[field])list.append(el('li',value));body.append(list);
+  if(work.counts[field]>work[field].length)p(body,`登録${work.counts[field]}件のうち先頭${work[field].length}件を表示しています。`,'sub');
+ }
+ p(body,'提供元の登録主題を原文で表示しています。自動生成した要約・あらすじや、版ごとの内容・本文の公開状況ではありません。分類には表記揺れや重複があり、内容を保証するものではありません。');
+ const usable=work.subjects.filter(value=>value.length<=80).slice(0,5);if(usable.length){p(body,'同じ主題から本を探す');const actions=el('div',undefined,'followups book-subject-actions');for(const subject of usable){const button=el('button',subject);button.type='button';button.dataset.ask='主題検索: '+subject;actions.append(button);}body.append(actions);}
+ source(body,'Open Library · 作品の主題',url,result);body.append(link('作品の登録情報を見る','https://openlibrary.org/works/'+task.workId));
+ state.context={...state.context,intent:'books',bookView:'subjects',bookWorkId:task.workId,bookSelection:null};follows(body,['本の候補に戻る',...(!state.context.booksExhausted&&state.context.page<5?['本の続き']:[])]);
+}
+
+const bookFields={q:'キーワード',title:'書名',author:'著者名',subject:'主題'};
 const bookSearchFields='key,title,author_name,first_publish_year,editions,editions.key,editions.title,editions.isbn';
 function selectedBookCandidates(context){
  const list=context.bookCandidates,page=context.page;
@@ -265,10 +295,12 @@ function selectedBookCandidates(context){
 }
 const bookError=error=>[{kind:'books',error}];
 function parseBookTasks(raw,context={}){
- const text=raw.normalize('NFKC').trim(),clean=text.replace(/[。？?]+$/,'');let match=clean.match(/^(書名検索|著者検索)[：:]\s*(.*)$/);
- if(match){const query=match[2].trim();if(!query||query.length>80)return bookError('検索語は1〜80文字で指定してください。');return [{kind:'books',query,field:match[1]==='書名検索'?'title':'author'}];}
+ const text=raw.normalize('NFKC').trim(),clean=text.replace(/[。？?]+$/,'');let match=clean.match(/^(書名検索|著者検索|主題検索)[：:]\s*(.*)$/);
+ if(match){const query=match[2].trim();if(!query||query.length>80)return bookError('検索語は1〜80文字で指定してください。');return [{kind:'books',query,field:match[1]==='書名検索'?'title':match[1]==='主題検索'?'subject':'author'}];}
  match=text.match(/^(?:本|書籍|ブック)[：:]\s*(.*)$/);if(match){const query=match[1].replace(/[。？?]$/,'').trim();if(!query||query.length>80)return bookError('検索語は1〜80文字で指定してください。');return [{kind:'books',query}];}
  if(/^(?:論文|文献|検索|知識|調べる|辞書|学術検索|学術|Crossref|周辺記事|文章|翻訳|要約|コード)[：:\s]/.test(text))return [];
+ const subjectChoice=clean.match(/^(?:本の)?(\d+)(?:冊目|番(?:目)?)(?:の)?(?:主題|分野|テーマ)(?:を(?:確認|教えて|表示))?$/),subjectStable=clean.match(/^本の主題[：:]\s*(OL[1-9]\d{0,11}W)$/);
+ if(subjectChoice||subjectStable){if(!(context.intent==='books'||context.intent==='isbn'&&context.bookSelection))return bookError('先に本を検索して、表示中の候補から主題を選んでください。');try{const list=selectedBookCandidates(context),candidate=list.find(v=>subjectStable?v.workId===subjectStable[1]:v.number===Number(subjectChoice[1]));if(!candidate)return bookError('現在のページにある本の主題を選んでください。以前のページのボタンは使えません。');return [{kind:'books',mode:'subjects',workId:candidate.workId,number:candidate.number}];}catch(error){return bookError(error.message);}}
  const choice=clean.match(/^(?:本の)?(\d+)(?:冊目|番(?:目)?)(?:の(?:本|版))?(?:を|の)?(?:詳しく|詳細|版を詳しく)$/),stable=clean.match(/^本の候補[：:]\s*(.*)$/),session=context.intent==='books'||context.intent==='isbn'&&context.bookSelection;
  if(choice||stable){if(!session)return stable||/^(?:本の|\d+冊目)/.test(clean)?bookError('先に本を検索して、表示中の候補から選んでください。'):[];try{const candidates=selectedBookCandidates(context),candidate=stable?candidates.find(v=>v.workId===stable[1]):candidates.find(v=>v.number===Number(choice[1]));if(!candidate)return bookError('現在のページにある番号から選んでください。以前のページのボタンは使えません。');if(!candidate.editionId||!candidate.isbn)return bookError('この候補の版には、照合できるISBNが1件に定まりません。作品リンクで版を確認し、ISBNを指定してください。');return [{kind:'isbn',isbn:candidate.isbn,bookSelection:{...candidate}}];}catch(error){return bookError(error.message);}}
  if(session&&/^(?:本の候補に戻る|候補に戻る)$/.test(clean)){try{selectedBookCandidates(context);return [{kind:'books',query:context.query,page:context.page,...(context.bookField&&context.bookField!=='q'?{field:context.bookField}:{})}];}catch(error){return bookError(error.message);}}
@@ -282,7 +314,7 @@ function parseBookTasks(raw,context={}){
   const page=context.page??1;if(!Number.isInteger(page)||page<1||page>=5)return bookError('書籍検索は5ページまでです。別の検索語で探してください。');
   return [{kind:'books',query:context.query,page:page+1,...(context.bookField&&context.bookField!=='q'?{field:context.bookField}:{})}];
  }
- if(context.intent==='books'&&/^(?:書名|著者|キーワード)(?:検索)?(?:なら|では|にすると)$/.test(clean)){const field=clean.startsWith('書名')?'title':clean.startsWith('著者')?'author':'q';return [{kind:'books',query:context.query,...(field!=='q'?{field}:{})}];}
+ if(context.intent==='books'&&/^(?:書名|著者|主題|キーワード)(?:検索)?(?:なら|では|にすると)$/.test(clean)){const field=clean.startsWith('書名')?'title':clean.startsWith('著者')?'author':clean.startsWith('主題')?'subject':'q';return [{kind:'books',query:context.query,...(field!=='q'?{field}:{})}];}
  return [];
 }
 function bookSearchURL(task){
@@ -305,13 +337,14 @@ function bookSearchPage(data,page=1){
 }
 function createBooksHandler({getJSON,el,p,link,source,state,follows}){
  return async function books(task,body){
+  if(task.error)throw Error(task.error);if(task.mode==='subjects'){const candidate=selectedBookCandidates(state.context).find(v=>v.workId===task.workId&&v.number===task.number);if(!(state.context.intent==='books'||state.context.intent==='isbn'&&state.context.bookSelection)||!candidate)throw Error('現在の本の候補と主題の選択が一致しません。');return showBookSubjects(task,body,{getJSON,el,p,link,source,state,follows});}
   const url=bookSearchURL(task),page=task.page??1,field=task.field||'q',result=await getJSON(url,86400000),data=bookSearchPage(result.data,page);
   body.append(el('h3','「'+task.query+'」の本 · '+bookFields[field]+'検索 · '+page+'ページ目'));p(body,(data.exact?'一致件数':'参考一致件数')+'：'+new Intl.NumberFormat('ja-JP').format(data.count)+'件（提供元）');
   if(!data.books.length)p(body,page===1?'この条件の本は見つかりませんでした。別の表記や英語でも試してください。':'このページに表示できる候補はありません。検索結果は更新される場合があります。');
-  for(const [i,book]of data.books.entries()){const number=(page-1)*5+i+1,row=el('div',undefined,'wiki-result');row.append(link(number+'. '+book.title,'https://openlibrary.org/works/'+book.id));p(row,book.authors.length?book.authors.slice(0,3).join('、')+(book.authors.length>3?' ほか'+(book.authors.length-3)+'名':''):'著者：未収録');p(row,book.year===null?'初刊年：未収録・形式未確認':'初刊年（提供元）：'+book.year+'年');if(book.edition){p(row,'検索に対応する版：'+book.edition.title);if(book.edition.isbn){p(row,'この版のISBN：'+book.edition.isbn);const button=el('button',number+'冊目の版を詳しく','history-item');button.type='button';button.dataset.ask='本の候補:'+book.id;button.dataset.askLabel=number+'冊目の版を詳しく';row.append(button);}else p(row,'この版のISBNは未収録・無効、または複数の番号があります。作品リンクで確認してください。');}else p(row,'検索に対応する版の情報は未収録です。');body.append(row);}
-  p(body,'Open Libraryの作品単位の書誌です。版・翻訳・電子書籍の提供状況を示す一覧ではありません。検索は提供元の関連度順で、書名・著者名の完全一致や、本文を無料で読めることを保証しません。');source(body,'Open Library',url,result);
+  for(const [i,book]of data.books.entries()){const number=(page-1)*5+i+1,row=el('div',undefined,'wiki-result');row.append(link(number+'. '+book.title,'https://openlibrary.org/works/'+book.id));p(row,book.authors.length?book.authors.slice(0,3).join('、')+(book.authors.length>3?' ほか'+(book.authors.length-3)+'名':''):'著者：未収録');p(row,book.year===null?'初刊年：未収録・形式未確認':'初刊年（提供元）：'+book.year+'年');if(book.edition){p(row,'検索に対応する版：'+book.edition.title);if(book.edition.isbn){p(row,'この版のISBN：'+book.edition.isbn);const button=el('button',number+'冊目の版を詳しく','history-item');button.type='button';button.dataset.ask='本の候補:'+book.id;button.dataset.askLabel=number+'冊目の版を詳しく';row.append(button);}else p(row,'この版のISBNは未収録・無効、または複数の番号があります。作品リンクで確認してください。');}else p(row,'検索に対応する版の情報は未収録です。');const subjects=el('button',number+'冊目の主題を見る','history-item');subjects.type='button';subjects.dataset.ask='本の主題:'+book.id;subjects.dataset.askLabel=number+'冊目の主題';row.append(subjects);body.append(row);}
+  p(body,'Open Libraryの作品単位の書誌です。版・翻訳・電子書籍の提供状況を示す一覧ではありません。検索は提供元の関連度順で、検索語の完全一致や、本文を無料で読めることを保証しません。');source(body,'Open Library',url,result);
   p(body,'版の詳細は検索に対応する1版だけを照会します。すべての版・翻訳の一覧ではありません。表示中の番号で「○冊目の詳細」と入力できます。');
-  const exhausted=!data.hasMore;state.context={...state.context,intent:'books',query:task.query,page,bookField:field,booksExhausted:exhausted,bookSelection:null,bookCandidates:data.books.map((book,i)=>({number:(page-1)*5+i+1,workId:book.id,editionId:book.edition?.id||null,isbn:book.edition?.isbn||null}))};if(page===5&&data.hasMore)p(body,'表示は5ページ・25候補までです。別の検索語で絞り込めます。');if(!exhausted&&page<5)follows(body,['本の続き']);
+  const exhausted=!data.hasMore;state.context={...state.context,intent:'books',query:task.query,page,bookField:field,booksExhausted:exhausted,bookSelection:null,bookView:'search',bookWorkId:null,bookCandidates:data.books.map((book,i)=>({number:(page-1)*5+i+1,workId:book.id,editionId:book.edition?.id||null,isbn:book.edition?.isbn||null}))};if(page===5&&data.hasMore)p(body,'表示は5ページ・25候補までです。別の検索語で絞り込めます。');if(!exhausted&&page<5)follows(body,['本の続き']);
  };
 }
 
@@ -2319,6 +2352,7 @@ const FEATURE_CATALOG=[
  {id:'hourlyWeather',category:'life',title:'時間別の天気',description:'気温・直後1時間の降水量・平均風速を予報時点ごとに6件ずつ確認。',query:'東京の明日の時間別の天気',tags:'時間別 時間ごと 天気 気温 風速 降水量 予報 1時間'},
  {id:'moon',category:'research',title:'月の出・月の入り・月相角',description:'地点と年月日を指定。実際のイベント日と提供元の月相角を表示します。',query:'東京の2026-10-26の月の出',tags:'月 つき 月の出 月の入り 月没 月相 天文 月の満ち欠け'},
  {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
+ {id:'bookSubjects',category:'research',title:'本の主題から探す',description:'主題で書籍検索。検索候補から作品の主題・場所・人物・時代を確認できます。',query:'主題検索: Fantasy fiction',tags:'本 書籍 主題 分野 テーマ ジャンル OpenLibrary'},
  {id:'forest',category:'research',title:'国の森林率',description:'陸地に占める森林の割合を比較。年次推移・ポイント差・CSVにも対応。',query:'2020年の日本とブラジルの森林率',tags:'森林率 森林被覆率 森林 面積 割合 陸地 環境 FAO WorldBank 年次 統計 比較'},
  {id:'inflation',category:'research',title:'消費者物価上昇率（年次）',description:'国別の年次インフレ率を比較。推移と前年差をポイントで確認。',query:'2021年の日本とアメリカの物価上昇率',tags:'物価 インフレ率 インフレーション CPI 消費者物価 上昇率 年次 統計 デフレ 比較'},
  {id:'gdpGrowth',category:'research',title:'GDP成長率（実質・年次）',description:'国ごとの年指定・比較・推移。マイナス成長と成長率どうしのポイント差にも対応。',query:'2020年の日本とアメリカの実質GDP成長率',tags:'GDP 国内総生産 成長率 経済成長 実質 年次 マイナス 統計 比較 ポイント'},
@@ -2724,7 +2758,7 @@ async function time(task,body){
 }
 function calculation(task,body){body.append(el('h3','計算結果'));const card=el('div',undefined,'result-card');card.append(el('div',task.expression,'sub'),el('div',String(Number(calculate(task.expression).toPrecision(13))),'big'));body.append(card);p(body,'ブラウザ内で計算しました。% は100分の1、^ は累乗として扱います。');state.context={...state.context,intent:'calc'};}
 function help(body){body.append(el('h3','こんなふうに聞いてください'));p(body,'「できること」では、用途やキーワードから質問例を探せます。例を選ぶと、そのまま送信します。');const browse=el('button','できることを開く','history-item');browse.type='button';browse.addEventListener('click',openSkills);body.append(browse);follows(body,FEATURE_CATALOG.filter(item=>item.popular).slice(0,6).map(item=>item.query));}
-function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目':c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='businessDays'?' · '+(c.businessMode==='uk'?'英国 '+(Array.isArray(c.ukBusinessRegions)?c.ukBusinessRegions.map(id=>UK_REGIONS.find(r=>r.id===id)?.name).filter(Boolean).join(' / '):''):c.businessMode==='weekdays'?'土日のみ':'日本の祝日'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
+function updateContext(){const c=state.context;$('#context').hidden=!c.intent;$('#context').textContent=c.intent?`会話の条件：${names[c.intent]}${['weather','sun','moon'].includes(c.intent)?' · '+[...(c.places||[]).map(v=>v.name),c.intent==='sun'?c.sunDate:c.intent==='moon'?c.moonDate:c.weatherDate,c.intent==='weather'?(c.weatherFocus==='wind'?'風速':c.weatherFocus==='humidity'?'湿度':c.weatherFocus==='hourly'?'時間別 '+(c.weatherHourlyPage||1)+'ページ目':null):null].filter(Boolean).join(' / '):['countryStat','countryTrend'].includes(c.intent)?' · '+(c.statCountries||[]).map(v=>v.name).join(' / ')+(c.intent==='countryTrend'?' · '+c.trendFrom+'〜'+c.trendTo+'年':c.statYear?' · '+c.statYear+'年':' · 最新'):c.intent==='books'?' · '+(bookFields[c.bookField||'q']||'')+' · '+c.page+'ページ目'+(c.bookView==='subjects'?' · 主題・分野':''):c.intent==='news'?' · '+(newsFeeds[c.newsFeed]?.label||'')+' · '+c.newsPage+'ページ目'+(c.newsView==='detail'?' · 記事詳細':c.newsView==='missing'?' · 記事未収録':''):c.intent==='isbn'?' · '+(c.isbn||'')+' · '+({openbd:'openBD',openlibrary:'Open Library',none:'未収録'}[c.isbnSource||'openbd']||''):c.intent==='species'?' · '+(c.speciesQuery||'')+' · '+(c.speciesView==='synonyms'?'同義語 '+((c.speciesSynonymsPage||0)+1)+'ページ目':c.speciesView==='detail'?'分類詳細':((c.speciesPage||0)+1)+'ページ目'):c.intent==='businessDays'?' · '+(c.businessMode==='uk'?'英国 '+(Array.isArray(c.ukBusinessRegions)?c.ukBusinessRegions.map(id=>UK_REGIONS.find(r=>r.id===id)?.name).filter(Boolean).join(' / '):''):c.businessMode==='weekdays'?'土日のみ':'日本の祝日'):c.intent==='dateMath'?' · 参照日 '+(c.lastDate||'未指定'):c.intent==='dictionary'?' · '+(c.word||'')+' · '+(dictionaryParts[c.dictionaryPos||'all']||'')+' · '+(c.dictionaryView==='pronunciation'?'発音記号':(c.dictionaryPage||1)+'ページ目'):c.intent==='papers'?' · '+(c.paperYearFrom?c.paperYearFrom+'〜'+c.paperYearTo+'年':'年指定なし')+(c.paperOpenOnly?' · OAのみ':'')+' · '+(c.page||1)+'ページ目':c.intent==='quakes'?' · '+(c.quakeJapan?'日本周辺':'世界')+' · '+(quakePeriods[c.quakePeriod||'week']||'')+' · '+(c.quakeFeed==='4.5'?'M'+(c.quakeMinMag??4.5)+'以上':'重要地震')+' · '+(c.quakePage||1)+'ページ目':c.intent==='units'?` · ${c.unitAmount} ${c.unitFrom} → ${c.unitTo}`:c.intent==='currency'?` · ${c.base} → ${c.quote}${Array.isArray(c.currencyCompareDates)&&c.currencyCompareDates.length===2?' · 比較 '+c.currencyCompareDates.join(' → '):c.currencyDate?' · '+c.currencyDate:''}`:''}　／「新しい会話」でリセット`:'';}
 const cloudAnswer=createCloudAnswer({cloud,state,el,p,scroll:()=>scrollConversationToEnd(false)});
 async function localAnswer(text,body,head){
  if(state.cloudAIEnabled)return cloudAnswer(text,body,head);
