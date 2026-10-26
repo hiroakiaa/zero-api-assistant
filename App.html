@@ -900,7 +900,7 @@ function currencyAmount(text){
  if(!Number.isFinite(value)||value<0||value>1e12)throw Error('金額は0〜1兆の数値で指定してください。');
  return Object.is(value,-0)?0:value;
 }
-function parseCurrencyTasks(raw,context={}){
+function parseCurrencyCore(raw,context={}){
  let input=raw.normalize('NFKC').replaceAll('−','-').trim().replace(/[。？?]+$/,'').trim();
  if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:]|とは|って何|について/.test(input))return [];
  // Keep the previous mixed weather+currency route while normal requests are split first.
@@ -950,6 +950,34 @@ function parseCurrencyTasks(raw,context={}){
  }catch(e){return currencyError(e.message);}
  return [];
 }
+function parseCurrencyTasks(raw,context={}){
+ const input=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'').trim(),active=context.intent==='currency';
+ if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:]|天気|気温|祝日|地震|とは|って何|について/.test(input))return parseCurrencyCore(raw,context);
+ const explicit=/^為替比較[：:\s]/.test(input),text=input.replace(/^為替比較[：:\s]+/,''),dates=[...text.matchAll(new RegExp(currencyDatePattern,'g'))];
+ try{
+  if(active&&/^(?:換算に戻る|比較を解除)$/.test(text))return [{kind:'currency',amount:context.amount,base:context.base,quote:context.quote,...(context.currencyDate?{date:context.currencyDate}:{})}];
+  const follow=active&&dates.length===1&&new RegExp('^'+currencyDatePattern+'(?:と比べて|と比較して|との比較)$').test(text);
+  if(follow){if(!context.currencyDate)return currencyError('比較元の日付を年月日で指定してください。最新レートとの比較は日付を確定してから行います。');return [{kind:'currency',amount:context.amount,base:context.base,quote:context.quote,compareDates:[validateCurrencyDate(context.currencyDate),validateCurrencyDate(dates[0][0])]}];}
+  if(dates.length>=2&&(explicit||/比較|比べ/.test(text)||new RegExp(currencyToken,'i').test(text))){
+   if(dates.length!==2)return currencyError('為替比較の日付は2つ指定してください。');
+   const a=dates[0],b=dates[1],between=text.slice(a.index+a[0].length,b.index).trim(),before=text.slice(0,a.index).trim();
+   if(before||!/^(?:と|→|->)$/.test(between))return currencyError('2つの時点を比較します。例：「為替比較:2025-01-15と2025-01-18の100ドルは何円？」。期間の平均や推移ではありません。');
+   const selected=dates.map(m=>validateCurrencyDate(m[0])),rest=text.slice(b.index+b[0].length).replace(/^(?:の|で)?\s*/,'').replace(/(?:を)?(?:比較して|比べて|比較|比べる)$/,'').trim();
+   let tasks=rest?parseCurrencyCore(rest,{}):active?[{kind:'currency',amount:context.amount,base:context.base,quote:context.quote}]:[];
+   if(tasks.length!==1||tasks[0].error||tasks[0].kind!=='currency')return currencyError('比較する金額と通貨ペアを指定してください。例：「為替比較:2025-01-15と2025-01-18の100ドルは何円？」。');
+   return [{...tasks[0],compareDates:selected}];
+  }
+  if(explicit)return currencyError('2つの年月日と金額・通貨を指定してください。例：「為替比較:2025-01-15と2025-01-18の100ドルは何円？」。');
+  const tasks=parseCurrencyCore(raw,context);
+  if(active&&Array.isArray(context.currencyCompareDates)&&!dates.length&&!/最新|今のレート/.test(input))return tasks.map(t=>t.kind==='currency'&&!t.error?{...t,compareDates:context.currencyCompareDates}:t);
+  return tasks;
+ }catch(e){return currencyError(e.message);}
+}
+function currencyComparisonValues(amount,first,second){
+ if(!Number.isFinite(amount)||amount<0||amount>1e12||![first,second].every(n=>Number.isFinite(n)&&n>0))throw Error('為替比較の金額・レートを確認してください。');
+ const values={first:amount*first,second:amount*second,difference:amount*(second-first),rateDifference:second-first,percent:(second-first)/first*100};
+ if(!Object.values(values).every(Number.isFinite))throw Error('比較結果が扱える範囲を超えています。');return values;
+}
 function currencyQuote(data,base,quote,requestedDate){
  if(!data||data.base!==base||data.quote!==quote||typeof data.rate!=='number'||!Number.isFinite(data.rate)||data.rate<=0)throw Error('指定した通貨ペアの参考レートを確認できませんでした。');
  if(typeof data.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||Number.isNaN(Date.parse(data.date+'T00:00:00Z'))||new Date(data.date+'T00:00:00Z').toISOString().slice(0,10)!==data.date)throw Error('参考レートの日付を確認できませんでした。');
@@ -959,6 +987,7 @@ function currencyQuote(data,base,quote,requestedDate){
 function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Date()}){
  return async function currency(task,body){
   if(task.error)throw Error(task.error);
+  if(task.compareDates!==undefined)return compareCurrency(task,body,{getJSON,el,p,source,state,follows,now});
   if(!Number.isFinite(task.amount)||task.amount<0||task.amount>1e12)throw Error('金額は0〜1兆の数値で指定してください。');
   if(!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote))throw Error('対応する通貨を指定してください。');
   const requestedDate=task.date!==undefined?validateCurrencyDate(task.date,now()):undefined;
@@ -974,9 +1003,33 @@ function createCurrencyHandler({getJSON,el,p,source,state,follows,now=()=>new Da
   p(body,'参考レートでの概算です。表示は最大12桁。実際の両替・決済レートや手数料は含みません。');
   if(r)source(body,'Frankfurter',url,r);else p(body,'同じ通貨のため、API通信は行っていません。');
   state.context={...state.context,intent:'currency',pending:null,base:task.base,quote:task.quote,amount:task.amount};
+  delete state.context.currencyCompareDates;
   if(requestedDate)state.context.currencyDate=requestedDate;else delete state.context.currencyDate;
   follows(body,['200なら？',task.quote==='EUR'?'円にすると？':'ユーロにすると？','逆にすると？',...(requestedDate?['最新のレートで']:[])]);
  };
+}
+
+async function compareCurrency(task,body,{getJSON,el,p,source,state,follows,now}){
+ if(!Array.isArray(task.compareDates)||task.compareDates.length!==2)throw Error('為替比較の日付は2つ指定してください。');
+ const dates=task.compareDates.map(d=>validateCurrencyDate(d,now()));
+ if(dates[0]===dates[1])throw Error('比較する2つの日付を別の日にしてください。');
+ if(!currencyCodes.includes(task.base)||!currencyCodes.includes(task.quote))throw Error('対応する通貨を指定してください。');
+ currencyComparisonValues(task.amount,1,1);
+ const records=[];
+ for(const date of dates){const url='https://api.frankfurter.dev/v2/rate/'+task.base.toLowerCase()+'/'+task.quote.toLowerCase()+'?date='+date;
+  let response=null;if(task.base!==task.quote)response=await getJSON(url,3600000);
+  const data=response?currencyQuote(response.data,task.base,task.quote,date):{rate:1,date:null};records.push({url,response,data,date});
+ }
+ if(records[0].data.date&&records[0].data.date===records[1].data.date&&records[0].data.rate!==records[1].data.rate)throw Error('同じ返却日のレートが一致しないため、比較を停止しました。時間をおいて再確認してください。');
+ const values=currencyComparisonValues(task.amount,records[0].data.rate,records[1].data.rate),format=n=>new Intl.NumberFormat('ja-JP',{maximumSignificantDigits:12}).format(Object.is(n,-0)?0:n),signed=n=>(n>0?'+':'')+format(n);
+ body.append(el('h3','2つの日付の為替を比較'));p(body,format(task.amount)+' '+task.base+' → '+task.quote+' · ①から②への変化');
+ for(const [i,r] of records.entries()){const card=el('div',undefined,'result-card');card.append(el('div',(i===0?'① ':'② ')+'指定日 '+r.date,'sub'),el('div',format(i===0?values.first:values.second)+' '+task.quote,'big'),el('div','1 '+task.base+' = '+format(r.data.rate)+' '+task.quote+(r.data.date?' · API返却日 '+r.data.date:''),'details'));body.append(card);if(r.data.date&&r.data.date!==r.date)p(body,'指定日 '+r.date+' は API返却日 '+r.data.date+' の参考レートを使用しています。');}
+ p(body,'換算額の差：'+signed(values.difference)+' '+task.quote);p(body,'レートの差：'+signed(values.rateDifference)+' '+task.quote+' / '+task.base+' · レート変化率：'+signed(values.percent)+'%');
+ if(records[0].data.date&&records[0].data.date===records[1].data.date)p(body,'両方とも同じAPI返却日です。異なる2営業日の変化を示すものではありません。');
+ p(body,'日次集計の参考値を①から②へ比較しています。日付の順序は入力順です。公表時刻・実際の決済・手数料・期間の平均や損益は表しません。表示は最大12桁で、差と変化率は丸める前の値から計算します。','sub');
+ for(const r of records)if(r.response)source(body,'Frankfurter · '+r.date,r.url,r.response);if(task.base===task.quote)p(body,'同じ通貨のため、API通信は行っていません。');
+ state.context={...state.context,intent:'currency',pending:null,amount:task.amount,base:task.base,quote:task.quote,currencyDate:dates[1],currencyCompareDates:dates};
+ follows(body,['200なら？','逆にすると？','換算に戻る']);
 }
 
 const UK_HOLIDAY_URL='https://www.gov.uk/bank-holidays.json';
@@ -2099,7 +2152,7 @@ function requestSegments(raw,recognize,context={}){
  }
  if(stack.length)return [text];push();
  if(parts.length<2)return [text.replace(/^(?:それと|そして|加えて)[、,\s]*/,'')];
- const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|参考文献にして|参考文献の形にして|引用形式にして|BibTeXにして|書誌情報に戻る|次の6時点|前の6時点|時間別の続き|(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して))[？?]?$/;
+ const follow=/^(?:(?:明日|明後日|あさって|今日|翌日|前日|\d+日後|今年|来年|再来年|\d{4}年)(?:は|も)?|\d{1,2}月だけ|(?:化合物の候補に戻る|(?:原子番号|元素記号|原子質量|原子量|分子式|化学式|分子量|モル質量|IUPAC名)(?:は|も)?|階級を解除|階級の条件を解除|(?:種|亜種|属|科)(?:だけ|のみ)|生物の続き|生物の候補に戻る|生物候補\d+|本の続き|書籍検索の続き|品詞を解除|意味に戻る|OA条件を解除|OAの条件を解除|年の条件を解除|出版年の条件を解除|候補に戻る|候補を表示|(?:候補の)?\d+番(?:目)?(?:の記事)?(?:を)?(?:詳しく|表示|選択)?|ニュースの続き|次のニュース|次の5件|参考文献にして|参考文献の形にして|引用形式にして|BibTeXにして|書誌情報に戻る|換算に戻る|比較を解除|次の6時点|前の6時点|時間別の続き|(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?|(?:前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減)(?:は|を教えて|を見せて|を表示して)?|グラフにして|推移を(?:見せて|教えて|確認して))|(?:最新では|最新のレートで|早い方|遅い方|ほかには|他には|他の記事|ほかの記事|続き|もっと広く|範囲を広げて|もっと詳しく|詳しく|発音(?:は)?|意味(?:は)?|逆にすると|逆にして|逆方向に|反対に)|.{1,20}(?:なら|では|にすると|にして|に換算して|に変換して|と比べて|と比較して))[？?]?$/;
  const articleChoice=/^(?:ニュースの)?\d+(?:番(?:目)?|件目)(?:の記事)?(?:を|の)?(?:詳しく|詳細)[？?]?$/;
  if(strong||parts.every((part,index)=>recognize(part,{}).length||(follow.test(part)||articleChoice.test(part))&&(index>0||recognize(part,context).length)))return parts;
  return [text];
@@ -2112,6 +2165,7 @@ const FEATURE_CATALOG=[
  {id:'weatherDetails',category:'life',title:'風速・湿度の予報',description:'予報時点の最大風速と相対湿度の範囲。日付・都市を引き継げます。',query:'東京の明日の風速は？',tags:'風 ふうそく しつど 湿度 屋外 天気 予報 相対湿度'},
  {id:'sun',category:'life',title:'日の出・日の入り',description:'年月日を指定し、翌日・前日・別都市へ続けられます。',query:'東京の2027-01-01の日の出',tags:'ひので 日没 太陽 天文 初日の出 元日 旅行 日付'},
  {id:'distance',category:'tools',title:'2地点の距離',description:'登録都市や緯度・経度から球面上の最短距離を計算。道路距離・所要時間とは別。',query:'東京から大阪までの距離は？',tags:'距離 きょり 大円距離 地理 球面 座標 緯度 経度 km マイル 移動 都市',local:true},
+ {id:'currencyCompare',category:'life',title:'2つの日付の為替比較',description:'金額と通貨を保ち、指定日ごとの返却レートと変化を確認。',query:'為替比較:2025-01-15と2025-01-18の100ドルは何円？',tags:'為替 比較 レート 差 変化率 過去 両替'},
  {id:'currency',category:'life',title:'通貨換算',description:'万・億や通貨コード、日付指定に対応。「200なら？」と続けられます。',query:'100ユーロは何円？',tags:'お金 両替 為替 ドル ポンド 旅行 かんさん USD JPY 万円 億円 過去 履歴 日付',popular:true},
  {id:'holiday',category:'life',title:'日本の祝日',description:'年・月で絞る、次の祝日や指定日の登録を確認。',query:'次の祝日は？',tags:'休み 連休 しゅくじつ カレンダー 来年 11月'},
  {id:'holidayDate',category:'life',title:'この日は祝日？',description:'日付計算の後に「その日は祝日？」と続けられます。',query:'2026-11-03は祝日？',tags:'休み 国民の祝日 文化の日 振替休日 日付 判定'},
