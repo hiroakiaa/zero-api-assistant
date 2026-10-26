@@ -100,3 +100,19 @@ From this source tree, use `node cloud/CloudServer.mjs --check`. This mode does 
 The JSON report lists the Ollama version, bridge response/busy state, and whether the required approved model tags are registered. If a valid bridge response reports the14B translation route, that model is checked as well. Only the required model names, reported digest and size are included; other installed model names, paths, hostnames, environment contents and credentials are not output. Exit0 means these checks passed, exit2 means attention is needed, and exit1 means an invalid invocation or configuration. A busy but responding bridge can pass the diagnostic while `readyToAccept` remains false.
 
 No prompt, generation, pull, model load, service restart, firewall change or Google request occurs. The report does not test model file checksums, GPU execution, answer quality, speed, the public tunnel, or network isolation. It is an operator diagnostic, not production readiness certification. Official metadata endpoints: [list models](https://docs.ollama.com/api/tags) and [version specification](https://github.com/ollama/ollama/blob/main/docs/openapi.yaml).
+
+## One-request local measurement
+
+To measure one real general-generation request, explicitly run this separate command with the same bridge secret and port environment settings:
+
+```sh
+node CloudServer.mjs --measure
+```
+
+In this source tree, use `node cloud/CloudServer.mjs --measure`. Unlike `--check`, this command generates a response and can load the general model. It first checks the authenticated loopback bridge health and approved model names. If the bridge is already busy, it stops without generating. Otherwise it sends exactly one fixed Japanese question about the four seasons, with empty history, through the existing `/zero/chat` route. That route retains its usual single-request generation slot and time limit. There is no automatic retry, translation request, model download, server restart, GAS request or conversation database write.
+
+The report contains a UTC timestamp, completion state, approved model name, local end-to-end `elapsedMS`, Unicode code-point `responseCharacters`, and finish reason. Only `stop` is completed; truncated or unknown termination is incomplete. Exit0 means this one request completed, Exit2 means it did not, and Exit1 means invalid configuration or invocation. It omits the generated text, credentials, user prompts, file paths and raw errors.
+
+After a valid generation response it reads Ollama's fixed loopback [GET /api/ps](https://docs.ollama.com/api/ps), with a further limit of five seconds inside the overall seventy-second deadline. For the measured model alone, it reports Ollama's `size` as `reportedSizeBytes`, `size_vram` as `reportedVramBytes`, and optional `context_length`. A model already released is `not_loaded`; invalid or unavailable metadata stays `unavailable` without discarding the completed generation timing. These are reported model-memory values, not total GPU utilization, free VRAM, peak memory or independent proof that kernels executed on the GPU. Other installed or loaded model names and metadata are not included.
+
+This is a single sample. Loading a cold model, other PC activity and response length affect time. It does not measure tokens per second, concurrent capacity, translation performance, answer quality, GAS, the browser, or Cloudflare latency. The existing bridge may leave the model loaded for five minutes after generation; the measurement does not unload it or change that policy. Do not run automatic polling or parallel measurements on the production PC.
