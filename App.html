@@ -390,12 +390,13 @@ function parsePlaceSearch(raw,context={},knownCities=[]){const text=raw.normaliz
  const stable=text.match(/^地点候補:([a-f0-9-]{36}):([NWR]\d{1,16})$/i);if(stable)return[{kind:'placeSearch',session:stable[1],choiceId:stable[2]}];
  const number=text.match(/^(?:地点候補|地点の)(\d+)(?:番(?:目)?)?(?:の天気)?$/);if(number)return[{kind:'placeSearch',number:Number(number[1])}];
  if(context.intent==='placeSearch'&&context.pending==='placeSearch'){
+  if(/同じ場所|同じ地点|そこ|その場所|同じ日|その日|翌日|次の日|前日|前の日|天気|気温|湿度|風速|風/.test(text)&&/^(?:(?:同じ場所|同じ地点|そこ|その場所|同じ日|その日)(?:の|で|は|も)?\s*)?(?:翌日|次の日|その翌日|前日|前の日)?(?:の|は|も|なら|では)?(?:天気|気温|湿度|風速|風)?(?:は|も|なら|では|を教えて)?$/.test(text))return[{kind:'placeSearch',remind:true}];
   if(/^(?:今日|明日|明後日|あさって|翌日|前日|来週|来年|湿度|風速)(?:は|なら|では|も)?$/.test(text))return[{kind:'placeSearch',remind:true}];
   const other=text.match(/^(.{2,60}?)(?:なら|では)$/);if(other){const place=knownWeatherPlace(other[1],knownCities);return[place?{kind:'weather',...context.placeWeather,places:[place]}:{kind:'placeSearch',query:other[1],weather:context.placeWeather}];}
  }
  if(context.intent==='weather'){
   const other=text.match(/^([\p{L}\p{M} -]{2,40}?)(?:なら|では)$/u),query=other?.[1];
-  if(query&&!/^(?:今日|明日|明後日|あさって|翌日|前日|昨日|一昨日|来週|来年|今年|湿度|風速|風|雨|最高|最低|最新|ドル|円|ユーロ|ポンド|UTC|摂氏|華氏)$/.test(query)){const options={offset:context.offset||0,focus:context.weatherFocus||'all',...(context.weatherDate?{date:context.weatherDate}:{})},place=knownWeatherPlace(query,knownCities);return[place?{kind:'weather',...options,places:[place]}:{kind:'placeSearch',query,weather:options}];}
+  if(query&&!/^(?:今日|明日|明後日|あさって|翌日|前日|昨日|一昨日|来週|来年|今年|湿度|風速|風|雨|最高|最低|最新|ドル|円|ユーロ|ポンド|UTC|摂氏|華氏)$/.test(query)){if(context.weatherDateAmbiguous)return[{kind:'weather',error:'比較中の地点で対象日が異なります。新しい都市は「大阪の2026-10-28の天気」のように日付を指定してください。'}];const options={offset:context.offset||0,focus:context.weatherFocus||'all',...(context.weatherDate?{date:context.weatherDate}:{})},place=knownWeatherPlace(query,knownCities);return[place?{kind:'weather',...options,places:[place]}:{kind:'placeSearch',query,weather:options}];}
  }return[];
 }
 function weatherPlaceLookup(task,knownCities=[]){
@@ -438,6 +439,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const weatherFollow=parseWeatherFollow(text,context);if(weatherFollow.length)return weatherFollow;
  const placeLookup=parsePlaceSearch(text,context,cities);if(placeLookup.length)return placeLookup;
  const selectedKnowledge=parseKnowledgeFollow(text,context);if(selectedKnowledge.length)return selectedKnowledge;
  const books=parseBookTasks(text,context);if(books.length)return books;
@@ -460,6 +462,7 @@ function parsePlan(raw, context={}){
  const protectedWeather=weatherQueryProtected(text),isWeather=!protectedWeather&&(/天気|気温|雨|傘|晴れ|寒い|暑い|服装|洗濯|湿度/.test(text)||weatherWindQuery(text)),dateFollow=weatherDateFollow(text,context);
  const isTime=/何時|時刻|時差|世界時計/.test(text)&&!/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書)[：:\s]/.test(text);
  const isFollow=/^(?:じゃあ|では|それなら|それと|あと)?\s*(?:明日|明後日|あさって|今日|\d+日後|.{1,25}(?:なら|では|は)[？?]?$)/.test(text)||found.length>0&&text.length<25;
+ if(context.intent==='weather'&&context.weatherDateAmbiguous&&knownWeatherPlace(text.replace(/[？?]$/,''),cities))return[{kind:'weather',error:'比較中の地点で対象日が異なります。新しい都市は都市名と日付を指定してください。'}];
  if(!protectedWeather&&(isWeather||dateFollow || (context.intent==='weather'&&isFollow&&!moneyTasks.length&&!isTime&&!/とは|って何|について|検索|調べ|為替|換算|何円|祝日|計算/.test(text)))){
   const explicit=weatherPlaceText(text).match(/^(.{2,40}?)(?:の|は)(?:天気|気温|雨|服装|風速|湿度|風)/);
   const requestedPlace=explicit?.[1]?.trim(),requestedParts=requestedPlace?.split(/[と、,・]/).map(v=>knownWeatherPlace(v,cities)),knownRequest=requestedParts?.every(Boolean);
@@ -500,6 +503,22 @@ const weatherDatePattern='(?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}|\\d{4}年\\d{1,2}月
 const weatherQueryProtected=text=>/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術)[：:\s]|とは|って何|について/.test(text);
 const weatherWindQuery=text=>/風速|風向|突風|台風/.test(text)||/(?:^|の|は)風(?:の強さ|(?:は|が)?(?:強い|弱い|どのくらい|どれくらい)?)?[。？?]?$/.test(text);
 const weatherDetailFollow=(text,context)=>context.intent==='weather'&&/^(?:風速|風|湿度)(?:は|が)?(?:どのくらい|どれくらい|強い|弱い|高い|低い)?(?:は|なら|では|も)?[。？?]?$/.test(text);
+// Relative continuations refer to the dates actually shown, including comparisons
+// across midnight. Keep one date per place rather than guessing a common UTC day.
+function parseWeatherFollow(raw,context={}){
+ if(context.intent!=='weather'||context.pending||!Array.isArray(context.places)||!context.places.length)return [];
+ const text=raw.normalize('NFKC').trim().replace(/^(?:じゃあ|では|それなら)[、,\s]*/,'').replace(/[。？?]$/,'');
+ const detail=weatherDetailFollow(text,context),match=text.match(/^(?:(同じ場所|同じ地点|そこ|その場所|同じ日|その日)(?:の|で|は|も)?\s*)?(?:(翌日|次の日|その翌日|前日|前の日)(?:の|は|も|なら|では)?\s*)?(天気|気温|湿度|風速|風)?(?:は|も|なら|では|を教えて)?$/)||(detail?[null,null,null,weatherWindQuery(text)?'風速':'湿度']:null);
+ if(!match||!match[1]&&!match[2]&&!detail)return [];
+ const step=match[2]?/前/.test(match[2])?-1:1:0,focus=match[3]?/風/.test(match[3])?'wind':match[3]==='湿度'?'humidity':'all':context.weatherFocus||'all';
+ const task={kind:'weather',places:context.places,offset:context.offset||0,focus};
+ try{
+  if(context.weatherDates!==undefined){if(!Array.isArray(context.weatherDates)||context.weatherDates.length!==context.places.length||context.weatherDates.length>3)throw Error('Invalid saved dates');task.dates=context.weatherDates.map(value=>{const date=parseCivilDate(value);date.setUTCDate(date.getUTCDate()+step);return date.toISOString().slice(0,10);});}
+  else if(context.weatherDate){const date=parseCivilDate(context.weatherDate);date.setUTCDate(date.getUTCDate()+step);task.date=date.toISOString().slice(0,10);}
+  else task.offset+=step;
+ }catch{return [{kind:'weather',error:'前回の予報日を確認できません。都市名と日付を指定してください。'}];}
+ if(step)task.dayStep=step;return [task];
+}
 function weatherDetailsOptions(text,context={},explicit=false){
  const wind=weatherWindQuery(text),humidity=/湿度/.test(text),focus=wind?'wind':humidity?'humidity':explicit?'all':context.weatherFocus||'all';
  if((wind||humidity)&&/突風|瞬間|風向|どこから|北風|南風|東風|西風|屋内|室内|海上|警報|台風|安全|危険|運航|欠航/.test(text))return {focus,error:'屋外の10分平均風速と相対湿度の予報に対応しています。突風・風向・室内・警報や安全判断には対応していません。'};
@@ -543,19 +562,21 @@ function createWeatherHandler({getJSON,el,p,source,state,follows,resolveCity,loc
  return async function weather(task,body){
   if(task.error)throw Error(task.error);
   const focus=task.focus||'all';if(!['all','wind','humidity'].includes(focus))throw Error('対応する天気の項目を指定してください。');
+  if(task.dates!==undefined){if(task.date!==undefined||!Array.isArray(task.dates)||task.dates.length!==task.places.length||task.dates.length>3)throw Error('地点ごとの予報日を確認できません。');task.dates.forEach(parseCivilDate);}
   if(task.date!==undefined)parseCivilDate(task.date);
-  else if(!Number.isInteger(task.offset)||task.offset<0||task.offset>9)throw Error('現在の予報は今日から9日後まで指定できます。過去の実測値は取得できません。');
+  else if(!task.dates&&(!Number.isInteger(task.offset)||task.offset<0||task.offset>9))throw Error('現在の予報は今日から9日後まで指定できます。過去の実測値は取得できません。');
   if(!task.places.length){state.context={...state.context,intent:'weather',pending:'weather',offset:task.offset,weatherFocus:focus};if(task.date)state.context.weatherDate=task.date;else delete state.context.weatherDate;p(body,`${task.date?task.date+'の天気ですね。':''}どこの${focus==='wind'?'風速':focus==='humidity'?'湿度':'天気'}を調べますか？ 都市名を入力してください。`);follows(body,['東京','大阪','パリ']);return;}
-  const grid=el('div',undefined,'result-grid');body.append(el('h3',task.date?`${task.date}の天気`:`${task.offset===0?'今日':task.offset===1?'明日':task.offset===2?'明後日':task.offset+'日後'}の天気`),grid);
-  const results=await Promise.allSettled(task.places.slice(0,3).map(async city=>{
+  const grid=el('div',undefined,'result-grid');body.append(el('h3',task.dates?task.dayStep===1?'前回の翌日の天気':task.dayStep===-1?'前回の前日の天気':'前回と同じ日の天気':task.date?`${task.date}の天気`:`${task.offset===0?'今日':task.offset===1?'明日':task.offset===2?'明後日':task.offset+'日後'}の天気`),grid);
+  const results=await Promise.allSettled(task.places.slice(0,3).map(async(city,index)=>{
+   const day=task.dates?{date:task.dates[index]}:task;
    // Registered cities can reject an out-of-range day before any API request.
-   if(Number.isFinite(city.latitude))resolveWeatherDate(task,localDate(city.timezone||'UTC'));
-   const place=await resolveCity(city),timezone=place.timezone||'UTC',date=resolveWeatherDate(task,localDate(timezone));
+   if(Number.isFinite(city.latitude))resolveWeatherDate(day,localDate(city.timezone||'UTC'));
+   const place=await resolveCity(city),timezone=place.timezone||'UTC',today=localDate(timezone),date=resolveWeatherDate(day,today),relativeOffset=(parseCivilDate(date)-parseCivilDate(today))/86400000;
    const query=new URLSearchParams({lat:place.latitude.toFixed(4),lon:place.longitude.toFixed(4)}),result=await getJSON(`https://api.met.no/weatherapi/locationforecast/2.0/compact?${query}`,1800000);
    const details=summarizeWeatherDetails(result.data,date,timezone);
    if(focus==='wind'&&details.windMax===null||focus==='humidity'&&details.humidityMin===null)throw Error(`${place.name}：${date} の${focus==='wind'?'風速':'湿度'}の有効値または単位を確認できませんでした。`);
    let summary;try{summary=summarizeForecast(result.data,date,timezone);}catch(error){if(error.message==='指定日の予報がありません。'){if(focus!=='all')summary={min:null,max:null,samples:0,precipitation:null,coveredHours:0};else throw Error(`${place.name}：${date} の予報が取得したデータにありません。別の日付を指定してください。`);}else throw error;}
-   return {place,result,date,...summary,...details};
+   return {place,result,date,relativeOffset,...summary,...details};
   }));
   const ok=[];
   for(const result of results){
@@ -568,7 +589,7 @@ function createWeatherHandler({getJSON,el,p,source,state,follows,resolveCity,loc
    if(focus!=='all')p(card,v.samples?`気温 ${v.max}° / ${v.min}°（${v.samples}時点）`:'気温：未収録');
    if(focus==='all')p(body,`${v.place.name}：${v.precipitation>0?'降水の予報があるため、雨具を検討してください。 ':''}${v.max<=12?'防寒できる上着を用意しましょう。':v.max>=28?'薄手の服と飲み物を用意しましょう。':'気温に合わせ、脱ぎ着できる服装が便利です。'}`);source(body,'MET Norway · CC BY 4.0（時間別予報を集計）','https://api.met.no/',v.result);
   }
-  if(ok.length){state.context={...state.context,intent:'weather',pending:null,places:ok.map(v=>v.place),offset:task.offset,weatherFocus:focus,lastDate:ok.length===1&&ok[0].place.timezone==='Asia/Tokyo'?ok[0].date:null};if(task.date)state.context.weatherDate=task.date;else delete state.context.weatherDate;p(body,'取得した時間別予報の集計であり、過去の実測値ではありません。1日全体を含まない場合や、将来の予報間隔が広がる場合があります。降水量は対象日に収まる区間だけを合計し、日付をまたぐ区間は推計で分割せず除きます。都市ごとの対象日付・期間の違いにご注意ください。','sub');p(body,'風速は地上10mの10分平均風速について、取得した予報時点の最大値です。瞬間最大風速ではありません。湿度は地上2mの相対湿度の範囲です。有効な数値の時点数を表示し、欠測を0や別の項目で補いません。','sub');source(body,'MET Norway · CC BY 4.0','https://creativecommons.org/licenses/by/4.0/');follows(body,[...(task.date||task.offset!==0?['今日は？','大阪なら？']:['明日は？','大阪なら？']),focus==='humidity'?'風速は？':'湿度は？']);}
+  if(ok.length){state.context={...state.context,intent:'weather',pending:null,places:ok.map(v=>v.place),weatherDates:ok.map(v=>v.date),weatherDateAmbiguous:!ok.every(v=>v.date===ok[0].date)&&!ok.every(v=>v.relativeOffset===ok[0].relativeOffset),offset:ok.every(v=>v.relativeOffset===ok[0].relativeOffset)?ok[0].relativeOffset:task.offset,weatherFocus:focus,lastDate:ok.length===1&&ok[0].place.timezone==='Asia/Tokyo'?ok[0].date:null};if(task.date)state.context.weatherDate=task.date;else if(task.dates&&ok.every(v=>v.date===ok[0].date))state.context.weatherDate=ok[0].date;else delete state.context.weatherDate;p(body,'取得した時間別予報の集計であり、過去の実測値ではありません。1日全体を含まない場合や、将来の予報間隔が広がる場合があります。降水量は対象日に収まる区間だけを合計し、日付をまたぐ区間は推計で分割せず除きます。都市ごとの対象日付・期間の違いにご注意ください。','sub');p(body,'風速は地上10mの10分平均風速について、取得した予報時点の最大値です。瞬間最大風速ではありません。湿度は地上2mの相対湿度の範囲です。有効な数値の時点数を表示し、欠測を0や別の項目で補いません。','sub');source(body,'MET Norway · CC BY 4.0','https://creativecommons.org/licenses/by/4.0/');follows(body,[...(task.date||task.offset!==0?['今日は？','大阪なら？']:['明日は？','大阪なら？']),focus==='humidity'?'風速は？':'湿度は？']);}
  };
 }
 
