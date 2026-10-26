@@ -1486,9 +1486,16 @@ function unpackCloudJSON(payload){
  let data;try{data=JSON.parse(payload.dataJSON);}catch{throw Error('APIデータを読み取れませんでした。');}
  const {dataJSON,...meta}=payload;return {...meta,data};
 }
+function cloudWaitMessage(action){
+ if(action==='saveTurn')return '保存の完了を確認できません。会話をテキストで控え、履歴で保存状況を確認してください。';
+ if(['moveConversation','renameConversation'].includes(action))return '履歴の変更結果を確認できません。履歴を更新して結果を確認してください。';
+ if(action==='generate')return 'AI生成の応答を確認できません。PC側で処理が続いている可能性があります。少し待ってから確認してください。';
+ if(action==='fetch')return 'データ照会の応答に時間がかかっています。少し待ってから、同じ条件で照会してください。';
+ return 'GASの応答に時間がかかっています。少し待ってから操作してください。';
+}
 class CloudDB{
  constructor(){this.available=!!globalThis.google?.script?.run;this.token=this.available?deviceToken():null;}
- call(action,payload={}){if(!this.available)return Promise.reject(Error('GASに接続されていません。'));return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('GASの応答に時間がかかっています。保存済みか履歴で確認してください。')),action==='generate'?90000:45000);google.script.run.withSuccessHandler(result=>{clearTimeout(timer);result?.ok?resolve(result.data):reject(Object.assign(Error(result?.error||'GASの処理に失敗しました。'),Number.isFinite(result?.retryAt)?{retryAt:result.retryAt}:{}));}).withFailureHandler(()=>{clearTimeout(timer);reject(Error('GASと通信できません。ページを開き直してください。'));}).api({action,token:this.token,payload});});}
+ call(action,payload={}){if(!this.available)return Promise.reject(Error('GASに接続されていません。'));return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error(cloudWaitMessage(action))),action==='generate'?90000:45000);google.script.run.withSuccessHandler(result=>{clearTimeout(timer);result?.ok?resolve(result.data):reject(Object.assign(Error(result?.error||'GASの処理に失敗しました。'),Number.isFinite(result?.retryAt)?{retryAt:result.retryAt}:{}));}).withFailureHandler(()=>{clearTimeout(timer);reject(Error('GASと通信できません。'+cloudWaitMessage(action)));}).api({action,token:this.token,payload});});}
 }
 
 const extraLabels={books:'書籍検索',papers:'生命科学の文献',quakes:'地震情報',country:'国のデータ',news:'技術ニュース',sun:'日の出・日の入り',dictionary:'英英辞書'};
