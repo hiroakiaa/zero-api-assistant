@@ -532,6 +532,40 @@ function createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows,no
  state.context={...c,intent:'chemistry',pending:null,chemicalQuery:query,chemicalCIDs:cids,chemicalSession:session,chemicalAt:at,chemicalTruncated:truncated,chemicalSelected:selected,chemicalFocus:focus,chemicalPendingConversion:conversion&&rows.length>1?conversion:null};follows(body,[...(selected!==null?['化合物の候補に戻る']:[]),focus==='formula'?'分子量は？':'分子式は？',focus==='name'?'分子量は？':'IUPAC名は？',calculated?.operation==='divide'?'1molは何g？':'10gは何mol？']);
 };}
 
+const elementsURL='https://pubchem.ncbi.nlm.nih.gov/rest/pug/periodictable/JSON';
+const elementJapanese={水素:1,ヘリウム:2,リチウム:3,ベリリウム:4,ホウ素:5,炭素:6,窒素:7,酸素:8,フッ素:9,ネオン:10,ナトリウム:11,マグネシウム:12,アルミニウム:13,ケイ素:14,リン:15,硫黄:16,塩素:17,アルゴン:18,カリウム:19,カルシウム:20,鉄:26,コバルト:27,ニッケル:28,銅:29,亜鉛:30,銀:47,白金:78,金:79,水銀:80,鉛:82,ニホニウム:113,オガネソン:118};
+function elementQuery(value){const text=typeof value==='string'?value.normalize('NFKC').trim():'';if(!text||text.length>40||! /^(?:[A-Za-z]+|[\p{Script=Han}\p{Script=Katakana}ー]+|\d{1,3})$/u.test(text))throw Error('元素記号・英語名・登録済み日本語名・原子番号で指定してください。例：元素:Au');if(/^\d+$/.test(text)&&(Number(text)<1||Number(text)>118))throw Error('原子番号は1〜118で指定してください。');return text;}
+function parseElements(raw,context={}){
+ const text=raw.normalize('NFKC').trim().replace(/[。?？]$/,'');
+ if(/^(?:本|書籍|ブック|論文|文献|学術|学術検索|検索|知識|辞書|翻訳|文章|コード)[：:\s]/.test(text))return[];
+ const prefix=text.match(/^元素[：:]\s*(.*)$/),number=text.match(/^原子番号\s*(\d{1,3})\s*の元素(?:は|を教えて)?$/),natural=text.match(/^(.{1,40}?)の(原子番号|元素記号|原子質量|原子量)(?:は(?:何)?(?:ですか)?|を教えて(?:ください)?)?$/);
+ let query=prefix?.[1]??number?.[1]??natural?.[1],focus=natural?(natural[2]==='原子番号'?'number':natural[2]==='元素記号'?'symbol':'mass'):'all';
+ if(query===undefined&&context.intent==='elements'){
+  const follow=text.match(/^(原子番号|元素記号|原子質量|原子量)(?:は|も)?$/);if(follow){query=String(context.elementNumber);focus=follow[1]==='原子番号'?'number':follow[1]==='元素記号'?'symbol':'mass';}
+  const other=text.match(/^(.{1,40}?)(?:なら|は)$/);if(!follow&&other&&(Object.hasOwn(elementJapanese,other[1])||/^(?:[A-Z][a-z]?|[a-z]{1,2}|\d{1,3})$/.test(other[1]))){query=other[1];focus=context.elementFocus||'all';}
+ }
+ if(query===undefined)return[];try{return[{kind:'elements',query:elementQuery(query),focus}];}catch(error){return[{kind:'elements',error:error.message}];}
+}
+function elementRows(raw){
+ const columns=raw?.Table?.Columns?.Column,rows=raw?.Table?.Row,required=['AtomicNumber','Symbol','Name','AtomicMass'];
+ if(!Array.isArray(columns)||columns.length>30||new Set(columns).size!==columns.length||!required.every(key=>columns.includes(key))||!Array.isArray(rows)||rows.length!==118)throw Error('周期表の応答形式を確認できませんでした。');
+ const seen=new Set(),symbols=new Set();return rows.map(row=>{
+  if(!Array.isArray(row?.Cell)||row.Cell.length!==columns.length)throw Error('元素の列数が一致しません。');
+  const [number,symbol,name,mass]=required.map(key=>row.Cell[columns.indexOf(key)]),n=Number(number);
+  if(typeof number!=='string'||! /^[1-9]\d{0,2}$/.test(number)||n>118||seen.has(n)||typeof symbol!=='string'||! /^[A-Z][a-z]?$/.test(symbol)||symbols.has(symbol)||typeof name!=='string'||! /^[A-Za-z]{1,40}$/.test(name)||typeof mass!=='string'||mass!==''&&(! /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(mass)||Number(mass)<=0||Number(mass)>400))throw Error('元素データの形式・重複を確認できませんでした。');
+  seen.add(n);symbols.add(symbol);return{number:n,symbol,name,mass};
+ });
+}
+function findElement(rows,input){const query=elementQuery(input);if(/^\d+$/.test(query))return rows.find(row=>row.number===Number(query));if(Object.hasOwn(elementJapanese,query))return rows.find(row=>row.number===elementJapanese[query]);return rows.find(row=>row.symbol===query||/^[a-z]{1,2}$/.test(query)&&row.symbol.toLowerCase()===query||row.name.toLowerCase()===query.toLowerCase());}
+function createElementsHandler({getJSON,cloud,el,p,source,state,follows}){return async(task,body)=>{
+ if(task.error)throw Error(task.error);const query=elementQuery(task.query);if(!cloud.available)throw Error('元素検索は共有の照会間隔を守るため、GAS接続版で利用できます。');
+ const result=await getJSON(elementsURL,21600000),row=findElement(elementRows(result.data),query);if(!row){p(body,'一致する元素がありません。元素記号か英語名で指定してください。例：元素:Au');return;}
+ const focus=task.focus||'all';if(!['all','number','symbol','mass'].includes(focus))throw Error('元素の表示項目を確認してください。');
+ body.append(el('h3',row.symbol+' · '+row.name));const card=el('div',undefined,'result-card');if(focus==='all'||focus==='number')p(card,'原子番号：'+row.number);if(focus==='all'||focus==='symbol')p(card,'元素記号：'+row.symbol);if(focus==='all'||focus==='mass'){p(card,'掲載原子質量（PubChem）：'+(row.mass?row.mass+' u':'未収録'));p(card,'PubChemのAtomicMass欄です。標準原子量や特定の同位体の精密質量と同一とは限りません。','sub');}body.append(card);
+ source(body,'PubChem · 周期表',elementsURL,result);source(body,'NCBI · 利用方針・免責・著作権','https://www.ncbi.nlm.nih.gov/home/about/policies/');
+ state.context={...state.context,intent:'elements',pending:null,elementNumber:row.number,elementFocus:focus};follows(body,['原子番号は？','元素記号は？','原子質量は？']);
+};}
+
 const cities = [
  ['東京','Tokyo',35.6762,139.6503,'Asia/Tokyo'],['横浜','Yokohama',35.4437,139.638,'Asia/Tokyo'],['大阪','Osaka',34.6937,135.5023,'Asia/Tokyo'],['京都','Kyoto',35.0116,135.7681,'Asia/Tokyo'],['札幌','Sapporo',43.0618,141.3545,'Asia/Tokyo'],['福岡','Fukuoka',33.5902,130.4017,'Asia/Tokyo'],['名古屋','Nagoya',35.1815,136.9066,'Asia/Tokyo'],['仙台','Sendai',38.2682,140.8694,'Asia/Tokyo'],['那覇','Naha',26.2124,127.6809,'Asia/Tokyo'],['神戸','Kobe',34.6901,135.1955,'Asia/Tokyo'],['広島','Hiroshima',34.3853,132.4553,'Asia/Tokyo'],['パリ','Paris',48.8566,2.3522,'Europe/Paris'],['ロンドン','London',51.5074,-0.1278,'Europe/London'],['ニューヨーク','New York',40.7128,-74.006,'America/New_York'],['台北','Taipei',25.033,121.5654,'Asia/Taipei'],['ソウル','Seoul',37.5665,126.978,'Asia/Seoul'],['シンガポール','Singapore',1.3521,103.8198,'Asia/Singapore'],['シドニー','Sydney',-33.8688,151.2093,'Australia/Sydney']
 ].map(([name,query,latitude,longitude,timezone])=>({name,query,latitude,longitude,timezone}));
@@ -539,6 +573,7 @@ function normalize(s){return s.normalize('NFKC').trim();}
 function getOffset(s,previous=0){if(/明後日|あさって/.test(s))return 2;if(/明日|あした/.test(s))return 1;if(/今日|きょう/.test(s))return 0;const n=s.match(/(\d+)日後/);return n?Number(n[1]):previous;}
 function parsePlan(raw, context={}){
  const text=normalize(raw),tasks=[];
+ const elements=parseElements(text,context);if(elements.length)return elements;
  const chemistry=parseChemistry(text,context);if(chemistry.length)return chemistry;
  const species=parseSpecies(text,context);if(species.length)return species;
  const weatherFollow=parseWeatherFollow(text,context);if(weatherFollow.length)return weatherFollow;
@@ -1846,6 +1881,7 @@ const FEATURE_CATALOG=[
  {id:'quakes',category:'life',title:'地震の公開記録',description:'重要地震の期間指定と、過去24時間のM4.5以上の記録。',query:'日本周辺の過去24時間のM4.5以上の地震',tags:'じしん 防災 揺れ USGS マグニチュード 重要地震 過去7日 過去30日'},
  {id:'knowledge',category:'research',title:'百科事典',description:'候補から記事を選び、Wikipediaの冒頭原文を確認。',query:'人工知能とは？',tags:'知識 意味 定義 検索 ウィキペディア 候補 選択 番号 詳しく',popular:true},
  {id:'species',category:'research',title:'生物の学名・分類',description:'日本語名や学名から候補を選び分類を確認。種・亜種・属・科で絞り込めます。',query:'猫の学名は？',tags:'生き物 いきもの 動物 植物 生物 学名 分類 ネコ GBIF 科 属 種 異名'},
+ {id:'elements',category:'research',title:'元素の原子番号・記号',description:'118元素を記号・英語名・番号で照合。登録済み日本語名にも対応。',query:'金の原子番号は？',tags:'元素 周期表 原子番号 元素記号 原子質量 原子量 金 水素 Au PubChem'},
  {id:'chemistry',category:'research',title:'化合物の分子式・モル質量',description:'PubChemの名前検索から基礎データを確認。GAS版で利用。',query:'カフェインの分子式は？',tags:'化学 かがく 化合物 分子式 化学式 分子量 モル質量 カフェイン 水 PubChem IUPAC'},
  {id:'molarConversion',category:'tools',title:'質量とモルを換算',description:'化合物のモル質量を確認してg・mg・molなどを換算。複数候補は選択。',query:'カフェインの分子式は？。10gは何モル？',tags:'化学 物質量 質量 モル mol mmol マイクロモル グラム g mg kg 計算 換算 PubChem'},
  {id:'nearby',category:'life',title:'地点の周辺の記事を探す',description:'座標付きの百科事典記事を距離順に表示。施設・営業情報の一覧ではありません。',query:'周辺記事: 京都駅',tags:'周辺 地理 散策 場所 地点 近く 京都 駅 半径 距離 Wikipedia'},
@@ -2138,7 +2174,7 @@ const providerCooldowns=new ProviderCooldowns();
 const directLibraryGap=new MinimumRequestGap();
 let aiPanel;const localAI=new LocalAI(status=>aiPanel?.update(status));
 const state={context:{},busy:false,calls:0,hits:0,cache:new Map(),transcript:[],conversationId:crypto.randomUUID(),historyEnabled:true,cloudAIEnabled:false};
-const names={chemistry:'化合物の基礎データ',species:'生物の分類',countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
+const names={elements:'元素の基礎データ',chemistry:'化合物の基礎データ',species:'生物の分類',countryTrend:'国の統計推移',countryStat:'国の統計',weather:'天気',currency:'為替',knowledge:'知識検索',holiday:'日本の祝日',calc:'計算',time:'世界時計',units:'単位換算',dateMath:'日付計算',isbn:'ISBNの本紹介',postal:'郵便番号の住所検索',...extraLabels};
 names.localAI='端末内AI';
 names.cloudAI='クラウドAI';
 names.eraYear='和暦・西暦';
@@ -2216,7 +2252,7 @@ async function ask(raw,displayText){
  const message=el('article',undefined,'message assistant'),head=el('div',undefined,'answer-head');head.append(el('span','z','brand-icon'),el('span','ZERO'),el('span','API + LOGIC','tag'));const body=el('div',undefined,'answer-body'),loading=el('div','質問に合う処理を選んでいます','status pulse');body.append(loading);message.append(head,body);$('#messages').append(message);message.scrollIntoView({block:'start',behavior:'smooth'});
  try{
   const requests=explicitLocalPrompt(text)?[text]:requestSegments(text,parsePlan,state.context);loading.remove();
-  const handlers={chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
+  const handlers={elements:createElementsHandler({getJSON,cloud,el,p,source,state,follows}),chemistry:createChemistryHandler({getJSON,cloud,el,p,link,source,state,follows}),species:createSpeciesHandler({getJSON,el,p,link,source,state,follows}),placeSearch:createPlaceSearchHandler({getJSON,cloud,el,p,source,state,weather}),eraYear:createEraYearHandler({el,p,state,localDate,follows}),dictionary:createDictionaryHandler({getJSON,el,p,source,state,follows}),papers:createPaperHandler({getJSON,el,p,link,source,state,follows}),quakesGuide:(task,body)=>p(body,task.message),quakes:createQuakeHandler({getJSON,el,p,link,source,state,follows,groupRecords:groupExactQuakeRecords}),books:createBooksHandler({getJSON,el,p,link,source,state,follows}),news:createNewsHandler({getJSON,el,p,link,source,state,follows}),weather,countryTrend:createCountryTrendHandler({getJSON,el,p,link,source,state,follows}),sun:createSolarHandler({getJSON,el,p,source,state,follows,resolveCity,localDate}),countryStat:createCountryStatHandler({getJSON,el,p,link,source,state,follows}),timeConvert:createTimeConversionHandler({el,p,state,follows,cities}),nearby:createNearbyHandler({getJSON,el,p,link,source,state,follows}),ukHoliday:createUKHolidayHandler({getJSON,el,p,link,source,state,localDate,follows}),currency:createCurrencyHandler({getJSON,el,p,source,state,follows}),knowledge,holiday:createJapaneseHolidayHandler({getJSON,el,p,source,state,localDate,follows}),time,calc:calculation,businessDays:createBusinessHandler({getJSON,el,p,source,state,localDate}),isbn:createISBNHandler({getJSON,el,p,link,source,state,follows}),postal:createPostalHandler({getJSON,el,p,source,state}),...createExtraHandlers({getJSON,el,p,link,source,follows,resolveCity,state,localDate}),...createLocalHandlers({el,p,state,localDate,source,follows}),...createCrossrefHandlers({getJSON,el,p,link,source,state,follows})};
   let executed=0,helpShown=false,limited=false;
   for(const request of requests){
    if(executed>=4){limited=true;break;}
