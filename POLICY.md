@@ -165,3 +165,9 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 ## World Bank / FAOの森林率
 
 2026-10-26に公式メタデータで定義・FAO FAOSTAT由来・CC BY 4.0を確認しました。`AG.LND.FRST.ZS`だけを既存World Bank API許可リストへ加え、source=2、最大3か国、単年または20年以内、既存24時間キャッシュと取得保護上限を使います。APIキー・アカウント・課金・Google権限の追加はありません。国・系列・年・件数・重複と0〜100%をキャッシュ前と表示時に検証します。森林率を面積や伐採量へ換算せず、未収録は補間しません。UIとCSVにFAO / World Bankの出典・定義・CC BY 4.0を表示します。公式資料：https://api.worldbank.org/v2/indicator/AG.LND.FRST.ZS?format=json 、https://databank.worldbank.org/metadataglossary/world-development-indicators/series/AG.LND.FRST.ZS 。
+
+## 公開データ取得中の重複保護
+
+既存の許可済み公開APIに対する同一キャッシュキーの重複取得を、GASのScriptLockとScript Propertiesで抑止します。URL本文・検索語・ユーザー情報を新しい管理項目へ保存せず、SHA-256ハッシュ・ランダムID・期限だけを最大20件保持します。正常終了・例外時に自分の項目だけを解除し、異常終了時の残存は6分で期限切れとします。外部通信中に全体ロックを持ち続けず、提供元別制限・取得予算・HTTP429/503待機・応答検証・キャッシュを維持します。新しいAPI契約・認証・公開経路・Googleスコープ・有料サービスは導入しません。自動再送も行いません。
+
+2026-10-26に[Googleの実行時間・Properties上限](https://developers.google.com/apps-script/guides/services/quotas)と[Cacheの仕様](https://developers.google.com/apps-script/reference/cache/cache)を確認。キャッシュの早期消失を排他制御の解除と同一視せず、管理項目は別に保持します。上限や提供元の応答時間はこの保護で解消されません。
