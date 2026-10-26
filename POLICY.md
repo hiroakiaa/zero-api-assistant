@@ -90,3 +90,8 @@ Photonの地名候補は利用者の手動操作でGASから照会し、固定�
 GBIF Backbone Taxonomy（GBIF Secretariat, 2023、DOI: 10.15468/39omei）のCC BY 4.0の分類だけを抜粋して表示します。公開APIの検索と単一分類IDのGETに限定し、1回5候補、最大25候補、利用者の選択を経て分類の詳細を表示します。他のチェックリストの応答は拒否します。写真、観察・生息地点、遺伝情報、説明文は取得・配布しません。毒性や食用の判断も提供しません。
 
 検索語をGBIFに送信し、既存の共有キャッシュ・取得上限・429/503待機に従います。登録・キー・カード・有料推論は不要です。参照：[分類データセット](https://doi.org/10.15468/39omei)、[ライセンス](https://creativecommons.org/licenses/by/4.0/)、[利用条件](https://www.gbif.org/terms)、[公式API仕様](https://techdocs.gbif.org/en/openapi/v1/species)。
+# PubChemの化合物基礎データ
+
+PubChem PUG RESTの無認証GETを使い、完全名検索の候補IDと、MolecularFormula・MolecularWeight・IUPACNameの3項目だけを取得します。候補は最大5件で、基礎的な式・数値・系統名だけを抜粋表示します。第三者の説明文・画像・ラベル等は転載せず、PubChem全データを一律にパブリックドメインとして扱いません。結果にPubChem / NCBIと[利用・免責・著作権方針](https://www.ncbi.nlm.nih.gov/home/about/policies/)へのリンクを表示します。
+
+GASの共有リースで同時1件・完了後1.1秒以上の間隔・日本時間1日100回・共有キャッシュを適用し、失敗も試行に含めます。名前と物性を別に数え、429/503では共有の待機を守ります。プレビューから直接取得しません。参照：[PUG REST仕様](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest)、[負荷制限](https://pubchem.ncbi.nlm.nih.gov/docs/dynamic-request-throttling)。APIキーやカード、有料APIへの切替はありません。
