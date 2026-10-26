@@ -190,3 +190,10 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 既存の無料公開API https://frankfurter.dev/ の日次時系列 `/v2/rates` を使用します。APIキー・登録・カード不要、FAQで商用利用とキャッシュを許可。無料枠から有料枠へ移行する仕組みは利用しません。公開サービスの濫用対策のレート制限は尊重し、既存の照会予算・同時照会保護・キャッシュを適用します。単一通貨ペア、連続31日までに制限します。
 
 v2の混合日次参考値は単一銀行の公式公表レートとは扱いません。ソフトウェアのMITライセンスをレートデータ全体のライセンスと表示せず、データ提供元の条件を含む https://frankfurter.dev/license/ を案内します。アプリ独自の補間・前日値の補完はしません。休日の返却値も取引日や公表日の証拠にはしません。
+
+
+## World Bankの人口密度
+
+2026-10-26に公式の指標ページとメタデータで `EN.POP.DNST` の年央人口・陸地面積の定義、FAO / World Bank由来、CC BY 4.0を確認しました。既存の無認証World Bank APIでsource=2の固定系列だけを追加許可し、最大3か国、単年または連続20年以内とします。APIキー・課金・アカウント・Google権限の追加はありません。
+
+非負有限の密度値と国・指標・年・件数・重複をキャッシュ前に検証し、表示時にも再検証します。小数・100超の値を割合の範囲制限で欠測にせず、未収録を補間しません。国・地域の収録値と都市や可住地密度を区別し、UIとCSVに単位・出典・定義・CC BY 4.0を残します。https://data.worldbank.org/indicator/EN.POP.DNST 、https://databank.worldbank.org/metadataglossary/world-development-indicators/series/EN.POP.DNST 、https://datacatalog.worldbank.org/public-licenses 。
