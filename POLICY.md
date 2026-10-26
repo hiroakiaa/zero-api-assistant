@@ -183,3 +183,10 @@ The optional `CloudServer.mjs --measure` command uses only the existing authenti
 ## MET Norwayの風向・海面気圧
 
 2026-10-26に[公式データモデル](https://docs.api.met.no/doc/locationforecast/datamodel.html)と[Locationforecast仕様](https://api.met.no/weatherapi/locationforecast/2.0/documentation)を確認しました。既存のCC BY 4.0 compactデータ内の風向（degrees）・海面気圧（hPa）を表示する拡張で、APIホスト・権限・キー・課金先は追加しません。予報時点だけを表示し、角度は0〜360・気圧は正の有限値と単位を確認します。日平均・補間・実測への置換はせず、海面気圧と現地の気圧を区別します。既存のキャッシュ・提供元表示・取得保護上限を維持します。
+
+
+### Frankfurterの日次期間照会（2026-10-26確認）
+
+既存の無料公開API https://frankfurter.dev/ の日次時系列 `/v2/rates` を使用します。APIキー・登録・カード不要、FAQで商用利用とキャッシュを許可。無料枠から有料枠へ移行する仕組みは利用しません。公開サービスの濫用対策のレート制限は尊重し、既存の照会予算・同時照会保護・キャッシュを適用します。単一通貨ペア、連続31日までに制限します。
+
+v2の混合日次参考値は単一銀行の公式公表レートとは扱いません。ソフトウェアのMITライセンスをレートデータ全体のライセンスと表示せず、データ提供元の条件を含む https://frankfurter.dev/license/ を案内します。アプリ独自の補間・前日値の補完はしません。休日の返却値も取引日や公表日の証拠にはしません。
