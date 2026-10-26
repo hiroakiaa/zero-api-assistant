@@ -96,5 +96,12 @@
     "enabled": true,
     "license": "登録不要の無償政府公開API・商用可・© Crown copyright / OGL v3.0・地域と収録年を明示",
     "source_url": "https://www.api.gov.uk/gds/bank-holidays/"
+  },
+  {
+    "id": "geocoding",
+    "name": "Photon / OpenStreetMap",
+    "enabled": true,
+    "license": "無償公開・公平利用・OSM ODbL・共有照会間隔とキャッシュ",
+    "source_url": "https://photon.komoot.io/"
   }
 ]
