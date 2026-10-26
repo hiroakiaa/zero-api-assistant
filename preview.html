@@ -1585,6 +1585,7 @@ const countryIndicators={population:{id:'SP.POP.TOTL',label:'人口',unit:'人',
 countryIndicators.unemployment={id:'SL.UEM.TOTL.NE.ZS',label:'失業率（各国推計）',unit:'%',maxValue:100,sourceLabel:'World Bank, World Development Indicators / ILO, Labour Force Statistics (LFS)',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/SL.UEM.TOTL.NE.ZS',note:'労働力人口に占める失業者の割合を示す年次の各国推計系列です。国ごとに調査・定義が異なるため、単純な順位づけや厳密な比較には注意が必要です。ILOモデル推計・月次・季節調整値とは別の系列です。'};
 countryIndicators.gdpGrowth={id:'NY.GDP.MKTP.KD.ZG',label:'GDP成長率（実質・年次）',unit:'%',allowNegative:true,pointDifference:true,sourceLabel:'World Bank, World Development Indicators / national statistics, OECD national accounts and World Bank estimates',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/NY.GDP.MKTP.KD.ZG',note:'一定価格のGDPの前年比を示す年次系列です。名目米ドルGDPの増減率・四半期・前期比年率・予測値とは異なります。国民経済計算の改定や基準年変更で過去値も更新されることがあります。'};
 countryIndicators.inflation={id:'FP.CPI.TOTL.ZG',label:'消費者物価上昇率（年次）',unit:'%',allowNegative:true,pointDifference:true,sourceLabel:'World Bank, World Development Indicators / IMF, International Financial Statistics',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FP.CPI.TOTL.ZG',note:'消費者が購入する財・サービスのバスケットの費用が年ごとにどれだけ変わったかを示すCPIの年次上昇率です。物価の絶対水準・国同士の生活費・コア指数・月次・予測値とは異なります。上昇率の低下は物価の下落とは限りません。国ごとの調査方法や品目構成、改定で数値が異なる場合があります。'};
+countryIndicators.forest={id:'AG.LND.FRST.ZS',label:'森林率（陸地面積比）',unit:'%',maxValue:100,pointDifference:true,sourceLabel:'World Bank, World Development Indicators / FAO, FAOSTAT',definitionURL:'https://databank.worldbank.org/metadataglossary/world-development-indicators/series/AG.LND.FRST.ZS',note:'森林面積が陸地面積に占める割合を示す年次系列です。天然林と人工林を含み、農業用の果樹園や都市の公園・庭園の樹木などは除きます。分母の陸地面積に内水面は含みません。森林面積そのもの・天然林だけの割合・森林減少率ではありません。年次の差には統計の改定も含まれ、伐採量やその年の現地観測の変化とは限りません。'};
 const statCountries=new Map(countryAliases.flatMap(([name,code])=>[[name,{name,code}],[code,{name:countryAliases.find(c=>c[1]===code)[0],code}]]));
 const statError=error=>[{kind:'countryStat',error}];
 const statCountryText=text=>text.replace(/(?:の|を|は|なら|では|いくら|何人|何歳|教えて|調べて|確認して|比較して|比べて|比較|比べる)/g,'').trim();
@@ -1594,9 +1595,12 @@ function parseCountryStats(raw,context={}){
  const active=context.intent==='countryStat',explicit=/^(?:国統計|統計)[：:\s]/.test(text);text=text.replace(/^(?:国統計|統計)[：:\s]+/,'');
  if(active&&['gdp','gdpGrowth'].includes(context.countryMetric)&&/^(?:実質)?(?:成長率|伸び率)(?:は|なら|では)?$/.test(text))text=text.replace(/^(?:実質)?(?:成長率|伸び率)/,'GDP成長率');
  const found=[];
- const patterns=[['gdpPerCapita',/(?:1人|一人)(?:当たり|あたり)(?:の)?GDP/i],['gdpGrowth',/(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率/i],['gdp',/GDP|国内総生産/i],['population',/人口/],['life',/平均寿命|出生時平均余命/],['unemployment',/失業率/],['inflation',/(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率)/i]];
+ const patterns=[['gdpPerCapita',/(?:1人|一人)(?:当たり|あたり)(?:の)?GDP/i],['gdpGrowth',/(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率/i],['gdp',/GDP|国内総生産/i],['forest',/森林被覆率|森林面積(?:の)?(?:割合|比率|率)|森林(?:の)?(?:割合|比率|率)/],['population',/人口/],['life',/平均寿命|出生時平均余命/],['unemployment',/失業率/],['inflation',/(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率)/i]];
  for(const [key,pattern] of patterns)if(pattern.test(text)){found.push(key);text=text.replace(pattern,'');}
+ if(!found.length&&/森林面積/.test(text)&&! /とは|について/.test(raw))return statError('森林面積（km²・ha）の照会には対応していません。「日本の森林率」のように陸地面積に占める割合を指定してください。');
  if(!found.length&&!active&&!explicit)return [];
+ if((found.includes('forest')||!found.length&&active&&context.countryMetric==='forest')&&/天然林|原生林|人工林|伐採|減少率|増加率|km|平方|ヘクタール|\bha\b|月次|予測|予想|見通し/i.test(raw))return statError('森林率は陸地面積に占める森林の割合の年次系列です。天然林・人工林の内訳、伐採量、面積、森林減少率、月次、予測へ読み替えません。');
+ if(found.includes('forest'))text=text.replace(/\(陸地面積比\)|年次/g,'');
  if((found.includes('unemployment')||!found.length&&active&&context.countryMetric==='unemployment')&&/モデル|月次|季節調整|完全失業率|完全|若年|若者|青少年|女性|男性|男女|15.?24/.test(raw))return statError('この機能は年次の失業率（各国推計・男女計）に対応します。モデル推計・月次・季節調整・年齢別・男女別・国内の完全失業率へ読み替えません。');
  if((found.includes('gdpGrowth')||!found.length&&active&&context.countryMetric==='gdpGrowth')&&/名目|四半期|月次|前期比|年率|予測|予想|見通し|PPP|購買力|1人|一人/.test(raw))return statError('GDP成長率は実質・年次の公表値に対応します。名目・四半期・前期比年率・予測・PPP・1人当たりへ読み替えません。');
  if((found.includes('inflation')||!found.length&&active&&context.countryMetric==='inflation')&&/コア|生鮮|食品|食料|エネルギー|月次|四半期|前月比|季節調整|予測|予想|見通し|目標|指数水準|生活費|実質賃金/.test(raw))return statError('物価上昇率は総合CPIの年次収録値です。コア・品目別・月次・前月比・予測・目標・指数水準・生活費へ読み替えません。');
@@ -1607,7 +1611,7 @@ function parseCountryStats(raw,context={}){
  if(found.length>1)return statError('指標は1件ずつ指定してください。例：「日本のGDP」。別の指標は改行して質問できます。');
  if(found.length&&/実質|PPP|購買力|成長率|密度|所得|給与|女性|男性/i.test(text))return statError('実質値・PPP・成長率・人口密度・男女別には対応していません。指標を変更せず、別の条件として指定してください。');
  const metric=found[0]||(active?context.countryMetric:null);
- if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命・失業率・GDP成長率・物価上昇率のいずれかを指定してください。');
+ if(!metric||!Object.hasOwn(countryIndicators,metric))return statError('人口・GDP・1人当たりGDP・平均寿命・失業率・GDP成長率・物価上昇率・森林率のいずれかを指定してください。');
  if(!found.length&&!explicit){const probe=statCountryText(text.replace(/\d{4}年|最新(?:の)?/g,''));if(probe){let tokens;try{tokens=splitStatCountries(probe);}catch{return [];}const unknown=tokens.some(token=>!statCountries.has(token)&&!statCountries.has(token.toUpperCase()));if(unknown&&(!(context.pending==='countryStat'||/(?:なら|では|は)$/.test(text)||/^[A-Za-z]{2,3}$/.test(probe))||/天気|時刻|明日|今日|昨日|来年|去年|来週|先週/.test(probe)||tokens.some(token=>!validCountryQuery(token))))return [];}}
  const years=[...text.matchAll(/(\d{4})年/g)];
  if(years.length>1)return statError('統計の年は1年ずつ指定してください。');
@@ -1643,7 +1647,7 @@ function countryStatRow(data,code,indicator,year,now=new Date()){
  const row=data[1][0],maxYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));
  if(row?.countryiso3code!==code||row?.indicator?.id!==indicator||!/^\d{4}$/.test(row.date)||Number(row.date)<1960||Number(row.date)>maxYear||year!==null&&row.date!==String(year))throw Error('指定した国・指標・統計年と異なる応答のため、表示を停止しました。');
  if(row.value===null)return null;
- if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0&&!['NY.GDP.MKTP.KD.ZG','FP.CPI.TOTL.ZG'].includes(indicator)||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value)||indicator==='SL.UEM.TOTL.NE.ZS'&&row.value>100)throw Error(`${row.date}年の統計の数値を確認できませんでした。`);
+ if(typeof row.value!=='number'||!Number.isFinite(row.value)||row.value<0&&!['NY.GDP.MKTP.KD.ZG','FP.CPI.TOTL.ZG'].includes(indicator)||indicator==='SP.POP.TOTL'&&!Number.isInteger(row.value)||['SL.UEM.TOTL.NE.ZS','AG.LND.FRST.ZS'].includes(indicator)&&row.value>100)throw Error(`${row.date}年の統計の数値を確認できませんでした。`);
  return row;
 }
 function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()=>new Date()}){
@@ -1674,12 +1678,12 @@ function createCountryStatHandler({getJSON,el,p,link,source,state,follows,now=()
 const trendError=error=>[{kind:'countryTrend',error}];
 function parseCountryTrend(raw,context={},now=new Date()){
  let text=raw.normalize('NFKC').trim().replace(/[。？?]+$/,'');if(/^(?:本|書籍|ブック|論文|文献|検索|知識|調べる|辞書|学術|翻訳|文章|コード)[：:\s]|とは|って何|について/.test(text))return [];
- const change=/前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減/.test(text),explicit=change||/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/実質経済成長率|人口|GDP|国内総生産|平均寿命|出生時平均余命|失業率|(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率)/i.test(text);
+ const change=/前年との差|前年差|前年との比較|前年比|年ごとの増減|増減率|増減/.test(text),explicit=change||/推移|トレンド|時系列|年ごと|(?:過去|直近)\d+年|グラフ/.test(text),active=context.intent==='countryTrend',hasMetric=/実質経済成長率|森林被覆率|森林面積(?:の)?(?:割合|比率|率)|森林(?:の)?(?:割合|比率|率)|人口|GDP|国内総生産|平均寿命|出生時平均余命|失業率|(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率)/i.test(text);
  if(active)text=text.replace(/^(?:同じ|その)期間(?:で|の|なら|では)?\s*/,'');
  if(!explicit&&!active||explicit&&!hasMetric&&!['countryTrend','countryStat'].includes(context.intent))return [];
  if(active&&/^最新(?:では|なら|は)?$/.test(text))return [{kind:'countryStat',countries:context.statCountries||[],metric:context.countryMetric,year:null}];
  if(!hasMetric&&/天気|気温|日の出|地震|祝日|為替|ドル|円|計算|時刻|翻訳|文章|ニュース/.test(text))return [];
- if(!explicit&&hasMetric&&!/^(?:(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率|人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命|失業率|(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率))(?:は|なら|では)?$/i.test(text))return [];
+ if(!explicit&&hasMetric&&!/^(?:(?:実質(?:の)?)?(?:GDP|国内総生産)(?:の)?(?:実質(?:の)?)?(?:成長率|伸び率)|実質経済成長率|森林被覆率|森林面積(?:の)?(?:割合|比率|率)|森林(?:の)?(?:割合|比率|率)|人口|GDP|国内総生産|(?:1人|一人)(?:当たり|あたり)(?:の)?GDP|平均寿命|出生時平均余命|失業率|(?:総合)?(?:(?:消費者物価(?:の)?|物価|CPI)(?:の)?上昇率|インフレ(?:ーション)?率))(?:は|なら|では)?$/i.test(text))return [];
  const ranges=[...text.matchAll(/(\d{4})年?\s*(?:から|[~〜～–-])\s*(\d{4})年/g)],recent=[...text.matchAll(/(?:過去|直近)(\d{1,3})年(?:間)?/g)];if(ranges.length+recent.length>1)return trendError('推移の期間は1つだけ指定してください。');
  const currentYear=Number(new Date(now.getTime()+9*3600000).toISOString().slice(0,4));let from=active?context.trendFrom:currentYear-9,to=active?context.trendTo:currentYear;
  if(ranges.length){from=Number(ranges[0][1]);to=Number(ranges[0][2]);text=text.replace(ranges[0][0],'');}
@@ -2287,6 +2291,7 @@ const FEATURE_CATALOG=[
  {id:'hourlyWeather',category:'life',title:'時間別の天気',description:'気温・直後1時間の降水量・平均風速を予報時点ごとに6件ずつ確認。',query:'東京の明日の時間別の天気',tags:'時間別 時間ごと 天気 気温 風速 降水量 予報 1時間'},
  {id:'moon',category:'research',title:'月の出・月の入り・月相角',description:'地点と年月日を指定。実際のイベント日と提供元の月相角を表示します。',query:'東京の2026-10-26の月の出',tags:'月 つき 月の出 月の入り 月没 月相 天文 月の満ち欠け'},
  {id:'country',category:'research',title:'国・地域の統計と首都',description:'国一覧から名称・コードを照合し、人口・GDP・平均寿命を3件まで比較。',query:'2020年のスイスとノルウェーの1人当たりGDP',tags:'くに 首都 人口 統計 国情報 GDP 国内総生産 平均寿命 所得 経済 国コード 南アフリカ スイス ノルウェー'},
+ {id:'forest',category:'research',title:'国の森林率',description:'陸地に占める森林の割合を比較。年次推移・ポイント差・CSVにも対応。',query:'2020年の日本とブラジルの森林率',tags:'森林率 森林被覆率 森林 面積 割合 陸地 環境 FAO WorldBank 年次 統計 比較'},
  {id:'inflation',category:'research',title:'消費者物価上昇率（年次）',description:'国別の年次インフレ率を比較。推移と前年差をポイントで確認。',query:'2021年の日本とアメリカの物価上昇率',tags:'物価 インフレ率 インフレーション CPI 消費者物価 上昇率 年次 統計 デフレ 比較'},
  {id:'gdpGrowth',category:'research',title:'GDP成長率（実質・年次）',description:'国ごとの年指定・比較・推移。マイナス成長と成長率どうしのポイント差にも対応。',query:'2020年の日本とアメリカの実質GDP成長率',tags:'GDP 国内総生産 成長率 経済成長 実質 年次 マイナス 統計 比較 ポイント'},
  {id:'unemployment',category:'research',title:'国の失業率（各国推計）',description:'ILO経由の年次系列。国ごとの定義の違いを示し、年指定・推移にも対応。',query:'2024年の日本とアメリカの失業率',tags:'失業率 しつぎょう 雇用 労働力 人口 国統計 WorldBank ILO 各国推計 年次 比較'},
